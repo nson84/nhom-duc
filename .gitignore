@@ -1,0 +1,16 @@
+.idea/
+.vscode/
+*.iml
+*.log
+scripts/dev-env.local.ps1
+
+backend/target/
+frontend/node_modules/
+frontend/dist/
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+
+backend-run.err
+backend-run.log
+frontend-run.log
+

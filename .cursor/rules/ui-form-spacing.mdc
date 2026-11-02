@@ -1,0 +1,28 @@
+---
+description: Khoảng cách form — mỗi ô nhập phải có khoảng trống bằng 1 dòng để không dính nhau
+globs: frontend/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# Khoảng cách form (bắt buộc khi code giao diện)
+
+Khi tạo / sửa form, modal, hàng nhập liệu trên `frontend/`:
+
+- **Mỗi ô (fill / Form.Item / hàng input) phải có khoảng cách dưới bằng đúng khoảng 1 dòng ô đó** (thường ≈ chiều cao control, ví dụ input 32px → `margin-bottom` / `gap` ≥ 32px).
+- **Không** để hai hàng input hoặc hàng tiêu đề cột dính sát nhau (0 margin) — nhìn không chuyên nghiệp.
+- Hàng lưới nhiều cột (vd. dòng phiếu nhập): khoảng cách **giữa các dòng** ≥ 1 dòng control; cột ngang dùng `column-gap` hợp lý, không đè khoảng cách dọc.
+- Lỗi validate hiện dưới đúng ô sai vẫn được, nhưng **không** được kéo ô bên cạnh lệch hàng; vẫn giữ khoảng cách dòng đủ rộng.
+- Ưu tiên class dùng chung trong `frontend/src/index.css` (vd. `.doc-form-meta-row`, `.purchase-line-block`) thay vì hard-code lẻ tẻ.
+
+Ví dụ đúng:
+
+```css
+.purchase-line-block {
+  margin-bottom: 32px; /* ≈ 1 dòng Input/Select */
+}
+.doc-form-meta-row {
+  margin-bottom: 32px;
+}
+```
+
+Ví dụ sai: `margin-bottom: 0` trên mọi `.ant-form-item` trong form nhiều hàng khiến meta dính sát bảng dòng hàng.

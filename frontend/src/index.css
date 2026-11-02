@@ -1,0 +1,512 @@
+html,
+body,
+#root,
+.ant-app {
+  height: 100%;
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: #f3f5f7;
+  color: #1c2430;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.login-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+}
+
+.login-aside {
+  background: #1e2933;
+  color: #f4f7f8;
+  padding: 48px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.login-aside h1 {
+  margin: 12px 0 8px;
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.login-aside p {
+  margin: 0;
+  color: #c5d0d6;
+  line-height: 1.5;
+}
+
+.login-mark {
+  width: 44px;
+  height: 44px;
+  border: 2px solid #8fb4c6;
+  border-radius: 8px;
+}
+
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+}
+
+.login-card {
+  width: min(420px, 100%);
+}
+
+.brand-block {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  color: #f4f7f8;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.app-content {
+  margin: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.startup-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.startup-card {
+  width: min(460px, 100%);
+}
+
+@media (max-width: 800px) {
+  .login-screen {
+    grid-template-columns: 1fr;
+  }
+
+  .login-aside {
+    min-height: 180px;
+  }
+}
+
+/* Nút hành động — mỗi tone một màu (không ép chung nâu Sienna) */
+.app-action-button.ant-btn {
+  color: #fff !important;
+}
+
+.app-action-button.ant-btn .anticon {
+  color: #fff !important;
+}
+
+.app-action-button.app-btn-create.ant-btn {
+  background-color: #2f6f8f !important;
+  border-color: #245a73 !important;
+}
+.app-action-button.app-btn-create.ant-btn:not(:disabled):hover {
+  background-color: #245a73 !important;
+  border-color: #1c485c !important;
+}
+
+.app-action-button.app-btn-edit.ant-btn {
+  background-color: #8b6914 !important;
+  border-color: #6b5010 !important;
+}
+.app-action-button.app-btn-edit.ant-btn:not(:disabled):hover {
+  background-color: #6b5010 !important;
+  border-color: #523c0c !important;
+}
+
+.app-action-button.app-btn-cancel.ant-btn {
+  background-color: #c2410c !important;
+  border-color: #9a3412 !important;
+}
+.app-action-button.app-btn-cancel.ant-btn:not(:disabled):hover {
+  background-color: #9a3412 !important;
+  border-color: #7c2d12 !important;
+}
+
+.app-action-button.app-btn-delete.ant-btn {
+  background-color: #7f1d1d !important;
+  border-color: #641616 !important;
+}
+.app-action-button.app-btn-delete.ant-btn:not(:disabled):hover {
+  background-color: #641616 !important;
+  border-color: #450a0a !important;
+}
+
+.app-action-button.app-btn-confirm.ant-btn {
+  background-color: #166534 !important;
+  border-color: #14532d !important;
+}
+.app-action-button.app-btn-confirm.ant-btn:not(:disabled):hover {
+  background-color: #14532d !important;
+  border-color: #052e16 !important;
+}
+
+.app-action-button.app-btn-pay.ant-btn {
+  background-color: #0f766e !important;
+  border-color: #0d5f59 !important;
+}
+.app-action-button.app-btn-pay.ant-btn:not(:disabled):hover {
+  background-color: #0d5f59 !important;
+  border-color: #0a4a45 !important;
+}
+
+.app-action-button.app-btn-reverse.ant-btn {
+  background-color: #ea580c !important;
+  border-color: #c2410c !important;
+}
+.app-action-button.app-btn-reverse.ant-btn:not(:disabled):hover {
+  background-color: #c2410c !important;
+  border-color: #9a3412 !important;
+}
+
+.app-action-button.app-btn-print.ant-btn {
+  background-color: #2f6f8f !important;
+  border-color: #245a73 !important;
+}
+.app-action-button.app-btn-print.ant-btn:not(:disabled):hover {
+  background-color: #245a73 !important;
+  border-color: #1c485c !important;
+}
+
+.app-action-button.app-btn-secondary.ant-btn {
+  background-color: #6b7280 !important;
+  border-color: #4b5563 !important;
+}
+.app-action-button.app-btn-secondary.ant-btn:not(:disabled):hover {
+  background-color: #4b5563 !important;
+  border-color: #374151 !important;
+}
+
+/* Nút X đóng modal chi tiết phiếu — đỏ đậm */
+.doc-detail-modal .ant-modal-close {
+  color: #7f1d1d;
+}
+.doc-detail-modal .ant-modal-close:hover {
+  color: #450a0a;
+  background: rgba(127, 29, 29, 0.08);
+}
+
+/*
+ * Thanh tìm kiếm: một khung bo góc, bỏ border/vạch dọc thừa giữa ô và nút.
+ */
+.app-search.ant-input-search,
+.ant-input-search.ant-space-compact {
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.app-search.ant-input-search:hover,
+.ant-input-search.ant-space-compact:hover,
+.app-search.ant-input-search:focus-within,
+.ant-input-search.ant-space-compact:focus-within {
+  border-color: #2f6f8f;
+  box-shadow: 0 0 0 2px rgba(47, 111, 143, 0.12);
+}
+
+.ant-input-search.ant-space-compact > .ant-input-compact-item:not(.ant-input-compact-last-item) {
+  margin-inline-end: 0 !important;
+}
+
+.app-search.ant-input-search .ant-input-affix-wrapper,
+.app-search.ant-input-search .ant-input,
+.ant-input-search.ant-space-compact .ant-input-compact-first-item .ant-input-affix-wrapper,
+.ant-input-search.ant-space-compact .ant-input-compact-first-item > .ant-input {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.app-search.ant-input-search .ant-input-search-button.ant-btn,
+.ant-input-search .ant-input-search-button.ant-btn {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  border-inline-start: none !important;
+  background: #2f6f8f !important;
+  color: #fff !important;
+}
+
+.app-search.ant-input-search .ant-input-search-button.ant-btn:hover,
+.ant-input-search .ant-input-search-button.ant-btn:hover {
+  background: #245a73 !important;
+  color: #fff !important;
+}
+
+/* Bảng: cả dòng bấm được để xem chi tiết */
+.ant-table-tbody > tr.app-row-clickable {
+  cursor: pointer;
+}
+.ant-table-tbody > tr.app-row-clickable:hover > td {
+  background: #f0f7fa !important;
+}
+
+/* Suffix trong InputNumber / Input (?, v.v.) ? kh?ng v?ch d?c */
+.ant-input-affix-wrapper .ant-input-suffix::before,
+.ant-input-number-affix-wrapper .ant-input-number-suffix::before {
+  display: none !important;
+}
+
+/* ===== Landing page c?ng khai (/gioi-thieu) ===== */
+.landing {
+  min-height: 100vh;
+  background: #fff;
+}
+
+.landing-wrap {
+  width: min(1120px, 100% - 40px);
+  margin: 0 auto;
+}
+
+.landing-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e6ebee;
+}
+
+.landing-header-inner {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.landing-header-inner strong {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: #1e2933;
+}
+
+.landing-hero {
+  padding: 72px 0 56px;
+  background: linear-gradient(160deg, #f2f7f9 0%, #ffffff 60%);
+}
+
+.landing-hero h1.ant-typography {
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+  max-width: 20ch;
+}
+
+.landing-lead {
+  font-size: 17px;
+  color: #4a5a63;
+  max-width: 60ch;
+  margin-bottom: 24px !important;
+}
+
+.landing-strengths {
+  padding: 8px 0 40px;
+}
+
+.landing-card {
+  height: 100%;
+  background: #f8fafb;
+  border-radius: 10px;
+}
+
+.landing-card h4.ant-typography {
+  margin: 12px 0 6px;
+  font-size: 16px;
+}
+
+.landing-icon {
+  font-size: 22px;
+  color: #2f6f8f;
+}
+
+.landing-chip {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #eef4f7;
+  color: #2f6f8f;
+  font-size: 14px;
+}
+
+.landing-contact {
+  padding: 48px 0 64px;
+  background: #f3f7f9;
+  margin-top: 24px;
+}
+
+.landing-form-card {
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(30, 41, 51, 0.08);
+}
+
+/* B?y spam: gi?u kh?i ngu?i d?ng nhung bot v?n th?y trong DOM. */
+.landing-honeypot {
+  position: absolute !important;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: 0 !important;
+}
+
+.landing-footer {
+  padding: 20px 0;
+  border-top: 1px solid #e6ebee;
+  background: #fff;
+}
+
+/*
+ * Form spacing toàn app (rule ui-form-spacing):
+ * mỗi Form.Item ≈ cách 1 dòng control (32px). Modal portal ngoài .app-content nên style riêng.
+ */
+.app-content .ant-form-vertical .ant-form-item,
+.ant-modal .ant-form-vertical .ant-form-item,
+.login-card .ant-form-vertical .ant-form-item {
+  margin-bottom: 32px;
+}
+
+.app-content .ant-form-item-hidden,
+.ant-modal .ant-form-item-hidden,
+.login-card .ant-form-item-hidden {
+  margin-bottom: 0 !important;
+}
+
+/* Hàng ngang (Space / lưới phiếu): khoảng cách do gap/block, không cộng margin từng ô */
+.ant-modal .ant-form-vertical .doc-form-meta-row .ant-form-item,
+.ant-modal .ant-form-vertical .purchase-line-body .ant-form-item,
+.ant-modal .ant-form-vertical .ant-space .ant-form-item,
+.app-content .ant-form-vertical .ant-space .ant-form-item {
+  margin-bottom: 0;
+}
+
+/* Sau hàng Space, chừa 1 dòng trước khối tiếp theo */
+.ant-modal .ant-form-vertical > .ant-space,
+.app-content .ant-form-vertical > .ant-space {
+  margin-bottom: 32px;
+}
+
+/* Dòng phiếu nhập: tiêu đề + ô nhập thẳng cột; khoảng cách dọc ≈ 1 dòng control (32px) */
+.purchase-line-grid {
+  display: grid;
+  column-gap: 10px;
+  width: 100%;
+  align-items: start;
+}
+
+.purchase-line-head {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.65);
+  line-height: 1.2;
+  align-items: end;
+}
+
+.purchase-line-head > span {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.purchase-line-head > span:first-child {
+  text-align: left;
+}
+
+.purchase-line-block {
+  margin-bottom: 32px; /* 1 dòng Input/Select — tránh dính hàng */
+}
+
+.purchase-line-body {
+  margin-bottom: 0;
+}
+
+.purchase-line-body .ant-form-item {
+  margin-bottom: 0;
+}
+
+.purchase-line-body .ant-form-item-explain,
+.doc-form-meta-row .ant-form-item-explain {
+  min-height: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  padding-top: 2px;
+}
+
+.purchase-line-body .ant-select {
+  width: 100%;
+}
+
+.purchase-line-static {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 1.5714;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.88);
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+}
+
+.purchase-line-body .ant-input-number {
+  width: 100%;
+}
+
+.purchase-line-remove {
+  justify-self: center;
+  margin-top: 0;
+  min-width: 32px;
+  height: 32px;
+  padding-inline: 8px;
+}
+
+.purchase-line-remove .anticon {
+  font-size: 14px;
+  color: #fff;
+}
+
+/* Hàng meta (ngày, NCC…) cách khối dòng hàng ≈ 1 dòng */
+.doc-form-meta-row.ant-space,
+.doc-form-meta-row {
+  margin-bottom: 32px;
+}
+
+.doc-form-meta-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+.document-editor-form > .ant-form-item {
+  margin-bottom: 32px;
+}

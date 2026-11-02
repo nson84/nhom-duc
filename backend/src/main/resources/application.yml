@@ -1,0 +1,44 @@
+server:
+  address: ${ALUMINUM_BIND_ADDRESS:127.0.0.1}
+  port: ${ALUMINUM_API_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: aluminum-manager
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/${ALUMINUM_DB_NAME:aluminum_app}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=Asia/Ho_Chi_Minh&sslMode=DISABLED&allowPublicKeyRetrieval=true
+    username: ${ALUMINUM_DB_USERNAME:aluminum_app}
+    password: ${ALUMINUM_DB_PASSWORD:aluminum_app_dev}
+    hikari:
+      initialization-fail-timeout: 60000
+      connection-init-sql: SET time_zone = '+07:00'
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.time_zone: Asia/Ho_Chi_Minh
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+aluminum:
+  jwt:
+    secret: ${ALUMINUM_JWT_SECRET:local-dev-only-change-before-packaging-32b}
+    ttl-seconds: 28800
+  admin:
+    username: ${ALUMINUM_ADMIN_USERNAME:admin}
+    initial-password: ${ALUMINUM_ADMIN_INITIAL_PASSWORD:Admin@123}
+  cors:
+    allowed-origins: ${ALUMINUM_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://tauri.localhost,https://tauri.localhost,tauri://localhost}
+    # Domain landing page công khai được gọi 2 endpoint /api/v1/public/**.
+    # Điền domain thật khi deploy, ví dụ: https://nhomduc.vn
+    public-origins: ${ALUMINUM_CORS_PUBLIC_ORIGINS:}
+
+logging:
+  level:
+    root: INFO
+    com.aluminum.manager: INFO
