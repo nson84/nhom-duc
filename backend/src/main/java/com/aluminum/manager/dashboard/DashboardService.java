@@ -2,6 +2,7 @@ package com.aluminum.manager.dashboard;
 
 import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
+import com.aluminum.manager.shop.ShopAccess;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
@@ -23,10 +24,12 @@ public class DashboardService {
 
 	private final JdbcTemplate jdbc;
 	private final Clock clock;
+	private final ShopAccess shops;
 
-	public DashboardService(JdbcTemplate jdbc, Clock clock) {
+	public DashboardService(JdbcTemplate jdbc, Clock clock, ShopAccess shops) {
 		this.jdbc = jdbc;
 		this.clock = clock;
+		this.shops = shops;
 	}
 
 	@Transactional(readOnly = true)
@@ -48,9 +51,10 @@ public class DashboardService {
 				  AND d.document_date >= ? AND d.document_date < ?
 				""", range);
 		BigDecimal cash = money("""
-				SELECT COALESCE(SUM(amount), 0)
-				FROM sales_payments
-				WHERE payment_date >= ? AND payment_date < ?
+				SELECT COALESCE(SUM(p.amount), 0)
+				FROM sales_payments p
+				JOIN stock_documents d ON d.id = p.document_id
+				WHERE p.payment_date >= ? AND p.payment_date < ?
 				""", range);
 		BigDecimal expenses = money("""
 				SELECT COALESCE(SUM(amount), 0)
@@ -61,10 +65,14 @@ public class DashboardService {
 				  AND transaction_date >= ? AND transaction_date < ?
 				""", range);
 		BigDecimal inventory = scale(jdbc.queryForObject("""
-				SELECT COALESCE(SUM(quantity_base * average_cost_per_base), 0)
-				FROM stock_balances
-				""", BigDecimal.class));
-		BigDecimal payroll = scale(jdbc.queryForObject("""
+				SELECT COALESCE(SUM(b.quantity_base * b.average_cost_per_base), 0)
+				FROM stock_balances b
+				JOIN products p ON p.id = b.product_id
+				WHERE p.shop_id = ?
+				""", BigDecimal.class, shops.currentId()));
+		BigDecimal payroll = shops.isDistribution()
+				? BigDecimal.ZERO.setScale(MONEY_SCALE, ROUNDING)
+				: scale(jdbc.queryForObject("""
 				SELECT COALESCE(SUM(pd.total_pay), 0)
 				FROM payroll_details pd
 				JOIN payroll_periods pp ON pp.id = pd.payroll_period_id
@@ -91,7 +99,7 @@ public class DashboardService {
 		for (LocalDate day = range.from(); !day.isAfter(range.to()); day = day.plusDays(1)) {
 			points.put(day, new MutablePoint());
 		}
-		jdbc.query("""
+		jdbc.query(shops.apply("""
 				SELECT DATE(document_date) AS day,
 				       COALESCE(SUM(total_amount), 0) AS revenue
 				FROM stock_documents
@@ -99,14 +107,14 @@ public class DashboardService {
 				  AND status = 'CONFIRMED'
 				  AND document_date >= ? AND document_date < ?
 				GROUP BY DATE(document_date)
-				""", rs -> {
+				"""), rs -> {
 			LocalDate day = rs.getDate("day").toLocalDate();
 			MutablePoint point = points.get(day);
 			if (point != null) {
 				point.revenue = scale(rs.getBigDecimal("revenue"));
 			}
 		}, start, end);
-		jdbc.query("""
+		jdbc.query(shops.apply("""
 				SELECT DATE(d.document_date) AS day,
 				       COALESCE(SUM(i.cost_total_snapshot), 0) AS cogs
 				FROM stock_document_items i
@@ -115,19 +123,20 @@ public class DashboardService {
 				  AND d.status = 'CONFIRMED'
 				  AND d.document_date >= ? AND d.document_date < ?
 				GROUP BY DATE(d.document_date)
-				""", rs -> {
+				"""), rs -> {
 			LocalDate day = rs.getDate("day").toLocalDate();
 			MutablePoint point = points.get(day);
 			if (point != null) {
 				point.cogs = scale(rs.getBigDecimal("cogs"));
 			}
 		}, start, end);
-		jdbc.query("""
-				SELECT DATE(payment_date) AS day, COALESCE(SUM(amount), 0) AS cash_collected
-				FROM sales_payments
-				WHERE payment_date >= ? AND payment_date < ?
-				GROUP BY DATE(payment_date)
-				""", rs -> {
+		jdbc.query(shops.apply("""
+				SELECT DATE(p.payment_date) AS day, COALESCE(SUM(p.amount), 0) AS cash_collected
+				FROM sales_payments p
+				JOIN stock_documents d ON d.id = p.document_id
+				WHERE p.payment_date >= ? AND p.payment_date < ?
+				GROUP BY DATE(p.payment_date)
+				"""), rs -> {
 			LocalDate day = rs.getDate("day").toLocalDate();
 			MutablePoint point = points.get(day);
 			if (point != null) {
@@ -146,7 +155,7 @@ public class DashboardService {
 
 	private BigDecimal money(String sql, DateRange range) {
 		return scale(jdbc.queryForObject(
-				sql,
+				shops.apply(sql),
 				BigDecimal.class,
 				Timestamp.valueOf(range.from().atStartOfDay()),
 				Timestamp.valueOf(range.to().plusDays(1).atStartOfDay())));

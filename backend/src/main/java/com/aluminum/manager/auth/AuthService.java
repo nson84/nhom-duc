@@ -55,7 +55,12 @@ public class AuthService {
 		AuthenticatedAdmin current = CurrentAdmin.get();
 		AdminUser user = adminUsers.findById(current.id())
 				.orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED, "Bạn cần đăng nhập", null));
-		return new AdminProfile(user.getId(), user.getUsername(), user.isMustChangePassword());
+		return new AdminProfile(
+				user.getId(),
+				user.getUsername(),
+				user.isMustChangePassword(),
+				user.getRole().name(),
+				user.getShopCode());
 	}
 
 	@Transactional
@@ -96,12 +101,15 @@ public class AuthService {
 	}
 
 	private LoginResponse tokenFor(AdminUser user) {
-		String token = jwtService.issue(user.getId(), user.getUsername());
+		UserRole role = user.getRole();
+		String token = jwtService.issue(user.getId(), user.getUsername(), role.name(), user.getShopCode());
 		return new LoginResponse(
 				token,
 				"Bearer",
 				jwtService.ttlSeconds(),
 				user.isMustChangePassword(),
-				user.getUsername());
+				user.getUsername(),
+				role.name(),
+				user.getShopCode());
 	}
 }

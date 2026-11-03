@@ -39,13 +39,15 @@ public class JwtService {
 		return ttlSeconds;
 	}
 
-	public String issue(long userId, String username) {
+	public String issue(long userId, String username, String role, String shopCode) {
 		Instant now = Instant.now();
 		long exp = now.plusSeconds(ttlSeconds).getEpochSecond();
 		String header = URL_ENCODER.encodeToString(
 				"{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
 		String payloadJson = "{\"uid\":" + userId
 				+ ",\"usr\":\"" + escape(username) + "\""
+				+ ",\"role\":\"" + escape(role == null ? "ADMIN" : role) + "\""
+				+ ",\"shop\":\"" + escape(shopCode == null ? "" : shopCode) + "\""
 				+ ",\"jti\":\"" + UUID.randomUUID() + "\""
 				+ ",\"iat\":" + now.getEpochSecond()
 				+ ",\"exp\":" + exp + "}";
@@ -80,7 +82,14 @@ public class JwtService {
 			}
 			revokedUntilEpoch.remove(jti);
 		}
-		return new JwtClaims(Long.parseLong(payload.get("uid")), payload.get("usr"), jti, exp);
+		String shop = payload.get("shop");
+		return new JwtClaims(
+				Long.parseLong(payload.get("uid")),
+				payload.get("usr"),
+				payload.getOrDefault("role", "ADMIN"),
+				shop == null || shop.isBlank() ? null : shop,
+				jti,
+				exp);
 	}
 
 	public void revoke(String token) {
@@ -163,6 +172,12 @@ public class JwtService {
 		return i;
 	}
 
-	public record JwtClaims(long userId, String username, String jti, long expiresAtEpochSecond) {
+	public record JwtClaims(
+			long userId,
+			String username,
+			String role,
+			String shopCode,
+			String jti,
+			long expiresAtEpochSecond) {
 	}
 }

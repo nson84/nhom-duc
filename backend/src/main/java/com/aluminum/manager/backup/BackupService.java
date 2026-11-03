@@ -48,6 +48,7 @@ public class BackupService {
 	private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
 	private static final List<String> DATA_TABLES = List.of(
+			"shops",
 			"app_settings",
 			"product_categories",
 			"products",

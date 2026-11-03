@@ -1,5 +1,6 @@
 import axios from "axios";
 import { authStore } from "../features/auth/auth-store";
+import { shopStore } from "../features/shop/shop-store";
 import { toApiError } from "./error-handler";
 
 export const api = axios.create({
@@ -12,6 +13,7 @@ api.interceptors.request.use((config) => {
   if (session) {
     config.headers.Authorization = `Bearer ${session.token}`;
   }
+  config.headers["X-Shop-Code"] = shopStore.get();
   return config;
 });
 

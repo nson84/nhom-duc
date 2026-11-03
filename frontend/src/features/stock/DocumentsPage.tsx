@@ -8,7 +8,7 @@ import {
   RetweetOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
+import { Alert, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppActionButton, appButtonStyle } from "../../components/AppButtons";
@@ -28,6 +28,7 @@ import {
   parseQtyInput,
   positiveDecimalRules,
   qtyInputNumberProps,
+  roundVndToThousand,
   vndAmountRules,
   vndInputNumberProps,
   vndUnitPriceRules,
@@ -38,19 +39,24 @@ import {
   purchaseUnit,
   suggestPurchasePricePerUnit,
   suggestSalePricePerUnit,
+  taUnit,
   tonUnit,
   type PurchaseWeightUnit,
 } from "../products/product-stock-unit";
+import { useCanWrite } from "../auth/auth-store";
+import { useShop } from "../shop/shop-store";
 import { listProducts, type Product } from "../products/products-api";
 import { getSettings } from "../settings/settings-api";
 import {
   addPayment,
   documentAction,
   getDocument,
+  listBalances,
   listDocuments,
   reverseDocument,
   saveDocument,
   type DocumentSummary,
+  type StockBalance,
   type StockDocument,
 } from "./stock-api";
 
@@ -114,6 +120,7 @@ const purchaseLineColumns = "minmax(180px, 1.1fr) 88px 96px minmax(200px, 1.15fr
 const saleLineColumns = "minmax(180px, 1.1fr) 96px 100px minmax(200px, 1.15fr) minmax(220px, 1.25fr) 56px";
 
 export function DocumentsPage({ kind }: { kind: Kind }) {
+  const canWrite = useCanWrite();
   const text = copy[kind];
   const draftKey = purchaseFormDraftKey(kind);
   const [rows, setRows] = useState<DocumentSummary[]>([]);
@@ -170,9 +177,11 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
     <Card
       title={text.title}
       extra={
-        <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => setEditing("new")}>
-          {text.newLabel}
-        </AppActionButton>
+        canWrite ? (
+          <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => setEditing("new")}>
+            {text.newLabel}
+          </AppActionButton>
+        ) : null
       }
     >
       <Space style={{ marginBottom: 16 }} wrap>
@@ -197,6 +206,13 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
         })}
         columns={[
           { title: "Số phiếu", dataIndex: "documentCode", align: "center" },
+          {
+            title: "Nội bộ",
+            dataIndex: "internal",
+            align: "center",
+            width: 90,
+            render: (v: boolean) => (v ? <Tag color="gold">Nội bộ</Tag> : "—"),
+          },
           { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
           { title: text.counterparty, dataIndex: "counterpartyName", align: "center" },
           { title: "Tổng tiền", dataIndex: "totalAmount", align: "center", render: (v: number) => formatMoney(v) },
@@ -261,6 +277,7 @@ type EditorValues = {
     /** Giá hệ thống đã gợi ý cho dòng này, dùng để biết Admin đã sửa tay hay chưa. */
     suggestedPrice?: number;
   }[];
+  internal?: boolean;
 };
 
 type DocumentDraftValues = Omit<EditorValues, "documentDate"> & { documentDate?: string };
@@ -276,16 +293,21 @@ function EditorModal({
   onClose: () => void;
   onSaved: (document: StockDocument) => void;
 }) {
+  const shop = useShop();
+  const sellByKg = shop === "MANUFACTURING" && kind === "SALE";
+  const canMarkInternal = shop === "DISTRIBUTION" && kind === "SALE";
   const text = copy[kind];
   const draftKey = purchaseFormDraftKey(kind);
   const targetId = document?.id ?? "new";
   const [form] = Form.useForm<EditorValues>();
   const [products, setProducts] = useState<Product[]>([]);
+  const [balances, setBalances] = useState<StockBalance[]>([]);
   const [saving, setSaving] = useState(false);
   const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
   const draftAppliedRef = useRef(false);
   const items = Form.useWatch("items", form) ?? [];
   const documentDate = Form.useWatch("documentDate", form);
+  const internalTransfer = Form.useWatch("internal", form) === true;
 
   const persistDraft = useCallback(() => {
     const values = form.getFieldsValue(true) as EditorValues;
@@ -324,7 +346,43 @@ function EditorModal({
       .catch((error) => message.error(toApiError(error).message));
   }, [priceDateKey]);
 
+  useEffect(() => {
+    if (!canMarkInternal) return;
+    listBalances({})
+      .then(setBalances)
+      .catch(() => setBalances([]));
+  }, [canMarkInternal]);
+
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const costByProductId = useMemo(
+    () => new Map(balances.map((b) => [b.productId, b.averageCostPerBase])),
+    [balances],
+  );
+
+  function costUnitPrice(product: Product, unitId?: number): number {
+    const unit = product.units.find((u) => u.id === unitId) ?? tonUnit(product) ?? purchaseUnit(product, "tấn");
+    const costPerBase = costByProductId.get(product.id) ?? 0;
+    if (!unit || costPerBase <= 0) return 0;
+    return roundVndToThousand(costPerBase * Number(unit.factorToBase));
+  }
+
+  function applyInternalCostPrices() {
+    const list = [...((form.getFieldValue("items") as EditorValues["items"] | undefined) ?? [])];
+    const next = list.map((line) => {
+      const product = productMap.get(line?.productId ?? 0);
+      if (!product) return line;
+      const price = costUnitPrice(product, line.unitId);
+      return { ...line, unitPrice: price, suggestedPrice: price };
+    });
+    form.setFieldValue("items", next);
+  }
+
+  useEffect(() => {
+    if (!internalTransfer || balances.length === 0 || products.length === 0) return;
+    applyInternalCostPrices();
+    // Chỉ khi bật nội bộ / có số dư giá vốn — không phụ thuộc mọi lần gõ form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [internalTransfer, balances, products]);
 
   // Đổi ngày phiếu thì giá chuẩn gợi ý đổi theo. Mỗi dòng ghi lại giá mà hệ thống đã gợi ý
   // (`suggestedPrice`); chỉ những dòng còn đúng giá gợi ý đó mới được cập nhật, để không ghi đè
@@ -336,7 +394,8 @@ function EditorModal({
     const next = list.map((line) => {
       const product = productMap.get(line?.productId ?? 0);
       if (!product) return line;
-      const suggested = suggestPurchasePricePerUnit(product, "tấn");
+      const weight = line?.weightInputUnit === "tạ" ? "tạ" : "tấn";
+      const suggested = suggestPurchasePricePerUnit(product, weight);
       const currentPrice = Math.round(Number(line.unitPrice ?? 0));
       const untouched = line.suggestedPrice === undefined ? currentPrice === 0 : currentPrice === line.suggestedPrice;
       if (!untouched) return line;
@@ -353,25 +412,43 @@ function EditorModal({
     return `Giá chuẩn từ ${dayjs(product.purchasePriceEffectiveFrom).format("DD/MM/YYYY")}`;
   }
 
+  function weightOf(line?: EditorValues["items"][number]): PurchaseWeightUnit {
+    if (sellByKg) return "kg";
+    if (shop === "MANUFACTURING" && kind === "PURCHASE" && line?.weightInputUnit === "tạ") return "tạ";
+    return "tấn";
+  }
+
+  function unitFor(product: Product, weight: PurchaseWeightUnit) {
+    if (weight === "kg") return kgUnit(product);
+    if (weight === "tạ") return taUnit(product);
+    return tonUnit(product) ?? purchaseUnit(product, "tấn");
+  }
+
   function onProductChange(index: number, productId: number) {
     const product = productMap.get(productId);
     if (!product) return;
     const list = [...(form.getFieldValue("items") as EditorValues["items"])];
-    const unit = purchaseUnit(product, "tấn") ?? tonUnit(product) ?? kgUnit(product);
-    if (!tonUnit(product) && !purchaseUnit(product, "tấn")) {
-      message.warning("Chưa có đơn vị tấn — hãy Sửa và Lưu lại sản phẩm trong danh mục.");
+    const weight = weightOf(list[index]);
+    const unit = unitFor(product, weight);
+    if (!unit) {
+      message.warning("Sản phẩm chưa có đơn vị phù hợp. Hãy Sửa và Lưu lại trong danh mục.");
     }
-    const suggested =
-      kind === "PURCHASE"
-        ? suggestPurchasePricePerUnit(product, "tấn")
+    const useCost = canMarkInternal && form.getFieldValue("internal") === true;
+    const suggested = useCost
+      ? costUnitPrice(product, unit?.id)
+      : kind === "PURCHASE"
+        ? suggestPurchasePricePerUnit(product, weight === "kg" ? "tấn" : weight)
         : unit
           ? suggestSalePricePerUnit(product, unit)
           : 0;
+    if (useCost && suggested <= 0) {
+      message.warning(`Sản phẩm ${product.productCode} chưa có giá vốn tồn kho để chuyển nội bộ`);
+    }
     list[index] = {
       ...list[index],
       productId,
-      weightInputUnit: "tấn",
-      priceInputUnit: "tấn",
+      weightInputUnit: weight,
+      priceInputUnit: weight,
       unitId: unit?.id,
       unitPrice: suggested,
       suggestedPrice: suggested,
@@ -391,6 +468,24 @@ function EditorModal({
   }
 
   /** Blur đơn giá: chỉ báo lỗi đỏ nếu chưa làm tròn hàng nghìn — không tự sửa im lặng. */
+  function onWeightChange(index: number, weight: "tạ" | "tấn") {
+    const list = [...(form.getFieldValue("items") as EditorValues["items"])];
+    const product = productMap.get(list[index]?.productId ?? 0);
+    const unit = product ? unitFor(product, weight) : undefined;
+    const currentPrice = Math.round(Number(list[index]?.unitPrice ?? 0));
+    const untouched = list[index]?.suggestedPrice === undefined ? currentPrice === 0 : currentPrice === list[index]?.suggestedPrice;
+    const suggested = product ? suggestPurchasePricePerUnit(product, weight) : currentPrice;
+    list[index] = {
+      ...list[index],
+      weightInputUnit: weight,
+      priceInputUnit: weight,
+      unitId: unit?.id ?? list[index]?.unitId,
+      unitPrice: untouched ? suggested : currentPrice,
+      suggestedPrice: untouched ? suggested : list[index]?.suggestedPrice,
+    };
+    form.setFieldValue("items", list);
+  }
+
   function onUnitPriceBlur(index: number) {
     validateLineField(index, "unitPrice");
   }
@@ -452,33 +547,38 @@ function EditorModal({
                 counterpartyName: document.counterpartyName ?? undefined,
                 issuedBy: document.issuedBy ?? undefined,
                 receivedBy: document.receivedBy ?? undefined,
+                internal: document.internal ?? false,
                 items: document.items.map((i) => {
+                  const product = productMap.get(i.productId);
+                  const keepStored = sellByKg || (shop === "MANUFACTURING" && kind === "PURCHASE");
                   let unitPrice = Math.round(i.unitPrice);
                   let quantityDocument = Number(Number(i.quantityDocument).toFixed(6));
-                  const product = productMap.get(i.productId);
-                  const ton = product ? tonUnit(product) ?? purchaseUnit(product, "tấn") : undefined;
-                  if (i.unitName !== "tấn") {
+                  let weight: PurchaseWeightUnit = sellByKg ? "kg" : i.unitName === "tạ" ? "tạ" : "tấn";
+                  if (!keepStored && i.unitName !== "tấn") {
                     unitPrice = Math.round(unitPrice * KG_PER_TON);
                     quantityDocument = Number(Math.max(0.000001, quantityDocument / KG_PER_TON).toFixed(6));
+                    weight = "tấn";
                   }
+                  const unit = product ? unitFor(product, weight) : undefined;
                   return {
                     productId: i.productId,
-                    unitId: ton?.id ?? i.unitId ?? undefined,
+                    unitId: unit?.id ?? i.unitId ?? undefined,
                     quantityDocument,
                     unitPrice,
-                    weightInputUnit: "tấn" as const,
-                    priceInputUnit: "tấn" as const,
+                    weightInputUnit: weight,
+                    priceInputUnit: weight,
                     suggestedPrice: unitPrice,
                   };
                 }),
               }
             : {
                 documentDate: dayjs(),
+                internal: false,
                 items: [
                   {
                     quantityDocument: 1,
-                    weightInputUnit: "tấn" as const,
-                    priceInputUnit: "tấn" as const,
+                    weightInputUnit: sellByKg ? "kg" : "tấn",
+                    priceInputUnit: sellByKg ? "kg" : "tấn",
                   },
                 ],
               }
@@ -494,6 +594,7 @@ function EditorModal({
               issuedBy: values.issuedBy,
               receivedBy: values.receivedBy,
               discountAmount: 0,
+              internal: canMarkInternal ? Boolean(values.internal) : false,
               idempotencyKey: document ? undefined : idempotencyKey,
               items: values.items.map((i) => {
                 const unitPrice = Math.round(Number(i.unitPrice ?? 0));
@@ -545,7 +646,29 @@ function EditorModal({
           >
             <Input style={{ width: 200 }} maxLength={50} showCount={kind === "PURCHASE"} />
           </Form.Item>
+          {canMarkInternal ? (
+            <Form.Item name="internal" valuePropName="checked" label=" ">
+              <Checkbox
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    applyInternalCostPrices();
+                  }
+                }}
+              >
+                Giao dịch nội bộ (xuất sang xưởng, giá = giá vốn)
+              </Checkbox>
+            </Form.Item>
+          ) : null}
         </Space>
+        {internalTransfer ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Xuất nội bộ sang xưởng"
+            description="Đơn giá khóa theo giá vốn tồn (làm tròn hàng nghìn). Khi xác nhận phiếu, hệ thống tự tạo phiếu nhập xưởng cùng mã sản phẩm, cộng tồn xưởng và không tính lãi đoạn chuyển."
+          />
+        ) : null}
         <Form.List name="items">
           {(fields, { add, remove }) => (
             <>
@@ -557,7 +680,7 @@ function EditorModal({
                   <span>Sản phẩm</span>
                   <span>Số lượng</span>
                   <span>Đơn vị khối lượng</span>
-                  <span>Đơn giá / tấn</span>
+                  <span>{shop === "MANUFACTURING" ? "Đơn giá" : "Đơn giá / tấn"}</span>
                   <span>Thành tiền</span>
                   <span aria-hidden />
                 </div>
@@ -569,7 +692,7 @@ function EditorModal({
                   <span>Sản phẩm</span>
                   <span>Đơn vị tính</span>
                   <span>Số lượng</span>
-                  <span>Đơn giá</span>
+                  <span>{sellByKg ? "Đơn giá / kg" : "Đơn giá / tấn"}</span>
                   <span>Thành tiền</span>
                   <span aria-hidden />
                 </div>
@@ -607,18 +730,30 @@ function EditorModal({
                         <Form.Item name={[field.name, "quantityDocument"]} validateFirst rules={positiveDecimalRules}>
                           <InputNumber
                             {...qtyInputNumberProps}
-                            placeholder="Tấn"
+                            placeholder={shop === "MANUFACTURING" ? "Khối lượng" : "Tấn"}
                             style={{ width: "100%" }}
                             onBlur={() => onQuantityBlur(field.name)}
                           />
                         </Form.Item>
-                        <span className="purchase-line-static">tấn</span>
+                        {shop === "MANUFACTURING" ? (
+                          <Select
+                            value={current?.weightInputUnit === "tạ" ? "tạ" : "tấn"}
+                            options={[
+                              { value: "tạ", label: "tạ" },
+                              { value: "tấn", label: "tấn" },
+                            ]}
+                            onChange={(value) => onWeightChange(field.name, value === "tạ" ? "tạ" : "tấn")}
+                          />
+                        ) : (
+                          <span className="purchase-line-static">tấn</span>
+                        )}
                         <Form.Item name={[field.name, "unitPrice"]} validateFirst rules={vndUnitPriceRules}>
                           <InputNumber
                             {...vndInputNumberProps}
-                            placeholder="Giá một tấn"
+                            placeholder={current?.weightInputUnit === "tạ" ? "Giá một tạ" : "Giá một tấn"}
                             style={{ width: "100%" }}
                             title={priceHint ?? undefined}
+                            disabled={internalTransfer}
                             onBlur={() => onUnitPriceBlur(field.name)}
                           />
                         </Form.Item>
@@ -667,7 +802,7 @@ function EditorModal({
                           options={products.map((p) => ({ value: p.id, label: `${p.productCode} - ${p.name}` }))}
                         />
                       </Form.Item>
-                      <span className="purchase-line-static">tấn</span>
+                      <span className="purchase-line-static">{sellByKg ? "kg" : "tấn"}</span>
                       <Form.Item name={[field.name, "quantityDocument"]} validateFirst rules={positiveDecimalRules}>
                         <InputNumber
                           {...qtyInputNumberProps}
@@ -679,6 +814,8 @@ function EditorModal({
                         <InputNumber
                           {...vndInputNumberProps}
                           style={{ width: "100%" }}
+                          disabled={internalTransfer}
+                          placeholder={internalTransfer ? "Giá vốn gốc" : undefined}
                           onBlur={() => onUnitPriceBlur(field.name)}
                         />
                       </Form.Item>
@@ -707,8 +844,8 @@ function EditorModal({
                 onClick={() =>
                   add({
                     quantityDocument: 1,
-                    weightInputUnit: "tấn",
-                    priceInputUnit: "tấn",
+                    weightInputUnit: sellByKg ? "kg" : "tấn",
+                    priceInputUnit: sellByKg ? "kg" : "tấn",
                   })
                 }
               >
@@ -756,6 +893,9 @@ function DetailModal({
     void refresh();
   }, [refresh]);
 
+  // Phải gọi hook trước mọi early-return — nếu để sau `if (!doc)` sẽ trắng màn hình.
+  const canWrite = useCanWrite();
+
   async function run(action: () => Promise<StockDocument>, success: string) {
     setBusy(true);
     try {
@@ -788,7 +928,7 @@ function DetailModal({
           <AppActionButton tone="print" icon={<PrinterOutlined />} onClick={() => void printDocument(doc, kind)}>
             In phiếu
           </AppActionButton>
-          {doc.status === "DRAFT" ? (
+          {canWrite && doc.status === "DRAFT" ? (
             <>
               <AppActionButton tone="edit" icon={<EditOutlined />} onClick={() => onEdit(doc)}>
                 Sửa
@@ -808,12 +948,20 @@ function DetailModal({
                 onClick={() =>
                   Modal.confirm({
                     title: "Xác nhận phiếu?",
-                    content: kind === "PURCHASE" ? "Phiếu sẽ tăng tồn kho và cập nhật giá vốn." : "Phiếu sẽ trừ tồn kho.",
+                    content: doc.internal
+                      ? "Trừ tồn phân phối theo giá vốn và tự tạo phiếu nhập nội bộ bên xưởng (cùng mã SP, cộng tồn xưởng)."
+                      : kind === "PURCHASE"
+                        ? "Phiếu sẽ tăng tồn kho và cập nhật giá vốn."
+                        : "Phiếu sẽ trừ tồn kho.",
                     okText: "Xác nhận",
                     cancelText: "Quay lại",
                     okButtonProps: { style: appButtonStyle("confirm") },
                     cancelButtonProps: { style: appButtonStyle("cancel") },
-                    onOk: () => run(() => documentAction(doc.id, "confirm"), "Đã xác nhận phiếu"),
+                    onOk: () =>
+                      run(
+                        () => documentAction(doc.id, "confirm"),
+                        doc.internal ? "Đã xác nhận và tạo phiếu nhập xưởng" : "Đã xác nhận phiếu",
+                      ),
                   })
                 }
               >
@@ -821,12 +969,12 @@ function DetailModal({
               </AppActionButton>
             </>
           ) : null}
-          {confirmed && remaining > 0 ? (
+          {canWrite && confirmed && remaining > 0 && !doc.internal ? (
             <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => setPaying(true)}>
               {text.payLabel}
             </AppActionButton>
           ) : null}
-          {confirmed && !doc.reversedByDocumentId && doc.paidAmount === 0 ? (
+          {canWrite && confirmed && !doc.reversedByDocumentId && (doc.internal || doc.paidAmount === 0) ? (
             <AppActionButton tone="reverse" icon={<RetweetOutlined />} onClick={() => setReversing(true)}>
               Đảo phiếu
             </AppActionButton>
@@ -838,12 +986,25 @@ function DetailModal({
         <Descriptions.Item label="Loại">{typeLabel[doc.documentType]}</Descriptions.Item>
         <Descriptions.Item label="Trạng thái">
           <Tag color={statusTag[doc.status].color}>{statusTag[doc.status].text}</Tag>
+          {doc.internal ? <Tag color="gold" style={{ marginLeft: 8 }}>Nội bộ</Tag> : null}
         </Descriptions.Item>
         <Descriptions.Item label="Ngày">{dayjs(doc.documentDate).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
         <Descriptions.Item label={text.counterparty}>{doc.counterpartyName}</Descriptions.Item>
         <Descriptions.Item label="Người xuất / giao">{doc.issuedBy}</Descriptions.Item>
         <Descriptions.Item label="Người nhận / nhập">{doc.receivedBy}</Descriptions.Item>
+        {doc.internalPairDocumentCode ? (
+          <Descriptions.Item label="Phiếu cặp nội bộ" span={2}>
+            {doc.internalPairDocumentCode}
+            {kind === "SALE" ? " (phiếu nhập xưởng)" : " (phiếu bán phân phối)"}
+          </Descriptions.Item>
+        ) : null}
+        {doc.internal ? (
+          <Descriptions.Item label="Giá" span={2}>
+            Giá gốc / giá vốn — không thu chi tiền, không tính lãi đoạn chuyển nhà mình
+          </Descriptions.Item>
+        ) : null}
         {doc.reason ? <Descriptions.Item label="Lý do" span={2}>{doc.reason}</Descriptions.Item> : null}
+        {doc.notes ? <Descriptions.Item label="Ghi chú phiếu" span={2}>{doc.notes}</Descriptions.Item> : null}
         {doc.reversedByDocumentId ? (
           <Descriptions.Item label="Ghi chú" span={2}>Phiếu này đã được đảo, không còn tính vào báo cáo.</Descriptions.Item>
         ) : null}
@@ -939,7 +1100,7 @@ function DetailModal({
               title: kind === "PURCHASE" ? "Còn phải chi trả" : "Còn phải thu",
               key: "remainingAfter",
               align: "center",
-              render: (_: unknown, row, index) => {
+              render: (_: unknown, _row, index) => {
                 const paidThrough = doc.payments
                   .slice(0, index + 1)
                   .reduce((sum, payment) => sum + Number(payment.amount), 0);

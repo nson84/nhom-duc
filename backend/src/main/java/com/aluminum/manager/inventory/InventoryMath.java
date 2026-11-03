@@ -103,6 +103,16 @@ public final class InventoryMath {
 		return amount.setScale(MONEY_SCALE, ROUNDING);
 	}
 
+	/** Tiền VND trên UI: làm tròn về bội số 1.000 đ (không ghi số lẻ hàng đơn vị/chục/trăm). */
+	public static BigDecimal roundVndToThousand(BigDecimal amount) {
+		requireNonNegative(amount, "Số tiền không được âm");
+		if (amount.signum() == 0) {
+			return BigDecimal.ZERO.setScale(0, ROUNDING);
+		}
+		BigDecimal thousand = new BigDecimal("1000");
+		return amount.divide(thousand, 0, ROUNDING).multiply(thousand).setScale(0, ROUNDING);
+	}
+
 	public static BigDecimal applyDelta(BigDecimal balance, BigDecimal deltaBase) {
 		requireNonNegative(balance, "Tồn kho không được âm");
 		BigDecimal next = balance.add(deltaBase).setScale(QTY_SCALE, ROUNDING);

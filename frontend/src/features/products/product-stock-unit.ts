@@ -9,7 +9,7 @@ export const KG_PER_TA = 100;
 
 export const KG_PER_TON = 1000;
 
-export type PurchaseWeightUnit = "kg" | "tấn";
+export type PurchaseWeightUnit = "kg" | "tạ" | "tấn";
 
 export function activeUnits(product: Product): ProductUnit[] {
   return product.units.filter((u) => u.active);
@@ -38,6 +38,16 @@ export function kgUnit(product: Product): ProductUnit | undefined {
 
 export function tonUnit(product: Product): ProductUnit | undefined {
   return product.units.find((u) => u.active && u.unitName === "tấn");
+}
+
+export function taUnit(product: Product): ProductUnit | undefined {
+  return product.units.find((u) => u.active && u.unitName === RETAIL_UNIT_TA);
+}
+
+export function weightFactor(unit: PurchaseWeightUnit): number {
+  if (unit === "tấn") return KG_PER_TON;
+  if (unit === "tạ") return KG_PER_TA;
+  return 1;
 }
 
 export function purchaseUnit(product: Product, weightUnit: PurchaseWeightUnit): ProductUnit | undefined {
@@ -69,7 +79,7 @@ function roundToThousand(value: number): number {
 
 export function suggestPurchasePricePerUnit(product: Product, unit: PurchaseWeightUnit): number {
   const base = product.referencePurchasePrice;
-  const raw = unit === "tấn" ? Math.round(base * KG_PER_TON) : Math.round(base);
+  const raw = Math.round(base * weightFactor(unit));
   return roundToThousand(raw);
 }
 

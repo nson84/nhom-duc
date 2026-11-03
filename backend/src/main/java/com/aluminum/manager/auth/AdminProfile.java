@@ -1,4 +1,10 @@
 package com.aluminum.manager.auth;
 
-public record AdminProfile(Long id, String username, boolean mustChangePassword) {
+public record AdminProfile(
+		Long id,
+		String username,
+		boolean mustChangePassword,
+		String role,
+		String shopCode
+) {
 }

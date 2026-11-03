@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
+import { useShop } from "../shop/shop-store";
 import { listBalances, listMovements, type Movement, type StockBalance } from "./stock-api";
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
 
 export function StockPage() {
+  const shop = useShop();
+  const asTon = shop === "DISTRIBUTION";
   const [rows, setRows] = useState<StockBalance[]>([]);
   const [query, setQuery] = useState("");
   const [onlyInStock, setOnlyInStock] = useState(false);
@@ -59,15 +62,15 @@ export function StockPage() {
           { title: "Tên", dataIndex: "productName", align: "center" },
           { title: "Loại", dataIndex: "categoryName", align: "center" },
           {
-            title: "Tồn (tấn)",
+            title: asTon ? "Tồn (tấn)" : "Tồn (kg)",
             align: "center",
-            render: (_, r) => qtyFormat.format(kgToTon(r.quantityBase)),
+            render: (_, r) => qtyFormat.format(asTon ? kgToTon(r.quantityBase) : r.quantityBase),
           },
           {
-            title: "Giá vốn BQ / tấn",
+            title: asTon ? "Giá vốn BQ / tấn" : "Giá vốn BQ / kg",
             dataIndex: "averageCostPerBase",
             align: "center",
-            render: (v: number) => formatMoney(costPerKgToTon(v)),
+            render: (v: number) => formatMoney(asTon ? costPerKgToTon(v) : v),
           },
           { title: "Giá trị tồn", dataIndex: "stockValue", align: "center", render: (v: number) => formatMoney(v) },
         ]}
@@ -97,19 +100,19 @@ export function StockPage() {
               render: (v: string) => (v === "IN" ? <Tag color="green">Nhập</Tag> : <Tag color="volcano">Xuất</Tag>),
             },
             {
-              title: "Số lượng (tấn)",
+              title: asTon ? "Số lượng (tấn)" : "Số lượng (kg)",
               dataIndex: "quantityDeltaBase",
               align: "center",
               render: (v: number) => {
-                const tons = kgToTon(v);
-                return `${tons > 0 ? "+" : ""}${qtyFormat.format(tons)}`;
+                const qty = asTon ? kgToTon(v) : v;
+                return `${qty > 0 ? "+" : ""}${qtyFormat.format(qty)}`;
               },
             },
             {
-              title: "Giá vốn / tấn",
+              title: asTon ? "Giá vốn / tấn" : "Giá vốn / kg",
               dataIndex: "unitCost",
               align: "center",
-              render: (v: number) => formatMoney(costPerKgToTon(v)),
+              render: (v: number) => formatMoney(asTon ? costPerKgToTon(v) : v),
             },
           ]}
         />

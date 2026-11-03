@@ -21,50 +21,218 @@ body {
 }
 
 .login-screen {
+  position: relative;
   min-height: 100vh;
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(280px, 420px) 1fr;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
 }
 
-.login-aside {
-  background: #1e2933;
-  color: #f4f7f8;
-  padding: 48px 36px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.login-aside h1 {
-  margin: 12px 0 8px;
-  font-size: 32px;
-  font-weight: 650;
-  letter-spacing: -0.03em;
-}
-
-.login-aside p {
-  margin: 0;
-  color: #c5d0d6;
-  line-height: 1.5;
-}
-
-.login-mark {
-  width: 44px;
-  height: 44px;
-  border: 2px solid #8fb4c6;
-  border-radius: 8px;
+.login-backdrop {
+  position: absolute;
+  inset: -24px;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(28, 36, 48, 0.28), rgba(28, 36, 48, 0.42)),
+    url("/login-hero.jpg") center / cover no-repeat;
+  filter: blur(10px);
+  transform: scale(1.06);
 }
 
 .login-panel {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   padding: 32px 20px;
 }
 
+.login-stack {
+  position: relative;
+  width: min(560px, 60vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Logo nằm ngoài form, phía trên card — nền trắng, chữ đen */
+.login-badge {
+  position: relative;
+  z-index: 2;
+  width: 112px;
+  height: 112px;
+  margin-bottom: -56px;
+  border-radius: 50%;
+  background: #fff;
+  color: #1c2430;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(20, 28, 40, 0.18);
+  line-height: 1.15;
+  flex-shrink: 0;
+}
+
+.login-badge-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #1c2430;
+}
+
+.login-badge-sub {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #1c2430;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
 .login-card {
-  width: min(420px, 100%);
+  width: 100%;
+  min-height: min(720px, 60vh);
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(20, 28, 40, 0.28);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+
+/* Ảnh làm nền toàn form — không lớp phủ trắng */
+.login-card-photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 18%;
+  display: block;
+  pointer-events: none;
+}
+
+.login-card-body {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 72px 48px 44px;
+  background: transparent;
+}
+
+.login-form {
+  width: 100%;
+}
+
+.login-form.ant-form-vertical .ant-form-item {
+  margin-bottom: 20px;
+}
+
+/* Ô tài khoản / mật khẩu trong suốt — không label */
+.login-field-block.ant-form-item {
+  background: transparent;
+  border-radius: 12px;
+  padding: 4px 0;
+  box-shadow: none;
+}
+
+.login-underline-control.ant-select,
+.login-underline-control.ant-input-affix-wrapper,
+.login-underline-control.ant-input {
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 8px 14px !important;
+  width: 100%;
+}
+
+.login-underline-control.ant-select .ant-select-content,
+.login-underline-control.ant-select .ant-select-selector {
+  padding-inline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.login-underline-control.ant-select-focused,
+.login-underline-control.ant-input-affix-wrapper-focused,
+.login-underline-control.ant-input:focus {
+  border-color: #fff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2) !important;
+}
+
+.login-underline-control.ant-select .ant-select-content,
+.login-underline-control.ant-select .ant-select-selection-item,
+.login-underline-control.ant-input-affix-wrapper input,
+.login-underline-control.ant-input {
+  color: #fff;
+  font-size: 18px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.login-underline-control.ant-input-affix-wrapper input::placeholder,
+.login-underline-control.ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.login-underline-control .ant-input-password-icon,
+.login-underline-control .ant-select-arrow {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.login-error {
+  margin: 0 0 16px;
+  color: #fff;
+  background: rgba(163, 59, 50, 0.92);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.login-submit-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+/* Nút bo tròn, rộng 50%, nền trắng chữ đen */
+.login-submit {
+  width: 50%;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  color: #1c2430;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 14px 18px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(20, 28, 40, 0.18);
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: #f3f5f7;
+  box-shadow: 0 8px 20px rgba(20, 28, 40, 0.22);
+}
+
+.login-submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .brand-block {
@@ -97,13 +265,23 @@ body {
   width: min(460px, 100%);
 }
 
-@media (max-width: 800px) {
-  .login-screen {
-    grid-template-columns: 1fr;
+@media (max-width: 640px) {
+  .login-stack {
+    width: min(560px, 92vw);
   }
 
-  .login-aside {
-    min-height: 180px;
+  .login-card {
+    min-height: min(640px, 70vh);
+  }
+
+  .login-card-body {
+    padding: 64px 28px 32px;
+  }
+
+  .login-badge {
+    width: 96px;
+    height: 96px;
+    margin-bottom: -48px;
   }
 }
 

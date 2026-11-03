@@ -37,7 +37,8 @@ public final class StockDtos {
 			@Size(max = 30) String paymentMethod,
 			String notes,
 			@Size(max = 80) String idempotencyKey,
-			@NotEmpty(message = "Phiếu cần ít nhất một dòng hàng") List<@Valid ItemRequest> items
+			@NotEmpty(message = "Phiếu cần ít nhất một dòng hàng") List<@Valid ItemRequest> items,
+			Boolean internal
 	) {
 	}
 
@@ -106,7 +107,10 @@ public final class StockDtos {
 			LocalDateTime confirmedAt,
 			String notes,
 			List<ItemDto> items,
-			List<PaymentDto> payments
+			List<PaymentDto> payments,
+			boolean internal,
+			Long internalPairDocumentId,
+			String internalPairDocumentCode
 	) {
 	}
 
@@ -118,7 +122,10 @@ public final class StockDtos {
 			LocalDateTime documentDate,
 			String counterpartyName,
 			BigDecimal totalAmount,
-			String paymentStatus
+			String paymentStatus,
+			boolean internal,
+			Long internalPairDocumentId,
+			String internalPairDocumentCode
 	) {
 	}
 

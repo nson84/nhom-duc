@@ -44,7 +44,7 @@ class AuthServiceTest {
 
 	@Test
 	void wrongCurrentPasswordDoesNotChangeTheHash() {
-		AdminUser user = new AdminUser("admin", "stored-hash");
+		AdminUser user = new AdminUser("admin", "stored-hash", UserRole.ADMIN, null);
 		when(adminUsers.findById(1L)).thenReturn(Optional.of(user));
 		when(passwordEncoder.matches("sai", "stored-hash")).thenReturn(false);
 		signIn();
@@ -64,7 +64,7 @@ class AuthServiceTest {
 		when(passwordEncoder.matches("Admin@123", "stored-hash")).thenReturn(true);
 		when(passwordEncoder.matches("MatKhauMoi1", "stored-hash")).thenReturn(false);
 		when(passwordEncoder.encode("MatKhauMoi1")).thenReturn("new-hash");
-		when(jwtService.issue(1L, "admin")).thenReturn("new-token");
+		when(jwtService.issue(1L, "admin", "ADMIN", null)).thenReturn("new-token");
 		when(jwtService.ttlSeconds()).thenReturn(3600L);
 		signIn();
 
@@ -82,7 +82,7 @@ class AuthServiceTest {
 	}
 
 	private static AdminUser savedUser() {
-		AdminUser user = new AdminUser("admin", "stored-hash");
+		AdminUser user = new AdminUser("admin", "stored-hash", UserRole.ADMIN, null);
 		try {
 			Field id = AdminUser.class.getDeclaredField("id");
 			id.setAccessible(true);
@@ -95,7 +95,7 @@ class AuthServiceTest {
 
 	private static void signIn() {
 		SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-				new AuthenticatedAdmin(1L, "admin", true),
+				new AuthenticatedAdmin(1L, "admin", true, UserRole.ADMIN, null),
 				null,
 				List.of()));
 	}

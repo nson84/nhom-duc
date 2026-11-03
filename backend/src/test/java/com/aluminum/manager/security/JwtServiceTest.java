@@ -13,15 +13,16 @@ class JwtServiceTest {
 
 	@Test
 	void issuesATokenThatRoundTrips() {
-		String token = jwtService.issue(7, "admin");
+		String token = jwtService.issue(7, "admin", "ADMIN", null);
 		JwtService.JwtClaims claims = jwtService.parse(token);
 		assertEquals(7, claims.userId());
 		assertEquals("admin", claims.username());
+		assertEquals("ADMIN", claims.role());
 	}
 
 	@Test
 	void rejectsATamperedToken() {
-		String token = jwtService.issue(7, "admin");
+		String token = jwtService.issue(7, "admin", "ADMIN", null);
 		String tampered = token.substring(0, token.length() - 2) + "aa";
 		BusinessException ex = assertThrows(BusinessException.class, () -> jwtService.parse(tampered));
 		assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
@@ -29,7 +30,7 @@ class JwtServiceTest {
 
 	@Test
 	void rejectsARevokedToken() {
-		String token = jwtService.issue(7, "admin");
+		String token = jwtService.issue(7, "admin", "ADMIN", null);
 		jwtService.revoke(token);
 		assertThrows(BusinessException.class, () -> jwtService.parse(token));
 	}
@@ -37,7 +38,7 @@ class JwtServiceTest {
 	@Test
 	void rejectsAnExpiredToken() {
 		JwtService expired = new JwtService("local-dev-only-change-before-packaging-32b", 0);
-		String token = expired.issue(7, "admin");
+		String token = expired.issue(7, "admin", "ADMIN", null);
 		assertThrows(BusinessException.class, () -> expired.parse(token));
 	}
 }

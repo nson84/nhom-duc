@@ -2,6 +2,8 @@ package com.aluminum.manager.auth;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -19,6 +21,13 @@ public class AdminUser {
 
 	@Column(nullable = false, unique = true, length = 80)
 	private String username;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 30)
+	private UserRole role = UserRole.ADMIN;
+
+	@Column(name = "shop_code", length = 30)
+	private String shopCode;
 
 	@Column(name = "password_hash", nullable = false, length = 255)
 	private String passwordHash;
@@ -38,9 +47,11 @@ public class AdminUser {
 	protected AdminUser() {
 	}
 
-	public AdminUser(String username, String passwordHash) {
+	public AdminUser(String username, String passwordHash, UserRole role, String shopCode) {
 		this.username = username;
 		this.passwordHash = passwordHash;
+		this.role = role;
+		this.shopCode = shopCode;
 	}
 
 	@PrePersist
@@ -58,6 +69,22 @@ public class AdminUser {
 		return username;
 	}
 
+	public UserRole getRole() {
+		return role == null ? UserRole.ADMIN : role;
+	}
+
+	public void setRole(UserRole role) {
+		this.role = role;
+	}
+
+	public String getShopCode() {
+		return shopCode;
+	}
+
+	public void setShopCode(String shopCode) {
+		this.shopCode = shopCode;
+	}
+
 	public String getPasswordHash() {
 		return passwordHash;
 	}
@@ -68,6 +95,10 @@ public class AdminUser {
 
 	public boolean isActive() {
 		return active;
+	}
+
+	public void setActive(boolean active) {
+		this.active = active;
 	}
 
 	public boolean isMustChangePassword() {

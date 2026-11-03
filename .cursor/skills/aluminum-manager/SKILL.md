@@ -10,7 +10,7 @@ description: >-
 
 # Aluminum manager
 
-Repo root is this project. One machine, one Admin account. Phase 1 (auth, settings, dashboard, V1 schema, domain math) is already in place. Later phases are products, stock, attendance, finance, and backup/packaging. Extend the layout below. Do not add multi-user, sync, debt, fingerprint, bank, e-invoice, or multi-branch.
+Repo root is this project. One machine, three local accounts: `admin` (read-only reports/vouchers + backup/settings), `phanphoi` (DISTRIBUTION shop), `xuong` (MANUFACTURING shop). Default password `123456`. Two shops share one database: `DISTRIBUTION` (nhập/bán tấn, no payroll) and `MANUFACTURING` (nhập tạ/tấn, bán kg, payroll). Shop is fixed by role; admin may send `X-Shop-Code` or `scope=all` for combined finance/reports (internal transfers stay out of external totals). Do not add cloud multi-user, sync, debt, fingerprint, bank, or e-invoice.
 
 ## Where code goes
 

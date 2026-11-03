@@ -37,6 +37,8 @@ export function ChangePasswordPage() {
         token: result.token,
         username: result.username,
         mustChangePassword: result.mustChangePassword,
+        role: result.role,
+        shopCode: result.shopCode,
       });
       navigate("/", { replace: true });
     } catch (caught) {

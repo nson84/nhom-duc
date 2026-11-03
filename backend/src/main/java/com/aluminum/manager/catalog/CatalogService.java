@@ -14,6 +14,7 @@ import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
 import com.aluminum.manager.common.NameValidation;
 import com.aluminum.manager.security.CurrentAdmin;
+import com.aluminum.manager.shop.ShopAccess;
 import com.aluminum.manager.system.AuditService;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
@@ -35,19 +36,24 @@ public class CatalogService {
 	private final AuditService audit;
 	private final PurchasePriceService purchasePrices;
 	private final Clock clock;
+	private final ShopAccess shops;
 
 	public CatalogService(
-			JdbcTemplate jdbc, AuditService audit, PurchasePriceService purchasePrices, Clock clock) {
+			JdbcTemplate jdbc, AuditService audit, PurchasePriceService purchasePrices, Clock clock, ShopAccess shops) {
 		this.jdbc = jdbc;
 		this.audit = audit;
 		this.purchasePrices = purchasePrices;
 		this.clock = clock;
+		this.shops = shops;
 	}
 
 	@Transactional(readOnly = true)
 	public List<CategoryDto> categories() {
 		return jdbc.query("""
-				SELECT id, name, description, is_active FROM product_categories ORDER BY name
+				SELECT id, name, description, is_active FROM product_categories
+				WHERE 1 = 1
+				""" + shops.shopOnly(null) + """
+				 ORDER BY name
 				""", (rs, i) -> new CategoryDto(
 				rs.getLong("id"), rs.getString("name"), rs.getString("description"), rs.getBoolean("is_active")));
 	}
@@ -56,8 +62,9 @@ public class CatalogService {
 	public CategoryDto createCategory(CategoryRequest request) {
 		NameValidation.requireNoLeadingDigit("Tên loại nhôm", request.name());
 		long id = insert("""
-				INSERT INTO product_categories (name, description, is_active) VALUES (?, ?, ?)
-				""", request.name().trim(), blankToNull(request.description()), request.active() == null || request.active());
+				INSERT INTO product_categories (name, description, is_active, shop_id) VALUES (?, ?, ?, ?)
+				""", request.name().trim(), blankToNull(request.description()), request.active() == null || request.active(),
+				shops.currentId());
 		audit.record(CurrentAdmin.get().id(), "CREATE_CATEGORY", "product_categories", String.valueOf(id), request.name());
 		return category(id);
 	}
@@ -83,7 +90,7 @@ public class CatalogService {
 		StringBuilder sql = new StringBuilder("""
 				SELECT p.id FROM products p
 				WHERE 1 = 1
-				""");
+				""" + shops.shopOnly("p"));
 		List<Object> args = new ArrayList<>();
 		if (query != null && !query.isBlank()) {
 			sql.append(" AND (p.product_code LIKE ? OR p.name LIKE ?)");
@@ -133,7 +140,7 @@ public class CatalogService {
 				FROM products p
 				JOIN product_categories c ON c.id = p.category_id
 				LEFT JOIN stock_balances b ON b.product_id = p.id
-				WHERE p.id = ?
+				WHERE p.id = ? AND p.shop_id = ?
 				""", (rs, i) -> new ProductDto(
 				rs.getLong("id"),
 				rs.getString("product_code"),
@@ -151,7 +158,7 @@ public class CatalogService {
 				rs.getBoolean("is_active"),
 				orZero(rs.getBigDecimal("quantity_base")),
 				orZero(rs.getBigDecimal("average_cost_per_base")),
-				units(id)), id);
+				units(id)), id, shops.currentId());
 		if (rows.isEmpty()) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy sản phẩm", null);
 		}
@@ -161,7 +168,8 @@ public class CatalogService {
 	@Transactional(readOnly = true)
 	public String nextProductCode() {
 		List<String> codes = jdbc.queryForList(
-				"SELECT product_code FROM products WHERE product_code REGEXP '^NH-[0-9]+$'", String.class);
+				"SELECT product_code FROM products WHERE shop_id = ? AND product_code REGEXP '^NH-[0-9]+$'",
+				String.class, shops.currentId());
 		int max = 0;
 		for (String c : codes) {
 			try {
@@ -173,7 +181,8 @@ public class CatalogService {
 			}
 		}
 		if (max == 0) {
-			Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM products", Integer.class);
+			Integer count = jdbc.queryForObject(
+					"SELECT COUNT(*) FROM products WHERE shop_id = ?", Integer.class, shops.currentId());
 			max = count == null ? 0 : count;
 		}
 		return "NH-%04d".formatted(max + 1);
@@ -193,15 +202,15 @@ public class CatalogService {
 					INSERT INTO products (product_code, name, category_id, specification, base_unit_name,
 					                      reference_purchase_price, default_selling_price,
 					                      default_selling_price_ta, image_path,
-					                      description, is_active)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					                      description, is_active, shop_id)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""",
 					code, request.name().trim(), request.categoryId(),
 					blankToNull(request.specification()), request.baseUnitName().trim(),
 					request.referencePurchasePrice(), request.defaultSellingPrice(),
 					sellingPriceTaOrDerived(request),
 					blankToNull(request.imagePath()), blankToNull(request.description()),
-					request.active() == null || request.active());
+					request.active() == null || request.active(), shops.currentId());
 		} catch (DuplicateKeyException ex) {
 			throw duplicate("Mã nhôm đã tồn tại");
 		}
@@ -391,10 +400,10 @@ public class CatalogService {
 
 	private CategoryDto category(long id) {
 		return jdbc.query("""
-				SELECT id, name, description, is_active FROM product_categories WHERE id = ?
+				SELECT id, name, description, is_active FROM product_categories WHERE id = ? AND shop_id = ?
 				""", (rs, i) -> new CategoryDto(
-				rs.getLong("id"), rs.getString("name"), rs.getString("description"), rs.getBoolean("is_active")),
-				id).stream().findFirst()
+				rs.getLong("id"), rs.getString("name"), rs.getString("description"), 				rs.getBoolean("is_active")),
+				id, shops.currentId()).stream().findFirst()
 				.orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy loại nhôm", null));
 	}
 

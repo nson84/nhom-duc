@@ -5,6 +5,8 @@ public record LoginResponse(
 		String tokenType,
 		long expiresInSeconds,
 		boolean mustChangePassword,
-		String username
+		String username,
+		String role,
+		String shopCode
 ) {
 }

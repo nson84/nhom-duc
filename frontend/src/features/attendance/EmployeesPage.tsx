@@ -43,7 +43,7 @@ export function EmployeesPage() {
       extra={<Button type="primary" onClick={() => setEditing("new")}>Thêm nhân viên</Button>}
     >
       <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search className="app-search" placeholder="Tìm mã, họ tên hoặc SĐT" allowClear onSearch={setQuery} style={{ width: 280 }} />
+        <Input.Search className="app-search" placeholder="Tìm họ tên hoặc SĐT" allowClear onSearch={setQuery} style={{ width: 280 }} />
         <Select
           placeholder="Trạng thái làm việc"
           allowClear
@@ -62,31 +62,33 @@ export function EmployeesPage() {
         dataSource={employees}
         pagination={{ pageSize: 20 }}
         columns={[
-          { title: "Mã NV", dataIndex: "employeeCode", width: 120 },
-          { title: "Họ và tên", dataIndex: "fullName" },
-          { title: "Điện thoại", dataIndex: "phone" },
+          { title: "Họ và tên", dataIndex: "fullName", align: "center" },
+          { title: "Điện thoại", dataIndex: "phone", align: "center" },
           {
             title: "Ngày vào làm",
             dataIndex: "hireDate",
+            align: "center",
             render: (v: string | null) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
           },
           {
             title: "Mức công ngày hiện tại",
-            align: "right",
+            align: "center",
             render: (_, e) => (e.currentPayRate ? formatMoney(e.currentPayRate.dailyRate) : "Chưa thiết lập"),
           },
           {
             title: "Tăng ca ngày thường / giờ",
-            align: "right",
+            align: "center",
             render: (_, e) => (e.currentPayRate ? formatMoney(e.currentPayRate.overtimeWeekdayRate) : "—"),
           },
           {
             title: "Trạng thái",
+            align: "center",
             render: (_, e) =>
               e.active ? <Tag color="green">Đang làm việc</Tag> : <Tag color="default">Ngừng làm việc</Tag>,
           },
           {
             title: "Thao tác",
+            align: "center",
             render: (_, e) => (
               <Space>
                 <a onClick={() => setEditing(e)}>Sửa</a>
@@ -118,9 +120,8 @@ export function EmployeesPage() {
 }
 
 type EmployeeFormValues = {
-  employeeCode: string;
   fullName: string;
-  phone?: string;
+  phone: string;
   address?: string;
   hireDate?: Dayjs | null;
   terminationDate?: Dayjs | null;
@@ -147,7 +148,7 @@ function EmployeeModal({
   return (
     <Modal
       open
-      title={employee ? `Sửa hồ sơ nhân viên ${employee.employeeCode}` : "Thêm nhân viên mới"}
+      title={employee ? `Sửa hồ sơ — ${employee.fullName}` : "Thêm nhân viên mới"}
       okText="Lưu"
       cancelText="Hủy"
       confirmLoading={saving}
@@ -161,7 +162,6 @@ function EmployeeModal({
         initialValues={
           employee
             ? {
-                employeeCode: employee.employeeCode,
                 fullName: employee.fullName,
                 phone: employee.phone ?? undefined,
                 address: employee.address ?? undefined,
@@ -183,7 +183,6 @@ function EmployeeModal({
           setSaving(true);
           try {
             await saveEmployee(employee?.id, {
-              employeeCode: values.employeeCode,
               fullName: values.fullName,
               phone: values.phone,
               address: values.address,
@@ -205,22 +204,26 @@ function EmployeeModal({
           }
         }}
       >
-        <Space align="start" style={{ display: "flex" }}>
-          <Form.Item name="employeeCode" label="Mã nhân viên" rules={[{ required: true, message: "Nhập mã nhân viên" }]}>
-            <Input style={{ width: 180 }} placeholder="NV001" />
-          </Form.Item>
+        <Form.Item
+          name="fullName"
+          label="Họ và tên"
+          rules={requiredNameRules("Nhập họ và tên", 150)}
+        >
+          <Input maxLength={150} />
+        </Form.Item>
+        <Space align="start" style={{ display: "flex" }} size={[16, 32]} wrap>
           <Form.Item
-            name="fullName"
-            label="Họ và tên"
-            rules={requiredNameRules("Nhập họ và tên", 150)}
-            style={{ flex: 1 }}
+            name="phone"
+            label="Số điện thoại"
+            rules={[
+              { required: true, message: "Nhập số điện thoại" },
+              {
+                pattern: /^(0|\+84)[0-9]{8,10}$/,
+                message: "Số chưa đúng, ví dụ 0912345678",
+              },
+            ]}
           >
-            <Input style={{ width: 420 }} maxLength={150} />
-          </Form.Item>
-        </Space>
-        <Space align="start" style={{ display: "flex" }}>
-          <Form.Item name="phone" label="Số điện thoại">
-            <Input style={{ width: 200 }} />
+            <Input style={{ width: 200 }} placeholder="0912345678" inputMode="tel" />
           </Form.Item>
           <Form.Item name="hireDate" label="Ngày vào làm">
             <DatePicker format="DD/MM/YYYY" style={{ width: 190 }} />
@@ -295,7 +298,7 @@ function PayRatesModal({
   }, [load]);
 
   return (
-    <Modal open title={`Lịch sử mức công — ${employee.employeeCode} (${employee.fullName})`} footer={null} onCancel={onClose} width={780}>
+    <Modal open title={`Lịch sử mức công — ${employee.fullName}`} footer={null} onCancel={onClose} width={780}>
       <p style={{ marginTop: 0 }}>
         Mức công mới áp dụng từ ngày hiệu lực được chọn. Kỳ công đã chốt giữ nguyên mức công cũ, không tự thay đổi.
       </p>
@@ -305,17 +308,18 @@ function PayRatesModal({
         pagination={false}
         dataSource={rates}
         columns={[
-          { title: "Từ ngày", dataIndex: "effectiveFrom", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
+          { title: "Từ ngày", dataIndex: "effectiveFrom", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
           {
             title: "Đến ngày",
             dataIndex: "effectiveTo",
+            align: "center",
             render: (v: string | null) => (v ? dayjs(v).format("DD/MM/YYYY") : <Tag color="green">Đang áp dụng</Tag>),
           },
-          { title: "Công / ngày", dataIndex: "dailyRate", align: "right", render: (v: number) => formatMoney(v) },
-          { title: "Giờ chuẩn", dataIndex: "standardHoursPerDay", align: "right" },
-          { title: "TC thường / giờ", dataIndex: "overtimeWeekdayRate", align: "right", render: (v: number) => formatMoney(v) },
-          { title: "TC nghỉ / giờ", dataIndex: "overtimeRestdayRate", align: "right", render: (v: number) => formatMoney(v) },
-          { title: "TC lễ / giờ", dataIndex: "overtimeHolidayRate", align: "right", render: (v: number) => formatMoney(v) },
+          { title: "Công / ngày", dataIndex: "dailyRate", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Giờ chuẩn", dataIndex: "standardHoursPerDay", align: "center" },
+          { title: "TC thường / giờ", dataIndex: "overtimeWeekdayRate", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "TC nghỉ / giờ", dataIndex: "overtimeRestdayRate", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "TC lễ / giờ", dataIndex: "overtimeHolidayRate", align: "center", render: (v: number) => formatMoney(v) },
         ]}
       />
       <Form

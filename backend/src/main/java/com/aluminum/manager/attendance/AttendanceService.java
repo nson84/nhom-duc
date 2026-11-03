@@ -26,6 +26,8 @@ import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.NameValidation;
 import com.aluminum.manager.common.ErrorCode;
 import com.aluminum.manager.inventory.DocumentSequenceService;
+import com.aluminum.manager.shop.ShopAccess;
+import com.aluminum.manager.shop.ShopContext;
 import com.aluminum.manager.inventory.InventoryMath;
 import com.aluminum.manager.security.CurrentAdmin;
 import com.aluminum.manager.system.AuditService;
@@ -64,21 +66,27 @@ public class AttendanceService {
 	private final AuditService audit;
 	private final DocumentSequenceService sequences;
 	private final Clock clock;
+	private final ShopAccess shops;
 
 	public AttendanceService(
-			JdbcTemplate jdbc, AuditService audit, DocumentSequenceService sequences, Clock clock) {
+			JdbcTemplate jdbc, AuditService audit, DocumentSequenceService sequences, Clock clock, ShopAccess shops) {
 		this.jdbc = jdbc;
 		this.audit = audit;
 		this.sequences = sequences;
 		this.clock = clock;
+		this.shops = shops;
 	}
 
 	// ---------- Employees ----------
 
 	@Transactional(readOnly = true)
 	public List<EmployeeDto> listEmployees(String query, Boolean active) {
-		StringBuilder sql = new StringBuilder("SELECT id FROM employees WHERE 1 = 1");
+		if (shops.isDistribution()) {
+			return List.of();
+		}
+		StringBuilder sql = new StringBuilder("SELECT id FROM employees WHERE shop_id = ?");
 		List<Object> args = new ArrayList<>();
+		args.add(shops.idOf(ShopContext.MANUFACTURING));
 		if (query != null && !query.isBlank()) {
 			sql.append(" AND (employee_code LIKE ? OR full_name LIKE ? OR phone LIKE ?)");
 			String like = "%" + query.trim() + "%";
@@ -128,23 +136,27 @@ public class AttendanceService {
 
 	@Transactional
 	public EmployeeDto createEmployee(EmployeeRequest request) {
+		shops.requireManufacturing();
 		NameValidation.requireNoLeadingDigit("Họ và tên", request.fullName());
 		validateEmployeeDates(request.hireDate(), request.terminationDate());
+		String phone = requirePhone(request.phone());
+		String code = nextEmployeeCode();
 		long id;
 		try {
 			id = insert("""
 					INSERT INTO employees (employee_code, full_name, phone, address, hire_date,
-					                       termination_date, is_active, notes)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					                       termination_date, is_active, notes, shop_id)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""",
-					request.employeeCode().trim(),
+					code,
 					request.fullName().trim(),
-					blank(request.phone()),
+					phone,
 					blank(request.address()),
 					request.hireDate() == null ? null : Date.valueOf(request.hireDate()),
 					request.terminationDate() == null ? null : Date.valueOf(request.terminationDate()),
 					request.active() == null || request.active(),
-					blank(request.notes()));
+					blank(request.notes()),
+					shops.idOf(ShopContext.MANUFACTURING));
 		} catch (DuplicateKeyException ex) {
 			throw new BusinessException(ErrorCode.DUPLICATE_PRODUCT_CODE, "Mã nhân viên đã tồn tại", null);
 		}
@@ -159,7 +171,7 @@ public class AttendanceService {
 					orZero(request.initialOvertimeRestdayRate()),
 					orZero(request.initialOvertimeHolidayRate())));
 		}
-		audit.record(CurrentAdmin.get().id(), "CREATE_EMPLOYEE", "employees", String.valueOf(id), request.employeeCode());
+		audit.record(CurrentAdmin.get().id(), "CREATE_EMPLOYEE", "employees", String.valueOf(id), code);
 		return getEmployee(id);
 	}
 
@@ -168,31 +180,45 @@ public class AttendanceService {
 		NameValidation.requireNoLeadingDigit("Họ và tên", request.fullName());
 		EmployeeDto existing = getEmployee(id);
 		validateEmployeeDates(request.hireDate(), request.terminationDate());
+		String phone = requirePhone(request.phone());
 		boolean active = request.active() == null ? existing.active() : request.active();
-		try {
-			jdbc.update("""
-					UPDATE employees
-					SET employee_code = ?, full_name = ?, phone = ?, address = ?, hire_date = ?,
-					    termination_date = ?, is_active = ?, notes = ?
-					WHERE id = ?
-					""",
-					request.employeeCode().trim(),
-					request.fullName().trim(),
-					blank(request.phone()),
-					blank(request.address()),
-					request.hireDate() == null ? null : Date.valueOf(request.hireDate()),
-					request.terminationDate() == null ? null : Date.valueOf(request.terminationDate()),
-					active,
-					blank(request.notes()),
-					id);
-		} catch (DuplicateKeyException ex) {
-			throw new BusinessException(ErrorCode.DUPLICATE_PRODUCT_CODE, "Mã nhân viên đã tồn tại", null);
-		}
+		jdbc.update("""
+				UPDATE employees
+				SET full_name = ?, phone = ?, address = ?, hire_date = ?,
+				    termination_date = ?, is_active = ?, notes = ?
+				WHERE id = ?
+				""",
+				request.fullName().trim(),
+				phone,
+				blank(request.address()),
+				request.hireDate() == null ? null : Date.valueOf(request.hireDate()),
+				request.terminationDate() == null ? null : Date.valueOf(request.terminationDate()),
+				active,
+				blank(request.notes()),
+				id);
 		String action = existing.active() != active
 				? (active ? "ENABLE_EMPLOYEE" : "DISABLE_EMPLOYEE")
 				: "UPDATE_EMPLOYEE";
-		audit.record(CurrentAdmin.get().id(), action, "employees", String.valueOf(id), request.employeeCode());
+		audit.record(CurrentAdmin.get().id(), action, "employees", String.valueOf(id), existing.employeeCode());
 		return getEmployee(id);
+	}
+
+	/** Mã nội bộ tự tăng: NV001, NV002, ... (không nhập trên UI). */
+	private String nextEmployeeCode() {
+		Integer maxNum = jdbc.queryForObject("""
+				SELECT COALESCE(MAX(CAST(SUBSTRING(employee_code, 3) AS UNSIGNED)), 0)
+				FROM employees
+				WHERE employee_code REGEXP '^NV[0-9]+$'
+				""", Integer.class);
+		int next = (maxNum == null ? 0 : maxNum) + 1;
+		return "NV%03d".formatted(next);
+	}
+
+	private static String requirePhone(String phone) {
+		if (phone == null || phone.isBlank()) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nhập số điện thoại", null);
+		}
+		return phone.trim();
 	}
 
 	@Transactional
@@ -426,6 +452,7 @@ public class AttendanceService {
 
 	@Transactional(readOnly = true)
 	public MonthlyAttendanceBoardDto monthlyBoard(int year, int month) {
+		shops.requireManufacturing();
 		validateYearMonth(year, month);
 		int daysInMonth = AttendanceCalculator.daysInMonth(year, month);
 		LocalDate start = LocalDate.of(year, month, 1);
@@ -1038,6 +1065,7 @@ public class AttendanceService {
 
 	@Transactional
 	public PayrollPeriodDto payPeriod(long periodId, PayPayrollRequest request) {
+		shops.requireManufacturing();
 		PayrollPeriodDto period = getPayrollPeriod(periodId);
 		if (!"CLOSED".equals(period.status())) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
@@ -1058,16 +1086,17 @@ public class AttendanceService {
 					"Số tiền chi vượt phần lương còn lại (" + remaining.stripTrailingZeros().toPlainString() + ")", null);
 		}
 		LocalDateTime now = LocalDateTime.now(clock);
-		String code = sequences.nextCode("FINANCE_EXPENSE", now.toLocalDate());
+		String code = sequences.nextCode("FINANCE_EXPENSE", now.toLocalDate(), ShopContext.MANUFACTURING);
 		String desc = blank(request.description()) != null
 				? request.description().trim()
 				: "Chi trả tiền công tháng " + period.month() + "/" + period.year();
 		long finId = insert("""
 				INSERT INTO financial_transactions (
 				    transaction_code, transaction_date, transaction_type, category,
-				    amount, description, reference_type, reference_id, status, idempotency_key)
-				VALUES (?, ?, 'EXPENSE', 'PAYROLL', ?, ?, 'PAYROLL_PERIOD', ?, 'CONFIRMED', ?)
-				""", code, Timestamp.valueOf(now), amount, desc, periodId, key);
+				    amount, description, reference_type, reference_id, status, idempotency_key,
+				    shop_id, is_internal)
+				VALUES (?, ?, 'EXPENSE', 'PAYROLL', ?, ?, 'PAYROLL_PERIOD', ?, 'CONFIRMED', ?, ?, 0)
+				""", code, Timestamp.valueOf(now), amount, desc, periodId, key, shops.idOf(ShopContext.MANUFACTURING));
 		audit.record(CurrentAdmin.get().id(), "PAY_PAYROLL", "payroll_periods", String.valueOf(periodId),
 				"Chi lương " + code + " (" + finId + "): " + amount.stripTrailingZeros().toPlainString());
 		return getPayrollPeriod(periodId);

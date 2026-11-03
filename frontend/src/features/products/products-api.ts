@@ -67,8 +67,8 @@ export type ProductInput = {
 
 export type UnitInput = { unitName: string; factorToBase: number; defaultSelling: boolean; active: boolean };
 
-export async function listCategories(): Promise<Category[]> {
-  return (await api.get<Envelope<Category[]>>("/api/v1/categories")).data.data;
+export async function listCategories(scope?: "all"): Promise<Category[]> {
+  return (await api.get<Envelope<Category[]>>("/api/v1/categories", { params: scope ? { scope } : undefined })).data.data;
 }
 
 export async function saveCategory(input: { id?: number; name: string; description?: string; active: boolean }) {
@@ -85,6 +85,7 @@ export async function listProducts(params: {
   active?: boolean;
   /** Lấy giá nhập có hiệu lực tại ngày này (YYYY-MM-DD). Bỏ trống = hôm nay. */
   asOf?: string;
+  scope?: "all";
 }): Promise<Product[]> {
   return (await api.get<Envelope<Product[]>>("/api/v1/products", { params })).data.data;
 }

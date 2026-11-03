@@ -2,6 +2,7 @@ package com.aluminum.manager.security;
 
 import com.aluminum.manager.auth.AdminUser;
 import com.aluminum.manager.auth.AdminUserRepository;
+import com.aluminum.manager.auth.UserRole;
 import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
 import jakarta.servlet.FilterChain;
@@ -49,10 +50,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 			if (!user.isActive()) {
 				throw new BusinessException(ErrorCode.UNAUTHORIZED, "Tài khoản đã ngừng sử dụng", null);
 			}
+			UserRole role = user.getRole();
 			AuthenticatedAdmin principal = new AuthenticatedAdmin(
-					user.getId(), user.getUsername(), user.isMustChangePassword());
+					user.getId(),
+					user.getUsername(),
+					user.isMustChangePassword(),
+					role,
+					user.getShopCode());
 			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-					principal, null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+					principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + role.name())));
 			SecurityContextHolder.getContext().setAuthentication(authentication);
 			if (user.isMustChangePassword() && !allowedWhilePasswordChange(request)) {
 				write(response, 403, "PASSWORD_CHANGE_REQUIRED", "Bạn cần đổi mật khẩu trước khi tiếp tục");

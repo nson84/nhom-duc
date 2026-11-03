@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import com.aluminum.manager.shop.ShopContextFilter;
 
 @Configuration
 public class SecurityConfig {
@@ -28,6 +29,8 @@ public class SecurityConfig {
 			JwtService jwtService,
 			AdminUserRepository adminUsers) throws Exception {
 		JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtService, adminUsers);
+		ShopContextFilter shopContextFilter = new ShopContextFilter();
+		RoleAccessFilter roleAccessFilter = new RoleAccessFilter();
 		// Ung dung desktop gui Bearer token, khong dung cookie. CORS chi mo origin cua app.
 		http.csrf(AbstractHttpConfigurer::disable)
 				.cors(Customizer.withDefaults())
@@ -49,7 +52,9 @@ public class SecurityConfig {
 					response.getWriter().write(
 							"{\"success\":false,\"code\":\"UNAUTHORIZED\",\"message\":\"Bạn cần đăng nhập\"}");
 				}))
-				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+				.addFilterAfter(shopContextFilter, JwtAuthenticationFilter.class)
+				.addFilterAfter(roleAccessFilter, ShopContextFilter.class);
 		return http.build();
 	}
 
@@ -72,7 +77,7 @@ public class SecurityConfig {
 		CorsConfiguration configuration = new CorsConfiguration();
 		configuration.setAllowedOrigins(origins);
 		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Shop-Code"));
 		configuration.setAllowCredentials(false);
 
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
+import { useSession } from "../auth/auth-store";
+import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { listCategories, listProducts, type Category, type Product } from "../products/products-api";
 import {
   downloadReportCsv,
@@ -24,6 +26,15 @@ const { RangePicker } = DatePicker;
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
 
 export function ReportsPage() {
+  const session = useSession();
+  const shop = useShop();
+  const canViewPayroll = session?.role !== "DISTRIBUTION";
+  const [book, setBook] = useState<"shop" | "all">("shop");
+  const asTon = shop === "DISTRIBUTION" && book === "shop";
+  const unitLabel = asTon ? "tấn" : "kg";
+  const showQty = (kg: number) => qtyFormat.format(asTon ? kgToTon(kg) : kg);
+  const showCost = (perKg: number) => formatMoney(asTon ? costPerKgToTon(perKg) : perKg);
+  const scope = book === "all" ? "all" as const : undefined;
   const [activeTab, setActiveTab] = useState<"profit" | "price-variance" | "sales-by-product" | "inventory" | "payroll">(
     "profit",
   );
@@ -42,37 +53,43 @@ export function ReportsPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    Promise.all([listCategories(), listProducts({})])
+    if (!canViewPayroll && activeTab === "payroll") {
+      setActiveTab("profit");
+    }
+  }, [canViewPayroll, activeTab]);
+
+  useEffect(() => {
+    Promise.all([listCategories(scope), listProducts({ scope })])
       .then(([c, p]) => {
         setCategories(c);
         setProducts(p);
       })
       .catch(() => undefined);
-  }, []);
+  }, [scope]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const from = range[0].format("YYYY-MM-DD");
       const to = range[1].format("YYYY-MM-DD");
-      const [pr, sp, inv, pay, pv] = await Promise.all([
-        getProfitReport(from, to),
-        getSalesByProductReport({ from, to, productId, categoryId }),
-        getInventoryReport({ from, to, categoryId }),
-        getPayrollReport(year),
-        getPriceVarianceReport({ from, to, categoryId }),
+      const [pr, sp, inv, pv, pay] = await Promise.all([
+        getProfitReport(from, to, scope),
+        getSalesByProductReport({ from, to, productId, categoryId, scope }),
+        getInventoryReport({ from, to, categoryId, scope }),
+        getPriceVarianceReport({ from, to, categoryId, scope }),
+        canViewPayroll ? getPayrollReport(year, scope) : Promise.resolve([] as PayrollReportRow[]),
       ]);
       setProfit(pr);
       setProductSales(sp);
       setInventoryRows(inv);
-      setPayrollRows(pay);
       setVarianceRows(pv);
+      setPayrollRows(pay);
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
       setLoading(false);
     }
-  }, [range, productId, categoryId, year]);
+  }, [range, productId, categoryId, year, scope, canViewPayroll]);
 
   useEffect(() => {
     void load();
@@ -86,6 +103,17 @@ export function ReportsPage() {
       title="Báo cáo doanh thu, lợi nhuận, tồn kho & tiền công"
       extra={
         <Space wrap>
+          {session?.role === "ADMIN" ? (
+            <Select
+              style={{ width: 220 }}
+              value={book}
+              onChange={setBook}
+              options={[
+                { value: "shop", label: SHOP_LABELS[shop] },
+                { value: "all", label: "Cả hai cửa hàng" },
+              ]}
+            />
+          ) : null}
           <RangePicker
             value={range}
             allowClear={false}
@@ -99,6 +127,7 @@ export function ReportsPage() {
             onClick={() =>
               void downloadReportCsv({
                 type: activeTab,
+                scope,
                 from: fromStr,
                 to: toStr,
                 productId,
@@ -148,7 +177,10 @@ export function ReportsPage() {
                   </Col>
                   <Col xs={24} md={6}>
                     <Card size="small">
-                      <Statistic title="Chi phí hoạt động & lương" value={formatMoney(profit?.operatingExpenses ?? 0)} />
+                      <Statistic
+                        title={canViewPayroll ? "Chi phí hoạt động & lương" : "Chi phí hoạt động"}
+                        value={formatMoney(profit?.operatingExpenses ?? 0)}
+                      />
                     </Card>
                   </Col>
                   <Col xs={24} md={6}>
@@ -290,22 +322,22 @@ export function ReportsPage() {
                       render: (v: string | null) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
                     },
                     {
-                      title: "Giá nhập chuẩn / tấn",
+                      title: `Giá nhập chuẩn / ${unitLabel}`,
                       dataIndex: "standardPricePerBase",
                       align: "center",
-                      render: (v: number) => formatMoney(costPerKgToTon(v)),
+                      render: (v: number) => showCost(v),
                     },
                     {
-                      title: "Giá nhập thực tế BQ / tấn",
+                      title: `Giá nhập thực tế BQ / ${unitLabel}`,
                       dataIndex: "actualAverageCostPerBase",
                       align: "center",
-                      render: (v: number) => formatMoney(costPerKgToTon(v)),
+                      render: (v: number) => showCost(v),
                     },
                     {
-                      title: "SL nhập (tấn)",
+                      title: `SL nhập (${unitLabel})`,
                       dataIndex: "actualQuantityBase",
                       align: "center",
-                      render: (v: number) => qtyFormat.format(kgToTon(v)),
+                      render: (v: number) => showQty(v),
                     },
                     {
                       title: "Giá trị nhập thực tế",
@@ -370,9 +402,9 @@ export function ReportsPage() {
                     { title: "Tên sản phẩm", dataIndex: "productName", align: "center" },
                     { title: "Loại nhôm", dataIndex: "categoryName", align: "center" },
                     {
-                      title: "SL đã bán (tấn)",
+                      title: `SL đã bán (${unitLabel})`,
                       align: "center",
-                      render: (_, r) => qtyFormat.format(kgToTon(r.quantityBaseSold)),
+                      render: (_, r) => showQty(r.quantityBaseSold),
                     },
                     { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
                     { title: "Giá vốn", dataIndex: "cogs", align: "center", render: (v: number) => formatMoney(v) },
@@ -437,36 +469,36 @@ export function ReportsPage() {
                   columns={[
                     { title: "Mã nhôm", dataIndex: "productCode", width: 120, align: "center" },
                     { title: "Tên sản phẩm", dataIndex: "productName", align: "center" },
-                    { title: "Đơn vị", align: "center", width: 70, render: () => "tấn" },
+                    { title: "Đơn vị", align: "center", width: 70, render: () => unitLabel },
                     {
                       title: "Tồn đầu kỳ",
                       dataIndex: "openingQuantityBase",
                       align: "center",
-                      render: (v: number) => qtyFormat.format(kgToTon(v)),
+                      render: (v: number) => showQty(v),
                     },
                     {
                       title: "Nhập trong kỳ",
                       dataIndex: "inQuantityBase",
                       align: "center",
-                      render: (v: number) => qtyFormat.format(kgToTon(v)),
+                      render: (v: number) => showQty(v),
                     },
                     {
                       title: "Xuất trong kỳ",
                       dataIndex: "outQuantityBase",
                       align: "center",
-                      render: (v: number) => qtyFormat.format(kgToTon(v)),
+                      render: (v: number) => showQty(v),
                     },
                     {
                       title: "Tồn cuối kỳ",
                       dataIndex: "closingQuantityBase",
                       align: "center",
-                      render: (v: number) => <b>{qtyFormat.format(kgToTon(v))}</b>,
+                      render: (v: number) => <b>{showQty(v)}</b>,
                     },
                     {
-                      title: "Giá vốn BQ / tấn",
+                      title: `Giá vốn BQ / ${unitLabel}`,
                       dataIndex: "averageCostPerBase",
                       align: "center",
-                      render: (v: number) => formatMoney(costPerKgToTon(v)),
+                      render: (v: number) => showCost(v),
                     },
                     { title: "Giá trị tồn", dataIndex: "inventoryValue", align: "center", render: (v: number) => <b>{formatMoney(v)}</b> },
                   ]}
@@ -474,44 +506,80 @@ export function ReportsPage() {
               </>
             ),
           },
-          {
-            key: "payroll",
-            label: "Tổng hợp tiền công",
-            children: (
-              <>
-                <Space style={{ marginBottom: 16 }}>
-                  <DatePicker
-                    picker="year"
-                    allowClear={false}
-                    value={dayjs(`${year}-01-01`)}
-                    onChange={(val) => val && setYear(val.year())}
-                  />
-                </Space>
-                <Table<PayrollReportRow>
-                  rowKey="periodId"
-                  loading={loading}
-                  dataSource={payrollRows}
-                  pagination={false}
-                  columns={[
-                    { title: "Kỳ công", render: (_, r) => `Tháng ${r.month}/${r.year}` },
-                    {
-                      title: "Trạng thái",
-                      dataIndex: "status",
-                      render: (v: string) => (v === "CLOSED" ? <Tag color="green">Đã chốt</Tag> : <Tag color="gold">Đang mở</Tag>),
-                    },
-                    { title: "Số NV", dataIndex: "employeeCount", align: "center" },
-                    { title: "Tổng ngày công", dataIndex: "totalCreditedDays", align: "center" },
-                    { title: "Lương cơ bản", dataIndex: "totalBasePay", align: "center", render: (v: number) => formatMoney(v) },
-                    { title: "Tăng ca", dataIndex: "totalOvertimePay", align: "center", render: (v: number) => formatMoney(v) },
-                    { title: "Phụ cấp", dataIndex: "totalAllowances", align: "center", render: (v: number) => formatMoney(v) },
-                    { title: "Khấu trừ", dataIndex: "totalDeductions", align: "center", render: (v: number) => formatMoney(v) },
-                    { title: "Tổng thực lĩnh", dataIndex: "grandTotalPay", align: "center", render: (v: number) => <b>{formatMoney(v)}</b> },
-                    { title: "Đã chi trả", dataIndex: "paidAmount", align: "center", render: (v: number) => formatMoney(v) },
-                  ]}
-                />
-              </>
-            ),
-          },
+          ...(canViewPayroll
+            ? [
+                {
+                  key: "payroll" as const,
+                  label: "Tổng hợp tiền công",
+                  children: (
+                    <>
+                      <Space style={{ marginBottom: 16 }}>
+                        <DatePicker
+                          picker="year"
+                          allowClear={false}
+                          value={dayjs(`${year}-01-01`)}
+                          onChange={(val) => val && setYear(val.year())}
+                        />
+                      </Space>
+                      <Table<PayrollReportRow>
+                        rowKey="periodId"
+                        loading={loading}
+                        dataSource={payrollRows}
+                        pagination={false}
+                        columns={[
+                          { title: "Kỳ công", render: (_, r) => `Tháng ${r.month}/${r.year}`, align: "center" },
+                          {
+                            title: "Trạng thái",
+                            dataIndex: "status",
+                            align: "center",
+                            render: (v: string) =>
+                              v === "CLOSED" ? <Tag color="green">Đã chốt</Tag> : <Tag color="gold">Đang mở</Tag>,
+                          },
+                          { title: "Số NV", dataIndex: "employeeCount", align: "center" },
+                          { title: "Tổng ngày công", dataIndex: "totalCreditedDays", align: "center" },
+                          {
+                            title: "Lương cơ bản",
+                            dataIndex: "totalBasePay",
+                            align: "center",
+                            render: (v: number) => formatMoney(v),
+                          },
+                          {
+                            title: "Tăng ca",
+                            dataIndex: "totalOvertimePay",
+                            align: "center",
+                            render: (v: number) => formatMoney(v),
+                          },
+                          {
+                            title: "Phụ cấp",
+                            dataIndex: "totalAllowances",
+                            align: "center",
+                            render: (v: number) => formatMoney(v),
+                          },
+                          {
+                            title: "Khấu trừ",
+                            dataIndex: "totalDeductions",
+                            align: "center",
+                            render: (v: number) => formatMoney(v),
+                          },
+                          {
+                            title: "Tổng thực lĩnh",
+                            dataIndex: "grandTotalPay",
+                            align: "center",
+                            render: (v: number) => <b>{formatMoney(v)}</b>,
+                          },
+                          {
+                            title: "Đã chi trả",
+                            dataIndex: "paidAmount",
+                            align: "center",
+                            render: (v: number) => formatMoney(v),
+                          },
+                        ]}
+                      />
+                    </>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
     </Card>

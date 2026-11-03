@@ -55,6 +55,9 @@ export type StockDocument = {
   notes: string | null;
   items: DocumentItem[];
   payments: Payment[];
+  internal?: boolean;
+  internalPairDocumentId?: number | null;
+  internalPairDocumentCode?: string | null;
 };
 
 export type DocumentSummary = {
@@ -66,6 +69,9 @@ export type DocumentSummary = {
   counterpartyName: string | null;
   totalAmount: number;
   paymentStatus: StockDocument["paymentStatus"];
+  internal?: boolean;
+  internalPairDocumentId?: number | null;
+  internalPairDocumentCode?: string | null;
 };
 
 export type DocumentInput = {
@@ -79,6 +85,7 @@ export type DocumentInput = {
   paymentMethod?: string;
   notes?: string;
   idempotencyKey?: string;
+  internal?: boolean;
   items: { productId: number; unitId: number; quantityDocument: number; unitPrice: number; lineDiscount: number }[];
 };
 

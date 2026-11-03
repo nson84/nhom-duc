@@ -28,9 +28,8 @@ export type Employee = {
 };
 
 export type EmployeeInput = {
-  employeeCode: string;
   fullName: string;
-  phone?: string;
+  phone: string;
   address?: string;
   hireDate?: string;
   terminationDate?: string;

@@ -60,9 +60,8 @@ public final class AttendanceDtos {
 	}
 
 	public record EmployeeRequest(
-			@NotBlank(message = "Nhập mã nhân viên") @Size(max = 50) String employeeCode,
 			@NotBlank(message = "Nhập họ tên nhân viên") @Size(max = 150) String fullName,
-			@Size(max = 30) String phone,
+			@NotBlank(message = "Nhập số điện thoại") @Size(max = 30) String phone,
 			@Size(max = 300) String address,
 			LocalDate hireDate,
 			LocalDate terminationDate,

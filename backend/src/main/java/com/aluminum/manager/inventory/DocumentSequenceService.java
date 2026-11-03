@@ -2,6 +2,7 @@ package com.aluminum.manager.inventory;
 
 import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
+import com.aluminum.manager.shop.ShopContext;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -22,7 +23,12 @@ public class DocumentSequenceService {
 
 	@Transactional
 	public String nextCode(String documentType, LocalDate documentDate) {
-		String key = DocumentCodes.sequenceKey(documentType);
+		return nextCode(documentType, documentDate, ShopContext.code());
+	}
+
+	@Transactional
+	public String nextCode(String documentType, LocalDate documentDate, String shopCode) {
+		String key = DocumentCodes.sequenceKey(documentType, shopCode);
 		String periodKey = documentDate.format(PERIOD);
 		jdbc.update("""
 				INSERT IGNORE INTO document_sequences (document_type, period_key, last_number)
@@ -43,6 +49,6 @@ public class DocumentSequenceService {
 				SET last_number = ?
 				WHERE document_type = ? AND period_key = ?
 				""", next, key, periodKey);
-		return DocumentCodes.format(documentType, YearMonth.from(documentDate), next);
+		return DocumentCodes.format(documentType, YearMonth.from(documentDate), next, shopCode);
 	}
 }

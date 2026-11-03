@@ -1,4 +1,6 @@
 import { api } from "../../services/api-client";
+import type { UserRole } from "./auth-store";
+import type { ShopCode } from "../shop/shop-store";
 
 export type LoginResult = {
   token: string;
@@ -6,6 +8,8 @@ export type LoginResult = {
   expiresInSeconds: number;
   mustChangePassword: boolean;
   username: string;
+  role: UserRole;
+  shopCode: ShopCode | null;
 };
 
 type Envelope<T> = {

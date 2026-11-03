@@ -1,9 +1,14 @@
 import { useSyncExternalStore } from "react";
+import type { ShopCode } from "../shop/shop-store";
+
+export type UserRole = "ADMIN" | "DISTRIBUTION" | "MANUFACTURING";
 
 export type Session = {
   token: string;
   username: string;
   mustChangePassword: boolean;
+  role: UserRole;
+  shopCode: ShopCode | null;
 };
 
 const STORAGE_KEY = "aluminum.session";
@@ -15,7 +20,11 @@ function readSession(): Session | null {
     return null;
   }
   try {
-    return JSON.parse(raw) as Session;
+    const parsed = JSON.parse(raw) as Session;
+    if (!parsed.role) {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -49,4 +58,8 @@ export const authStore = {
 
 export function useSession() {
   return useSyncExternalStore(authStore.subscribe, authStore.get, authStore.get);
+}
+
+export function useCanWrite(): boolean {
+  return useSession()?.role !== "ADMIN";
 }

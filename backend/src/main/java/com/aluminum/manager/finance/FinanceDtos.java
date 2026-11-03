@@ -25,7 +25,9 @@ public final class FinanceDtos {
 			String referenceType,
 			Long referenceId,
 			String status,
-			LocalDateTime createdAt
+			LocalDateTime createdAt,
+			boolean internal,
+			String shopCode
 	) {
 	}
 
@@ -56,7 +58,9 @@ public final class FinanceDtos {
 			BigDecimal payrollExpense,
 			BigDecimal otherExpense,
 			BigDecimal purchasePaymentOutflow,
-			BigDecimal netCashflow
+			BigDecimal netCashflow,
+			BigDecimal internalIncome,
+			BigDecimal internalExpense
 	) {
 	}
 

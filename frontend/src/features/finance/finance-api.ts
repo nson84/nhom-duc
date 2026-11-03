@@ -20,6 +20,8 @@ export type FinanceTransaction = {
   referenceId: number | null;
   status: "CONFIRMED" | "VOID";
   createdAt: string;
+  internal?: boolean;
+  shopCode?: string;
 };
 
 export type FinanceSummary = {
@@ -34,6 +36,8 @@ export type FinanceSummary = {
   otherExpense: number;
   purchasePaymentOutflow: number;
   netCashflow: number;
+  internalIncome?: number;
+  internalExpense?: number;
 };
 
 export type DailyRevenueRow = {
@@ -138,12 +142,13 @@ export async function listFinanceTransactions(params: {
   category?: string;
   status?: string;
   q?: string;
+  scope?: "all";
 }): Promise<FinanceTransaction[]> {
   return (await api.get<Envelope<FinanceTransaction[]>>("/api/v1/finance/transactions", { params })).data.data;
 }
 
-export async function getFinanceSummary(from: string, to: string): Promise<FinanceSummary> {
-  return (await api.get<Envelope<FinanceSummary>>("/api/v1/finance/summary", { params: { from, to } })).data.data;
+export async function getFinanceSummary(from: string, to: string, scope?: "all"): Promise<FinanceSummary> {
+  return (await api.get<Envelope<FinanceSummary>>("/api/v1/finance/summary", { params: { from, to, scope } })).data.data;
 }
 
 export async function createFinanceTransaction(input: {
@@ -161,8 +166,8 @@ export async function voidFinanceTransaction(id: number, reason: string): Promis
   return (await api.post<Envelope<FinanceTransaction>>(`/api/v1/finance/transactions/${id}/void`, { reason })).data.data;
 }
 
-export async function getProfitReport(from: string, to: string): Promise<ProfitReport> {
-  return (await api.get<Envelope<ProfitReport>>("/api/v1/reports/profit", { params: { from, to } })).data.data;
+export async function getProfitReport(from: string, to: string, scope?: "all"): Promise<ProfitReport> {
+  return (await api.get<Envelope<ProfitReport>>("/api/v1/reports/profit", { params: { from, to, scope } })).data.data;
 }
 
 export async function getSalesByProductReport(params: {
@@ -170,6 +175,7 @@ export async function getSalesByProductReport(params: {
   to: string;
   productId?: number;
   categoryId?: number;
+  scope?: "all";
 }): Promise<ProductSalesRow[]> {
   return (await api.get<Envelope<ProductSalesRow[]>>("/api/v1/reports/sales-by-product", { params })).data.data;
 }
@@ -178,18 +184,20 @@ export async function getInventoryReport(params: {
   from: string;
   to: string;
   categoryId?: number;
+  scope?: "all";
 }): Promise<InventoryReportRow[]> {
   return (await api.get<Envelope<InventoryReportRow[]>>("/api/v1/reports/inventory", { params })).data.data;
 }
 
-export async function getPayrollReport(year?: number): Promise<PayrollReportRow[]> {
-  return (await api.get<Envelope<PayrollReportRow[]>>("/api/v1/reports/payroll", { params: { year } })).data.data;
+export async function getPayrollReport(year?: number, scope?: "all"): Promise<PayrollReportRow[]> {
+  return (await api.get<Envelope<PayrollReportRow[]>>("/api/v1/reports/payroll", { params: { year, scope } })).data.data;
 }
 
 export async function getPriceVarianceReport(params: {
   from: string;
   to: string;
   categoryId?: number;
+  scope?: "all";
 }): Promise<PurchasePriceVarianceRow[]> {
   return (await api.get<Envelope<PurchasePriceVarianceRow[]>>("/api/v1/reports/price-variance", { params })).data.data;
 }
@@ -201,6 +209,7 @@ export async function downloadReportCsv(params: {
   productId?: number;
   categoryId?: number;
   year?: number;
+  scope?: "all";
 }) {
   const response = await api.get<Blob>("/api/v1/reports/export", {
     params,

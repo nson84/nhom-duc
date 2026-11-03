@@ -54,6 +54,8 @@ import {
   type ProductInput,
   type PurchasePrice,
 } from "./products-api";
+import { useCanWrite } from "../auth/auth-store";
+import { useShop } from "../shop/shop-store";
 import {
   DEFAULT_STOCK_UNIT,
   KG_PER_TA,
@@ -67,7 +69,7 @@ type ProductFormValues = ProductInput & {
 };
 
 /** Form nhập giá theo tấn; API lưu đ/kg. */
-function formPricesFromProduct(purchaseKg: number, sellingKg: number) {
+function formPricesFromProduct(purchaseKg: number, sellingKg: number, sellByKg: boolean) {
   const p = Math.max(0, Math.round(Number(purchaseKg) || 0));
   const s = Math.max(0, Math.round(Number(sellingKg) || 0));
   return {
@@ -75,11 +77,14 @@ function formPricesFromProduct(purchaseKg: number, sellingKg: number) {
     purchasePriceTon: Math.round(p * KG_PER_TON),
     defaultSellingPrice: s,
     defaultSellingPriceTa: Math.round(s * KG_PER_TA),
-    sellingPriceTon: Math.round(s * KG_PER_TON),
+    sellingPriceTon: sellByKg ? s : Math.round(s * KG_PER_TON),
   };
 }
 
 export function ProductsPage() {
+  const canWrite = useCanWrite();
+  const shop = useShop();
+  const sellByKg = shop === "MANUFACTURING";
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [query, setQuery] = useState("");
@@ -135,14 +140,16 @@ export function ProductsPage() {
     <Card
       title="Sản phẩm"
       extra={
-        <Space>
-          <AppActionButton tone="secondary" icon={<SwapOutlined />} onClick={() => setShowCategories(true)}>
-            Loại nhôm
-          </AppActionButton>
-          <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => setEditing("new")}>
-            Thêm sản phẩm
-          </AppActionButton>
-        </Space>
+        canWrite ? (
+          <Space>
+            <AppActionButton tone="secondary" icon={<SwapOutlined />} onClick={() => setShowCategories(true)}>
+              Loại nhôm
+            </AppActionButton>
+            <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => setEditing("new")}>
+              Thêm sản phẩm
+            </AppActionButton>
+          </Space>
+        ) : null
       }
     >
       <Space style={{ marginBottom: 16 }} wrap>
@@ -202,9 +209,9 @@ export function ProductsPage() {
           { title: "Tên sản phẩm", dataIndex: "name", align: "center" },
           { title: "Loại nhôm", dataIndex: "categoryName", align: "center" },
           {
-            title: "Tồn (tấn)",
+            title: sellByKg ? "Tồn (kg)" : "Tồn (tấn)",
             align: "center",
-            render: (_, p) => formatTonFromKg(p.quantityBase),
+            render: (_, p) => (sellByKg ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(p.quantityBase) : formatTonFromKg(p.quantityBase)),
           },
           {
             title: "Giá nhập / tấn",
@@ -221,9 +228,9 @@ export function ProductsPage() {
             ),
           },
           {
-            title: "Giá bán / tấn",
+            title: sellByKg ? "Giá bán / kg" : "Giá bán / tấn",
             align: "center",
-            render: (_, p) => formatMoney(Math.round(p.defaultSellingPrice * KG_PER_TON)),
+            render: (_, p) => formatMoney(sellByKg ? Math.round(p.defaultSellingPrice) : Math.round(p.defaultSellingPrice * KG_PER_TON)),
           },
           {
             title: "Trạng thái",
@@ -235,9 +242,11 @@ export function ProductsPage() {
             align: "center",
             render: (_, p) => (
               <Space onClick={(e) => e.stopPropagation()}>
-                <AppActionButton tone="edit" icon={<EditOutlined />} onClick={() => setEditing(p)}>
-                  Sửa
-                </AppActionButton>
+                {canWrite ? (
+                  <AppActionButton tone="edit" icon={<EditOutlined />} onClick={() => setEditing(p)}>
+                    Sửa
+                  </AppActionButton>
+                ) : null}
                 <AppActionButton tone="secondary" icon={<HistoryOutlined />} onClick={() => setPricesFor(p)}>
                   Lịch sử giá nhập
                 </AppActionButton>
@@ -286,10 +295,12 @@ function ProductModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const shop = useShop();
+  const sellByKg = shop === "MANUFACTURING";
   const [form] = Form.useForm<ProductFormValues>();
   const [saving, setSaving] = useState(false);
   const imageValue = Form.useWatch("imagePath", form);
-  const imageBeforeUploadRef = useRef<string | undefined>();
+  const imageBeforeUploadRef = useRef<string | undefined>(undefined);
   const uploadAcceptedRef = useRef(false);
   const draftAppliedRef = useRef(false);
   const targetId = product?.id ?? "new";
@@ -341,14 +352,16 @@ function ProductModal({
     draftAppliedRef.current = true;
     const draft = readSessionDraft<ProductFormValues>(PRODUCT_FORM_DRAFT_KEY);
     if (draft && draft.targetId === targetId) {
-      const ton = Number(draft.values.sellingPriceTon ?? 0);
+      const shown = Number(draft.values.sellingPriceTon ?? 0);
       const sellingKg =
-        ton > 0
-          ? Math.round(ton / KG_PER_TON)
+        shown > 0
+          ? sellByKg
+            ? Math.round(shown)
+            : Math.round(shown / KG_PER_TON)
           : Math.max(0, Math.round(Number(draft.values.defaultSellingPrice ?? 0)));
       form.setFieldsValue({
         ...draft.values,
-        ...formPricesFromProduct(Number(draft.values.referencePurchasePrice ?? 0), sellingKg),
+        ...formPricesFromProduct(Number(draft.values.referencePurchasePrice ?? 0), sellingKg, sellByKg),
       });
       return;
     }
@@ -363,11 +376,11 @@ function ProductModal({
         form.setFieldValue("categoryId", defaultCategoryId);
       }
     }
-  }, [product, form, defaultCategoryId, targetId, persistDraft]);
+  }, [product, form, defaultCategoryId, targetId, persistDraft, sellByKg]);
 
-  const emptyPrices = formPricesFromProduct(0, 0);
+  const emptyPrices = formPricesFromProduct(0, 0, sellByKg);
   const productPrices = product
-    ? formPricesFromProduct(product.referencePurchasePrice, product.defaultSellingPrice)
+    ? formPricesFromProduct(product.referencePurchasePrice, product.defaultSellingPrice, sellByKg)
     : emptyPrices;
 
   return (
@@ -408,8 +421,8 @@ function ProductModal({
           setSaving(true);
           try {
             const purchaseKg = Math.max(0, Math.round(Number(values.referencePurchasePrice ?? 0)));
-            const sellingTon = Math.max(0, Math.round(Number(values.sellingPriceTon ?? 0)));
-            const sellingKg = Math.max(0, Math.round(sellingTon / KG_PER_TON));
+            const sellingShown = Math.max(0, Math.round(Number(values.sellingPriceTon ?? 0)));
+            const sellingKg = sellByKg ? sellingShown : Math.max(0, Math.round(sellingShown / KG_PER_TON));
             await saveProduct(product?.id, {
               productCode: values.productCode,
               name: values.name,
@@ -474,7 +487,7 @@ function ProductModal({
           </Col>
           <Col span={8}>
             <Form.Item label="Đơn vị tồn kho">
-              <Input disabled value="tấn" />
+              <Input disabled value={sellByKg ? "kg" : "tấn"} />
             </Form.Item>
             <Form.Item name="baseUnitName" hidden>
               <Input />
@@ -486,7 +499,7 @@ function ProductModal({
           type="info"
           showIcon
           style={{ marginBottom: 32 }}
-          message="Giá nhập và giá bán theo tấn."
+          message={sellByKg ? "Giá nhập theo tấn. Giá bán theo kg." : "Giá nhập và giá bán theo tấn."}
         />
 
         <Row gutter={[16, 32]}>
@@ -504,16 +517,16 @@ function ProductModal({
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item name="sellingPriceTon" label="Giá bán / tấn" rules={vndUnitPriceRules}>
+            <Form.Item name="sellingPriceTon" label={sellByKg ? "Giá bán / kg" : "Giá bán / tấn"} rules={vndUnitPriceRules}>
               <InputNumber<number>
                 {...vndInputNumberProps}
                 style={{ width: "100%" }}
-                placeholder="VD: 80,000,000 / tấn"
+                placeholder={sellByKg ? "VD: 80,000 / kg" : "VD: 80,000,000 / tấn"}
                 onChange={(val) => {
-                  const ton = Math.max(0, Math.round(Number(val) || 0));
-                  const sellingKg = Math.round(ton / KG_PER_TON);
+                  const shown = Math.max(0, Math.round(Number(val) || 0));
+                  const sellingKg = sellByKg ? shown : Math.round(shown / KG_PER_TON);
                   form.setFieldsValue({
-                    sellingPriceTon: ton,
+                    sellingPriceTon: shown,
                     defaultSellingPrice: sellingKg,
                     defaultSellingPriceTa: Math.round(sellingKg * KG_PER_TA),
                   });
@@ -733,6 +746,7 @@ function PurchasePricesModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const canWrite = useCanWrite();
   const [rows, setRows] = useState<PurchasePrice[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -809,55 +823,57 @@ function PurchasePricesModal({
           { title: "Ghi chú", dataIndex: "note", align: "center", render: (v: string | null) => v ?? "—" },
         ]}
       />
-      <Form
-        form={form}
-        layout="vertical"
-        style={{ marginTop: 16 }}
-        initialValues={{
-          effectiveFrom: dayjs(),
-          pricePerTon: Math.round(product.referencePurchasePrice * KG_PER_TON),
-        }}
-        onFinish={async (values) => {
-          setSaving(true);
-          try {
-            const pricePerTon = Math.max(0, Math.round(Number(values.pricePerTon ?? 0)));
-            setRows(
-              await savePurchasePrice(product.id, {
-                pricePerBase: Math.max(0, Math.round(pricePerTon / KG_PER_TON)),
-                effectiveFrom: values.effectiveFrom?.format("YYYY-MM-DD"),
-                note: values.note,
-              }),
-            );
-            message.success("Đã ghi giá nhập mới");
-            onChanged();
-          } catch (error) {
-            message.error(toApiError(error).message);
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        <Space align="start" wrap size={[16, 32]}>
-          <Form.Item name="pricePerTon" label="Giá nhập / tấn" rules={vndUnitPriceRules}>
-            <InputNumber<number> {...vndInputNumberProps} style={{ width: 220 }} />
-          </Form.Item>
-          <Form.Item
-            name="effectiveFrom"
-            label="Hiệu lực từ ngày"
-            tooltip="Mặc định hôm nay. Có thể đặt giá cho ngày mai. Không chọn ngày trước mốc giá sớm nhất, để không làm lệch chi phí đã chốt."
-          >
-            <DatePicker format="DD/MM/YYYY" style={{ width: 160 }} />
-          </Form.Item>
-          <Form.Item name="note" label="Ghi chú">
-            <Input placeholder="VD: nhà cung cấp tăng giá" style={{ width: 240 }} />
-          </Form.Item>
-          <Form.Item label=" ">
-            <AppActionButton tone="create" icon={<SaveOutlined />} htmlType="submit" loading={saving}>
-              Ghi giá mới
-            </AppActionButton>
-          </Form.Item>
-        </Space>
-      </Form>
+      {canWrite ? (
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+          initialValues={{
+            effectiveFrom: dayjs(),
+            pricePerTon: Math.round(product.referencePurchasePrice * KG_PER_TON),
+          }}
+          onFinish={async (values) => {
+            setSaving(true);
+            try {
+              const pricePerTon = Math.max(0, Math.round(Number(values.pricePerTon ?? 0)));
+              setRows(
+                await savePurchasePrice(product.id, {
+                  pricePerBase: Math.max(0, Math.round(pricePerTon / KG_PER_TON)),
+                  effectiveFrom: values.effectiveFrom?.format("YYYY-MM-DD"),
+                  note: values.note,
+                }),
+              );
+              message.success("Đã ghi giá nhập mới");
+              onChanged();
+            } catch (error) {
+              message.error(toApiError(error).message);
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          <Space align="start" wrap size={[16, 32]}>
+            <Form.Item name="pricePerTon" label="Giá nhập / tấn" rules={vndUnitPriceRules}>
+              <InputNumber<number> {...vndInputNumberProps} style={{ width: 220 }} />
+            </Form.Item>
+            <Form.Item
+              name="effectiveFrom"
+              label="Hiệu lực từ ngày"
+              tooltip="Mặc định hôm nay. Có thể đặt giá cho ngày mai. Không chọn ngày trước mốc giá sớm nhất, để không làm lệch chi phí đã chốt."
+            >
+              <DatePicker format="DD/MM/YYYY" style={{ width: 160 }} />
+            </Form.Item>
+            <Form.Item name="note" label="Ghi chú">
+              <Input placeholder="VD: nhà cung cấp tăng giá" style={{ width: 240 }} />
+            </Form.Item>
+            <Form.Item label=" ">
+              <AppActionButton tone="create" icon={<SaveOutlined />} htmlType="submit" loading={saving}>
+                Ghi giá mới
+              </AppActionButton>
+            </Form.Item>
+          </Space>
+        </Form>
+      ) : null}
     </Modal>
   );
 }
