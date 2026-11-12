@@ -93,3 +93,7 @@ Phiếu bán xưởng tự lấy dòng nhập gần nhất làm giá nhôm tham 
 Tồn Phân phối theo số lượng. Phiếu bán gợi ý giá theo loại nhôm và cho sửa giá trên phiếu.
 
 Tạo phiếu bán Phân phối xác nhận và trừ tồn trong một giao dịch. Thiếu tồn thì không tạo phiếu.
+
+### Bổ sung giao diện Tổng tồn kho
+
+Phân phối hiển thị tổng giá trị tồn sổ, số kg đã nhập, đã giao và tồn sổ, có thể kiểm kê thực tế từng cặp sản phẩm/loại; số tổng không bị thay đổi khi tìm kiếm trong bảng. Xưởng hiển thị tóm tắt nhập, giao, phế liệu đã bán và hao hụt ước tính theo báo cáo quyết toán của năm hiện tại (không trừ tồn từng lần giao); có liên kết sang Quyết toán Xưởng. Chỉ tiêu phế liệu hiện là **đã bán**, không đại diện cho toàn bộ phế liệu chưa bán.
