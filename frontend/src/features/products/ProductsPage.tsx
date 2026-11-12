@@ -672,7 +672,7 @@ function CategoriesModal({
     <Modal open title="Loại nhôm" footer={null} onCancel={onClose} width={1040}>
       {shop === "MANUFACTURING" && reviewPrices && <Alert type="warning" showIcon style={{ marginBottom: 16 }}
         message="Danh mục vừa đồng bộ từ Phân phối — cần kiểm tra giá bán thành phẩm"
-        description={<Space direction="vertical"><span>Giá bán Xưởng được giữ độc lập. Loại mới chưa có giá bán; hãy chọn Sửa từng loại và điền giá trước khi bán. Các ô giá bán được viền vàng để nhắc kiểm tra.</span><AppActionButton tone="secondary" onClick={acknowledgePrices}>Đã kiểm tra / Giữ nguyên các giá đang có</AppActionButton></Space>} />}
+        description={<Space direction="vertical"><span>Giá bán Xưởng được giữ độc lập. Loại mới chưa có giá bán; hãy chọn Sửa từng loại và điền giá trước khi bán. Các ô giá bán được viền vàng để nhắc kiểm tra.</span><AppActionButton tone="secondary" icon={<SaveOutlined />} onClick={acknowledgePrices}>Đã kiểm tra / Giữ nguyên các giá đang có</AppActionButton></Space>} />}
       <Table<Category>
         rowKey="id"
         size="small"
