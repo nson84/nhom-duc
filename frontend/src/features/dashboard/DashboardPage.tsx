@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { ApiError, toApiError } from "../../services/error-handler";
+import { Link } from "react-router-dom";
 import { useShop } from "../shop/shop-store";
 import { formatMoney } from "../../utils/money";
 import { getBackupStatus } from "../backup/backup-api";
@@ -146,6 +147,9 @@ export function DashboardPage() {
           style={{ marginBottom: 16 }}
         />
       ) : null}
+      {!periodicFactory && !period?.closed && <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message="Để chốt kỳ Phân phối, cần cân thực tế toàn bộ các loại đã phát sinh kho."
+        description={<Link to="/ton-kho">Mở Tồn kho → Kiểm kê / Hao hụt trước khi bấm Chốt năm</Link>} />}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}><Card><Statistic title="Tổng tiền hàng nhập" value={formatMoney(summary?.purchaseAmount ?? 0)} /></Card></Col>
         <Col xs={24} md={8}><Card><Statistic title="Tổng tiền thu dự kiến" value={formatMoney(summary?.revenue ?? 0)} /></Card></Col>
