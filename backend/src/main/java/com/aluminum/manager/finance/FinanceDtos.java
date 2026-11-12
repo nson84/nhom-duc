@@ -105,6 +105,11 @@ public final class FinanceDtos {
 	) {
 	}
 
+	/** Lãi gộp tham khảo: giá vốn loại nhôm theo ngày bán, không gồm công và hao hụt. */
+	public record InvoiceGrossMarginDto(long documentId, String documentCode, LocalDate documentDate,
+			String customerName, BigDecimal revenue, BigDecimal estimatedMaterialCost,
+			BigDecimal estimatedGrossProfit, boolean costComplete) {}
+
 	public record ProductSalesRowDto(
 			Long productId,
 			String productCode,
