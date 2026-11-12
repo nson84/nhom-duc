@@ -101,7 +101,7 @@ public class DashboardService {
 				expenses,
 				inventory,
 				payroll,
-				shops.isDistribution() ? debts(range, true) : null,
+				debts(range, true),
 				shops.isDistribution() ? debts(range, false) : null,
 				shops.isDistribution() ? cashExpenses(range) : null,
 				shops.isDistribution() ? closing(range) : null,
