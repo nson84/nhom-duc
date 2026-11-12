@@ -170,7 +170,7 @@ public class DashboardService {
 				    OR c.counted_quantity_kg <> b.quantity_base
 				    OR EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = b.product_id
 				       AND m.category_id = b.category_id AND m.movement_at > c.counted_at))
-				""", Integer.class, shops.currentId(), cutoff, cutoff);
+				""", Integer.class, shops.currentId(), cutoff, Timestamp.valueOf(range.to().atStartOfDay()));
 		if (uncounted != null && uncounted > 0) throw new BusinessException(
 				ErrorCode.VALIDATION_ERROR,
 				"Chưa kiểm kê đầy đủ hoặc đã phát sinh biến động kho sau kiểm kê: "
