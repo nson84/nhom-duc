@@ -13,15 +13,12 @@ import {
 } from "recharts";
 import { ApiError, toApiError } from "../../services/error-handler";
 import { useShop } from "../shop/shop-store";
-import { Link } from "react-router-dom";
 import { formatMoney } from "../../utils/money";
 import { getBackupStatus } from "../backup/backup-api";
 import type { ThemePalette } from "../theme/palette";
 import { useThemeColors } from "../theme/theme-store";
 import { useCanWrite } from "../auth/auth-store";
 import { closeDistribution, getCharts, getSummary, getYearPeriod, type DashboardSummary, type YearPeriod } from "./dashboard-api";
-import { YearEndBalanceCard } from "./YearEndBalanceCard";
-import { getYearReport, type YearReport } from "../factory/factory-api";
 
 const { RangePicker } = DatePicker;
 
@@ -49,7 +46,6 @@ export function DashboardPage() {
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [closeRange, setCloseRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [period, setPeriod] = useState<YearPeriod | null>(null);
-  const [factoryReport, setFactoryReport] = useState<YearReport | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [points, setPoints] = useState<{ day: string; revenue: number; cash: number; profit: number }[]>([]);
   const [dayMode, setDayMode] = useState<"active" | "all">("active");
@@ -71,18 +67,6 @@ export function DashboardPage() {
     }).catch((reason) => { if (active) setError(toApiError(reason).message); });
     return () => { active = false; };
   }, [viewYear, yearEndRefresh, shop]);
-
-  useEffect(() => {
-    if (!periodicFactory) {
-      setFactoryReport(null);
-      return;
-    }
-    let active = true;
-    setFactoryReport(null);
-    getYearReport(viewYear).then((value) => { if (active) setFactoryReport(value); })
-      .catch(() => { if (active) setFactoryReport(null); });
-    return () => { active = false; };
-  }, [periodicFactory, viewYear]);
 
   useEffect(() => {
     if (!range) return;
@@ -162,38 +146,13 @@ export function DashboardPage() {
           style={{ marginBottom: 16 }}
         />
       ) : null}
-      {periodicFactory && <Alert type="info" showIcon style={{ marginBottom: 16 }} message="Lãi và hao hụt của xưởng được tính theo kiểm kê cuối kỳ" description={<Link to="/quyet-toan-xuong">Mở quyết toán xưởng</Link>} />}
       <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card><Statistic title={periodicFactory ? "Doanh thu thành phẩm" : "Doanh thu"} value={formatMoney(summary?.revenue ?? 0)} /></Card>
-        </Col>
-        <Col xs={24} md={8}>
-          <Card><Statistic title={periodicFactory ? "Đã thu từ thành phẩm" : "Tiền thực thu"} value={formatMoney(summary?.cashCollected ?? 0)} /></Card>
-        </Col>
-
-        <Col xs={24} md={8}>
-          <Card><Statistic title="Chi phí hoạt động" value={formatMoney(summary?.operatingExpenses ?? 0)} /></Card>
-        </Col>
-
-        {!periodicFactory && summary && <>
-          <Col xs={24} md={8}><Card><Statistic title="Tổng tiền đã chi" value={formatMoney(summary.cashExpenses ?? 0)} /></Card></Col>
-          <Col xs={24} md={8}><Card><Statistic title="Khách còn nợ" value={formatMoney(summary.customerDebt ?? 0)} /></Card></Col>
-          <Col xs={24} md={8}><Card><Statistic title="Cửa hàng còn nợ nhà cung cấp" value={formatMoney(summary.supplierDebt ?? 0)} /></Card></Col>
-          {summary.closing && <>
-            <Col xs={24} md={8}><Card><Statistic title="Lãi kỳ đã chốt" value={formatMoney(summary.closing.profit)} /></Card></Col>
-            <Col xs={24} md={8}><Card><Statistic title={`Tồn cuối kỳ · ${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 6 }).format(summary.closing.quantityKg / 1000)} tấn`} value={formatMoney(summary.closing.inventoryValue)} /></Card></Col>
-          </>}
-        </>}
-        {periodicFactory && <Col xs={24} md={8}>
-          <Card><Statistic title="Tiền công tháng đang xem" value={formatMoney(summary?.payroll ?? 0)} /></Card>
-        </Col>}
-        {periodicFactory && factoryReport?.estimatedProfit != null && <Col xs={24} md={8}>
-          <Card><Statistic title={factoryReport.countStatus === "CLOSED" ? "Lãi năm đã chốt" : "Lãi năm ước tính · chưa chốt"}
-            value={formatMoney(factoryReport.estimatedProfit)} /></Card>
-        </Col>}
+        <Col xs={24} md={8}><Card><Statistic title="Tổng tiền hàng nhập" value={formatMoney(summary?.purchaseAmount ?? 0)} /></Card></Col>
+        <Col xs={24} md={8}><Card><Statistic title="Tổng tiền thu dự kiến" value={formatMoney(summary?.revenue ?? 0)} /></Card></Col>
+        <Col xs={24} md={8}><Card><Statistic title="Tổng tiền thu thực tế" value={formatMoney(summary?.cashCollected ?? 0)} /></Card></Col>
+        <Col xs={24} md={12}><Card><Statistic title="Nợ khách đến cuối kỳ" value={formatMoney(summary?.customerDebt ?? 0)} /></Card></Col>
+        <Col xs={24} md={12}><Card><Statistic title="Tổng khối lượng hàng đã giao" value={`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary?.deliveredKg ?? 0) / 1000)} tấn`} /></Card></Col>
       </Row>
-
-      <YearEndBalanceCard year={viewYear} refreshKey={yearEndRefresh} />
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={15}>
