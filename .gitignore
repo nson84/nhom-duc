@@ -7,6 +7,9 @@ scripts/dev-env.local.ps1
 backend/target/
 frontend/node_modules/
 frontend/dist/
+backups/
+.runtime/
+backend/.runtime/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
 

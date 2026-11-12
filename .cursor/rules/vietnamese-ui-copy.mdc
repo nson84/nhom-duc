@@ -1,0 +1,15 @@
+---
+description: Chữ UI tiếng Việt đầy đủ — không viết tắt, không tiếng Anh trên nhãn người dùng thấy
+globs: frontend/src/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# Chữ giao diện
+
+Khi sửa nhãn / cột / nút / tag / thông báo trên UI:
+
+- Viết **tiếng Việt đủ từ** (ví dụ `Thanh toán`, không `TT`).
+- Không viết tắt, không tiếng Anh trên chữ người dùng đọc được.
+- Thanh toán một phần: lịch sử phải có **ngày giờ từng lần**, không chỉ tổng đã thu.
+
+Chi tiết: skill `vietnamese-ui-copy`.

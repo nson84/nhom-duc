@@ -1,6 +1,5 @@
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Space, message } from "antd";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { toApiError } from "../../services/error-handler";
 import {
   getLandingContent,
@@ -45,7 +44,6 @@ export function LandingContentPage() {
       loading={loading}
       extra={
         <Space>
-          <Link to="/khach-hang">Khách để lại thông tin</Link>
           <a onClick={() => window.open("/gioi-thieu", "_blank")}>Xem trang</a>
         </Space>
       }
@@ -58,7 +56,7 @@ export function LandingContentPage() {
         description="Tên cửa hàng, địa chỉ và số điện thoại lấy từ Cài đặt. Phần dưới đây chỉ là nội dung chữ của từng khối trên trang."
       />
       <Form form={form} layout="vertical" onFinish={onFinish} disabled={loading}>
-        <Divider orientation="left">Phần đầu (hero)</Divider>
+        <Divider titlePlacement="start">Phần đầu (hero)</Divider>
         <Form.Item
           name="heroTitle"
           label="Tiêu đề lớn"
@@ -94,7 +92,7 @@ export function LandingContentPage() {
           </Col>
         </Row>
 
-        <Divider orientation="left">Bốn điểm nổi bật</Divider>
+        <Divider titlePlacement="start">Bốn điểm nổi bật</Divider>
         <Form.List name="strengths">
           {(fields) => (
             <Row gutter={[16, 32]}>
@@ -125,7 +123,7 @@ export function LandingContentPage() {
           )}
         </Form.List>
 
-        <Divider orientation="left">Danh mục mặt hàng</Divider>
+        <Divider titlePlacement="start">Danh mục mặt hàng</Divider>
         <Form.Item
           name="categoriesTitle"
           label="Tiêu đề khối mặt hàng"
@@ -134,7 +132,7 @@ export function LandingContentPage() {
           <Input />
         </Form.Item>
 
-        <Divider orientation="left">Khối liên hệ / form</Divider>
+        <Divider titlePlacement="start">Khối liên hệ / form</Divider>
         <Form.Item
           name="contactTitle"
           label="Tiêu đề khối liên hệ"

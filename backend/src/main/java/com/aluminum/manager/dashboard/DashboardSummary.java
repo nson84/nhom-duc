@@ -12,6 +12,11 @@ public record DashboardSummary(
 		BigDecimal grossProfit,
 		BigDecimal operatingExpenses,
 		BigDecimal inventoryValue,
-		BigDecimal payroll
+		BigDecimal payroll,
+		BigDecimal customerDebt,
+		BigDecimal supplierDebt,
+		BigDecimal cashExpenses,
+		Closing closing
 ) {
+	public record Closing(BigDecimal quantityKg, BigDecimal inventoryValue, BigDecimal profit) {}
 }

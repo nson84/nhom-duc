@@ -13,13 +13,33 @@ public final class CatalogDtos {
 	private CatalogDtos() {
 	}
 
-	public record CategoryDto(Long id, String name, String description, boolean active) {
+	public record CategoryDto(
+			Long id,
+			String name,
+			String description,
+			boolean active,
+			/** Giá nhập đang áp dụng (đ/kg). */
+			BigDecimal referencePurchasePrice,
+			LocalDate purchasePriceEffectiveFrom,
+			/** Giá bán gợi ý / kg. */
+			BigDecimal defaultSellingPrice,
+			BigDecimal defaultSellingPriceTa,
+			BigDecimal defaultSellingPriceTon,
+			BigDecimal defaultSellingPriceM2
+	) {
 	}
 
 	public record CategoryRequest(
 			@NotBlank(message = "Nhập tên loại nhôm") @Size(max = 100) String name,
 			@Size(max = 500) String description,
-			Boolean active
+			Boolean active,
+			@NotNull(message = "Nhập giá nhập")
+			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal referencePurchasePrice,
+			@NotNull(message = "Nhập giá bán / kg")
+			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal defaultSellingPrice,
+			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal defaultSellingPriceTa,
+			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal defaultSellingPriceTon,
+			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal defaultSellingPriceM2
 	) {
 	}
 
@@ -47,35 +67,23 @@ public final class CatalogDtos {
 			String productCode,
 			String name,
 			Long categoryId,
-			String categoryName,
-			String specification,
 			String baseUnitName,
-			BigDecimal referencePurchasePrice,
-			/** Giá nhập đang áp dụng có hiệu lực từ ngày nào. Null khi sản phẩm chưa có lịch sử giá. */
-			LocalDate purchasePriceEffectiveFrom,
-			/** Giá bán / kg (từ giá bán / tấn ÷ 1000). */
-			BigDecimal defaultSellingPrice,
-			/** Đồng bộ nội bộ từ giá tấn (×100); UI không nhập riêng. */
-			BigDecimal defaultSellingPriceTa,
 			String imagePath,
 			String description,
 			boolean active,
+			/** Tổng tồn kg gộp mọi loại. */
 			BigDecimal quantityBase,
-			BigDecimal averageCostPerBase,
 			List<UnitDto> units
 	) {
 	}
 
-	/** Một mốc giá nhập trong lịch sử. {@code effectiveTo} null nghĩa là mốc xa nhất đã ghi. */
 	public record PurchasePriceDto(
 			Long id,
 			LocalDate effectiveFrom,
 			LocalDate effectiveTo,
 			BigDecimal pricePerBase,
 			String note,
-			/** True khi đây là mốc đang áp dụng hôm nay. */
 			boolean open,
-			/** True khi mốc được đặt cho một ngày trong tương lai. */
 			boolean future
 	) {
 	}
@@ -83,26 +91,30 @@ public final class CatalogDtos {
 	public record PurchasePriceRequest(
 			@NotNull(message = "Nhập giá nhập")
 			@DecimalMin(value = "0", message = "Giá nhập không được âm") BigDecimal pricePerBase,
-			/** Bỏ trống thì hiệu lực từ hôm nay. */
 			LocalDate effectiveFrom,
 			@Size(max = 500, message = "Ghi chú tối đa 500 ký tự") String note
 	) {
 	}
 
+	/** SP chỉ mã / tên / ảnh / trạng thái. */
 	public record ProductRequest(
 			@Size(max = 50, message = "Mã nhôm tối đa 50 ký tự") String productCode,
 			@NotBlank(message = "Nhập tên sản phẩm") @Size(max = 200) String name,
-			@NotNull(message = "Chọn loại nhôm") Long categoryId,
-			@Size(max = 200) String specification,
-			@NotBlank(message = "Nhập đơn vị cơ sở") @Size(max = 30) String baseUnitName,
-			@NotNull(message = "Nhập giá nhập")
-			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal referencePurchasePrice,
-			@NotNull(message = "Nhập giá bán / tấn")
-			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal defaultSellingPrice,
-			@DecimalMin(value = "0", message = "Giá không được âm") BigDecimal defaultSellingPriceTa,
+		Long categoryId,
 			@Size(max = 2_000_000, message = "Ảnh vượt quá dung lượng cho phép") String imagePath,
 			@Size(max = 500, message = "Ghi chú tối đa 500 ký tự") String description,
 			Boolean active
+	) {
+	}
+
+	/** Kết quả đẩy danh mục (SP + loại) sang shop kia — không đụng tồn kho. */
+	public record CatalogSyncResult(
+			String targetShopCode,
+			String targetShopName,
+			int categoriesCreated,
+			int categoriesUpdated,
+			int productsCreated,
+			int productsUpdated
 	) {
 	}
 }

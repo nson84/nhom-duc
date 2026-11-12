@@ -1,0 +1,12 @@
+---
+description: Khung trang luôn đầy màn hình, phân trang chuẩn 30 bản ghi căn giữa
+globs: frontend/**/*.{tsx,ts,css}
+alwaysApply: true
+---
+
+# Khung trang và phân trang
+
+- Khung (`Card`) chính của **mọi trang** luôn kéo dài hết chiều cao màn hình, dù chỉ có 1 bản ghi hay rỗng. CSS có sẵn: `.app-content > .ant-card:only-child` hoặc class `app-fill-card` (xem `frontend/src/index.css`).
+- Trang mới chỉ giữ **một `Card` gốc**; `Table` là con trực tiếp của phần thân thẻ để phân trang dính đáy khung. Không rải `minHeight`/`height` trong component.
+- Bảng nhiều dòng dùng `PagedTable` (`frontend/src/components/PagedTable.tsx`): tối đa **30 bản ghi/trang**, phân trang căn giữa, có nút về trang đầu/cuối, dạng `3 4 5 … 89 90`.
+- Màu chỉ lấy từ token theme (`var(--color-*)`), xem skill `aluminum-manager`.

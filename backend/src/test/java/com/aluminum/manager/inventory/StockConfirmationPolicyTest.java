@@ -11,6 +11,13 @@ import org.junit.jupiter.api.Test;
 class StockConfirmationPolicyTest {
 
 	@Test
+	void onlyManufacturingSalesSkipStock() {
+		assertEquals(false, StockConfirmationPolicy.skipsStock(true, "SALE"));
+		assertEquals(true, StockConfirmationPolicy.skipsStock(false, "SALE"));
+		assertEquals(false, StockConfirmationPolicy.skipsStock(false, "PURCHASE"));
+	}
+
+	@Test
 	void secondConfirmIsRejected() {
 		assertDoesNotThrow(() -> StockConfirmationPolicy.requireDraft("DRAFT"));
 		BusinessException ex = assertThrows(BusinessException.class,

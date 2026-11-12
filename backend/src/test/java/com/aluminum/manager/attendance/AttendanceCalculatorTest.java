@@ -33,6 +33,17 @@ class AttendanceCalculatorTest {
 	}
 
 	@Test
+	void eachAttendanceSessionCreditsHalfADay() {
+		for (boolean morning : new boolean[]{true, false}) {
+			for (boolean afternoon : new boolean[]{true, false}) {
+				String status = AttendanceCalculator.rollCallStatus(morning, afternoon);
+				assertBd(morning && afternoon ? "1" : morning || afternoon ? "0.5" : "0",
+						AttendanceCalculator.creditedDays(status, BigDecimal.ONE, new BigDecimal("0.5")));
+			}
+		}
+	}
+
+	@Test
 	void calculatesADayShiftAfterTheConfiguredBreak() {
 		LocalDateTime start = LocalDateTime.of(2026, 10, 29, 8, 0);
 		LocalDateTime end = LocalDateTime.of(2026, 10, 29, 17, 0);

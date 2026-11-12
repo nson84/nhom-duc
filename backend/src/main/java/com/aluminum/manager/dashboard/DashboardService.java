@@ -25,11 +25,13 @@ public class DashboardService {
 	private final JdbcTemplate jdbc;
 	private final Clock clock;
 	private final ShopAccess shops;
+	private final YearEndBalanceService yearEndBalances;
 
-	public DashboardService(JdbcTemplate jdbc, Clock clock, ShopAccess shops) {
+	public DashboardService(JdbcTemplate jdbc, Clock clock, ShopAccess shops, YearEndBalanceService yearEndBalances) {
 		this.jdbc = jdbc;
 		this.clock = clock;
 		this.shops = shops;
+		this.yearEndBalances = yearEndBalances;
 	}
 
 	@Transactional(readOnly = true)
@@ -61,7 +63,7 @@ public class DashboardService {
 				FROM financial_transactions
 				WHERE transaction_type = 'EXPENSE'
 				  AND status = 'CONFIRMED'
-				  AND category IN ('OPERATING_EXPENSE', 'PAYROLL', 'OTHER_EXPENSE')
+				  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'PAYROLL', 'OTHER_EXPENSE')
 				  AND transaction_date >= ? AND transaction_date < ?
 				""", range);
 		BigDecimal inventory = scale(jdbc.queryForObject("""
@@ -87,8 +89,122 @@ public class DashboardService {
 				revenue.subtract(cogs).setScale(MONEY_SCALE, ROUNDING),
 				expenses,
 				inventory,
-				payroll);
+				payroll,
+				shops.isDistribution() ? debts(range, true) : null,
+				shops.isDistribution() ? debts(range, false) : null,
+				shops.isDistribution() ? cashExpenses(range) : null,
+				shops.isDistribution() ? closing(range) : null);
 	}
+
+	private BigDecimal cashExpenses(DateRange range) {
+		return money("""
+				SELECT COALESCE(SUM(amount), 0) FROM financial_transactions
+				WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED'
+				  AND transaction_date >= ? AND transaction_date < ?
+				""", range);
+	}
+
+	private BigDecimal debts(DateRange range, boolean customer) {
+		Timestamp end = Timestamp.valueOf(range.to().plusDays(1).atStartOfDay());
+		String paid = customer
+				? "SELECT SUM(p.amount) FROM sales_payments p WHERE p.document_id = d.id AND p.payment_date < ?"
+				: "SELECT SUM(f.amount) FROM financial_transactions f WHERE f.reference_type = 'STOCK_DOCUMENT'"
+				  + " AND f.reference_id = d.id AND f.category = 'PURCHASE_PAYMENT' AND f.status = 'CONFIRMED' AND f.transaction_date < ?";
+		return jdbc.queryForObject("""
+				SELECT COALESCE(SUM(GREATEST(d.total_amount - COALESCE((
+				""" + paid + """
+				), 0), 0)), 0) FROM stock_documents d
+				WHERE d.shop_id = ? AND d.document_type = ? AND d.status = 'CONFIRMED'
+				  AND d.is_internal = 0 AND d.document_date < ?
+				""", BigDecimal.class, end, shops.currentId(), customer ? "SALE" : "PURCHASE", end);
+	}
+
+	private DashboardSummary.Closing closing(DateRange range) {
+		return jdbc.query("""
+				SELECT quantity_kg, inventory_value, profit FROM distribution_period_closings
+				WHERE shop_id = ? AND period_from = ? AND period_to = ?
+				""", (rs, i) -> new DashboardSummary.Closing(rs.getBigDecimal(1), rs.getBigDecimal(2), rs.getBigDecimal(3)),
+				shops.currentId(), range.from(), range.to()).stream().findFirst().orElse(null);
+	}
+
+	@Transactional
+	public DashboardSummary.Closing closeDistribution(LocalDate from, LocalDate to, boolean annual, Integer year) {
+		if (!shops.isDistribution()) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ chốt kỳ Phân phối tại đây", null);
+		DateRange range = range(from, to);
+		if (range.to().isAfter(LocalDate.now(clock))) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không chốt ngày tương lai", null);
+		Integer missing = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+				WHERE d.shop_id = ? AND d.document_type IN ('PURCHASE', 'SALE')
+				  AND d.status = 'CONFIRMED' AND d.document_date < ?
+				  AND NOT EXISTS (SELECT 1 FROM stock_movements m WHERE m.document_item_id = i.id)
+				""", Integer.class, shops.currentId(), Timestamp.valueOf(range.to().plusDays(1).atStartOfDay()));
+		if (missing != null && missing > 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+				"Có phiếu cũ thiếu biến động kho. Cần đối chiếu tồn trước khi chốt", null);
+		Valuation opening = valuation(range.from());
+		Valuation ending = valuation(range.to().plusDays(1));
+		BigDecimal purchases = money("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM stock_documents
+				WHERE document_type = 'PURCHASE' AND status = 'CONFIRMED'
+				  AND document_date >= ? AND document_date < ?
+				""", range);
+		DashboardSummary summary = summary(from, to);
+		BigDecimal profit = summary.revenue().subtract(opening.value()).subtract(purchases)
+				.add(ending.value()).subtract(summary.operatingExpenses());
+		jdbc.update("""
+				INSERT INTO distribution_period_closings(shop_id, period_from, period_to, quantity_kg, inventory_value, profit)
+				VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE quantity_kg = VALUES(quantity_kg),
+				    inventory_value = VALUES(inventory_value), profit = VALUES(profit)
+				""", shops.currentId(), range.from(), range.to(), ending.quantity(), ending.value(), profit);
+		boolean calendarYear = range.from().equals(LocalDate.of(range.to().getYear(), 1, 1))
+				&& range.to().equals(LocalDate.of(range.to().getYear(), 12, 31));
+		if (annual || calendarYear) {
+			int closingYear = annual && year != null ? year : range.to().getYear();
+			if (closingYear < 2000 || closingYear > 2100) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chọn tên năm chốt hợp lệ", null);
+			yearEndBalances.save(closingYear, range.from(), range.to(), ending.quantity(), ending.value(), profit);
+		}
+		return closing(range);
+	}
+
+	private Valuation valuation(LocalDate cutoff) {
+		Timestamp end = Timestamp.valueOf(cutoff.atStartOfDay());
+		var rows = jdbc.query("""
+				WITH balances AS (
+				    SELECT m.product_id, m.category_id, SUM(m.quantity_delta_base) AS qty
+				    FROM stock_movements m JOIN products p ON p.id = m.product_id
+				    WHERE p.shop_id = ? AND m.movement_at < ?
+				    GROUP BY m.product_id, m.category_id
+				    HAVING SUM(m.quantity_delta_base) <> 0
+				), receipts AS (
+				    SELECT i.product_id, i.category_id, i.quantity_base AS qty, i.line_total AS value,
+				           SUM(i.quantity_base) OVER (PARTITION BY i.product_id, i.category_id
+				             ORDER BY d.document_date DESC, d.id DESC, i.id DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+				             - i.quantity_base AS prior_qty
+				    FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+				    WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.document_date < ?
+				      AND d.confirmed_at IS NOT NULL AND NOT EXISTS (
+				        SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id AND r.document_date < ?
+				      )
+				)
+				SELECT b.qty, COALESCE(SUM(r.qty), 0) AS sourced,
+				       COALESCE(SUM(LEAST(r.qty, GREATEST(b.qty - r.prior_qty, 0)) * r.value / r.qty), 0) AS value
+				FROM balances b LEFT JOIN receipts r ON r.product_id = b.product_id AND r.category_id = b.category_id
+				GROUP BY b.product_id, b.category_id, b.qty
+				""", (rs, i) -> new BigDecimal[]{rs.getBigDecimal("qty"), rs.getBigDecimal("sourced"), rs.getBigDecimal("value")},
+				shops.currentId(), end, shops.currentId(), end, end);
+		BigDecimal quantity = BigDecimal.ZERO;
+		BigDecimal value = BigDecimal.ZERO;
+		for (var row : rows) {
+			if (row[0].signum() < 0 || row[0].compareTo(row[1]) > 0) {
+				throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+						"Tồn kho không khớp lịch sử phiếu nhập tại " + cutoff.minusDays(1) + ". Hãy đối chiếu trước khi chốt", null);
+			}
+			quantity = quantity.add(row[0]);
+			value = value.add(row[2]);
+		}
+		return new Valuation(quantity, scale(value));
+	}
+
+	private record Valuation(BigDecimal quantity, BigDecimal value) {}
 
 	@Transactional(readOnly = true)
 	public List<DashboardPoint> charts(LocalDate from, LocalDate to) {
@@ -168,8 +284,8 @@ public class DashboardService {
 		if (end.isBefore(start)) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu", null);
 		}
-		if (start.plusDays(366).isBefore(end)) {
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Khoảng thời gian báo cáo không quá 366 ngày", null);
+		if (start.plusDays(400).isBefore(end)) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Khoảng thời gian báo cáo không quá 400 ngày", null);
 		}
 		return new DateRange(start, end);
 	}

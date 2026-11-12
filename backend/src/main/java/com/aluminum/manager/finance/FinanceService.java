@@ -42,9 +42,8 @@ public class FinanceService {
 	private static final int MONEY_SCALE = 4;
 	private static final int QTY_SCALE = 6;
 	private static final RoundingMode ROUNDING = RoundingMode.HALF_UP;
-	private static final Set<String> MANUAL_INCOME_CATEGORIES = Set.of("OTHER_INCOME");
 	private static final Set<String> MANUAL_EXPENSE_CATEGORIES = Set.of(
-			"OPERATING_EXPENSE", "PAYROLL", "OTHER_EXPENSE");
+			"OPERATING_EXPENSE", "MAINTENANCE", "PAYROLL", "OTHER_EXPENSE");
 
 	private final JdbcTemplate jdbc;
 	private final DocumentSequenceService sequences;
@@ -69,7 +68,7 @@ public class FinanceService {
 		DateRange range = range(from, to);
 		StringBuilder sql = new StringBuilder("""
 				SELECT ft.id, ft.transaction_code, ft.transaction_date, ft.transaction_type, ft.category,
-				       ft.amount, ft.description, ft.reference_type, ft.reference_id, ft.status, ft.created_at,
+				       ft.amount, ft.description, ft.spent_by, ft.reference_type, ft.reference_id, ft.status, ft.created_at,
 				       ft.is_internal, s.code AS shop_code
 				FROM financial_transactions ft
 				JOIN shops s ON s.id = ft.shop_id
@@ -113,18 +112,16 @@ public class FinanceService {
 		if ("PAYROLL".equals(category)) {
 			shops.requireManufacturing();
 		}
-		if ("INCOME".equals(type)) {
-			if (!MANUAL_INCOME_CATEGORIES.contains(category)) {
-				throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nhóm phiếu thu thủ công không hợp lệ", null);
-			}
-		} else if ("EXPENSE".equals(type)) {
-			if (!MANUAL_EXPENSE_CATEGORIES.contains(category)) {
-				throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nhóm phiếu chi thủ công không hợp lệ", null);
-			}
-		} else {
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Loại giao dịch phải là INCOME hoặc EXPENSE", null);
+		if (!"EXPENSE".equals(type)) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ lập phiếu chi thủ công trong sổ thu chi", null);
+		}
+		if (!MANUAL_EXPENSE_CATEGORIES.contains(category)) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nhóm phiếu chi thủ công không hợp lệ", null);
 		}
 
+		if (shops.isDistribution() && blank(request.spentBy()) == null) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nhập người chi", null);
+		}
 		String key = blank(request.idempotencyKey());
 		if (key != null) {
 			List<Long> existing = jdbc.queryForList(
@@ -135,20 +132,20 @@ public class FinanceService {
 		}
 
 		LocalDateTime when = request.transactionDate() == null ? LocalDateTime.now(clock) : request.transactionDate();
-		String code = sequences.nextCode(
-				"INCOME".equals(type) ? "FINANCE_INCOME" : "FINANCE_EXPENSE", when.toLocalDate());
+		if (!shops.isDistribution()) assertFactoryYearOpen(when);
+		String code = sequences.nextCode("FINANCE_EXPENSE", when.toLocalDate());
 		BigDecimal amount = InventoryMath.snapshotMoney(request.amount());
 		long id = insert("""
 				INSERT INTO financial_transactions (
 				    transaction_code, transaction_date, transaction_type, category,
-				    amount, description, reference_type, reference_id, status, idempotency_key,
+				    amount, description, spent_by, reference_type, reference_id, status, idempotency_key,
 				    shop_id, is_internal)
-				VALUES (?, ?, ?, ?, ?, ?, 'MANUAL', NULL, 'CONFIRMED', ?, ?, 0)
+				VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL', NULL, 'CONFIRMED', ?, ?, 0)
 				""",
-				code, Timestamp.valueOf(when), type, category, amount, request.description().trim(), key,
+				code, Timestamp.valueOf(when), type, category, amount, blank(request.description()), blank(request.spentBy()), key,
 				shops.currentId());
 		audit.record(CurrentAdmin.get().id(), "CREATE_FINANCE_" + type, "financial_transactions",
-				String.valueOf(id), code + ": " + request.description().trim());
+				String.valueOf(id), code);
 		return getTransaction(id);
 	}
 
@@ -162,6 +159,15 @@ public class FinanceService {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 					"Khoản thu/chi gắn với phiếu kho không thể hủy rời. Hãy kiểm tra trên phiếu kho tương ứng", null);
 		}
+		if ("HOLIDAY_BONUS".equals(tx.referenceType())) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Hãy chỉnh trạng thái đã nhận trong Lịch nghỉ lễ để cập nhật khoản chi thưởng", null);
+		}
+		if ("SCRAP_SALE".equals(tx.referenceType())) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Khoản thu phế liệu phải được đối soát trên phiếu bán phế liệu", null);
+		}
+		if (ShopContext.MANUFACTURING.equals(tx.shopCode())) assertFactoryYearOpen(tx.transactionDate());
 		String updatedDesc = (tx.description() == null ? "" : tx.description() + " ")
 				+ "[Đã hủy: " + reason.trim() + "]";
 		jdbc.update("""
@@ -199,12 +205,24 @@ public class FinanceService {
 				rs.getString("category"),
 				rs.getBigDecimal("amount"),
 				rs.getString("description"),
+				rs.getString("spent_by"),
 				rs.getString("reference_type"),
 				(Long) rs.getObject("reference_id"),
 				rs.getString("status"),
 				rs.getTimestamp("created_at").toLocalDateTime(),
 				rs.getBoolean("is_internal"),
 				rs.getString("shop_code"));
+	}
+
+	private void assertFactoryYearOpen(LocalDateTime date) {
+		Integer closed = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM factory_year_counts
+				WHERE status = 'CLOSED' AND period_from <= ? AND period_to >= ?
+				""", Integer.class, date.toLocalDate(), date.toLocalDate());
+		if (closed != null && closed > 0) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Ngày giao dịch thuộc kỳ đã chốt kiểm kê xưởng", null);
+		}
 	}
 
 	// ---------- Finance Summary ----------
@@ -216,8 +234,9 @@ public class FinanceService {
 		BigDecimal otherIncome = sumByCategory("INCOME", "OTHER_INCOME", range);
 		BigDecimal totalIncome = saleReceipt.add(otherIncome).setScale(MONEY_SCALE, ROUNDING);
 
-		BigDecimal operatingExpense = sumByCategory("EXPENSE", "OPERATING_EXPENSE", range);
-		BigDecimal payrollExpense = sumByCategory("EXPENSE", "PAYROLL", range);
+		BigDecimal operatingExpense = sumByCategory("EXPENSE", "OPERATING_EXPENSE", range).add(sumByCategory("EXPENSE", "MAINTENANCE", range));
+		BigDecimal payrollExpense = shops.isDistribution()
+				? BigDecimal.ZERO : sumByCategory("EXPENSE", "PAYROLL", range);
 		BigDecimal otherExpense = sumByCategory("EXPENSE", "OTHER_EXPENSE", range);
 		BigDecimal purchasePayment = sumByCategory("EXPENSE", "PURCHASE_PAYMENT", range);
 		BigDecimal totalExpense = operatingExpense.add(payrollExpense).add(otherExpense).add(purchasePayment)
@@ -292,7 +311,7 @@ public class FinanceService {
 						SELECT COALESCE(SUM(amount), 0)
 						FROM financial_transactions
 						WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED'
-						  AND category IN ('OPERATING_EXPENSE', 'PAYROLL', 'OTHER_EXPENSE')
+						  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'PAYROLL', 'OTHER_EXPENSE')
 						  AND transaction_date >= ? AND transaction_date < ?
 						""", start, end)).setScale(MONEY_SCALE, ROUNDING);
 		BigDecimal priceVariance = cogs.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING);
@@ -301,7 +320,7 @@ public class FinanceService {
 				SELECT COALESCE(SUM(amount), 0)
 				FROM financial_transactions
 				WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED'
-				  AND category IN ('OPERATING_EXPENSE', 'PAYROLL', 'OTHER_EXPENSE')
+				  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'PAYROLL', 'OTHER_EXPENSE')
 				  AND transaction_date >= ? AND transaction_date < ?
 				""", start, end);
 
@@ -387,7 +406,7 @@ public class FinanceService {
 				SELECT DATE(transaction_date) AS day, COALESCE(SUM(amount), 0) AS exp
 				FROM financial_transactions
 				WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED'
-				  AND category IN ('OPERATING_EXPENSE', 'PAYROLL', 'OTHER_EXPENSE')
+				  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'PAYROLL', 'OTHER_EXPENSE')
 				  AND transaction_date >= ? AND transaction_date < ?
 				GROUP BY DATE(transaction_date)
 				"""), rs -> {
@@ -518,8 +537,8 @@ public class FinanceService {
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				JOIN products p ON p.id = i.product_id
-				JOIN product_categories c ON c.id = p.category_id
-				LEFT JOIN product_purchase_prices pp ON pp.id = i.purchase_price_id
+				JOIN product_categories c ON c.id = i.category_id
+				LEFT JOIN category_purchase_prices pp ON pp.id = i.purchase_price_id
 				WHERE d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
 				  AND d.document_date >= ? AND d.document_date < ?
 				  AND i.standard_cost_per_base_snapshot IS NOT NULL
@@ -528,7 +547,7 @@ public class FinanceService {
 		args.add(start);
 		args.add(end);
 		if (categoryId != null) {
-			sql.append(" AND p.category_id = ?");
+			sql.append(" AND i.category_id = ?");
 			args.add(categoryId);
 		}
 		sql.append("""
@@ -669,6 +688,34 @@ public class FinanceService {
 	public String exportCsv(String type, LocalDate from, LocalDate to, Long productId, Long categoryId, Integer year) {
 		StringBuilder sb = new StringBuilder("\uFEFF");
 		String kind = type == null ? "profit" : type.trim().toLowerCase();
+		if (shops.isDistribution() && "profit".equals(kind)) {
+			ProfitReportDto report = profitReport(from, to);
+			sb.append("Chỉ tiêu,Số tiền\r\n");
+			sb.append("Doanh thu bán hàng,").append(report.revenue().toPlainString()).append("\r\n");
+			sb.append("Tiền thực thu,").append(report.cashCollected().toPlainString()).append("\r\n");
+			sb.append("Doanh thu chưa thu tiền,").append(report.uncollectedRevenue().toPlainString()).append("\r\n");
+			sb.append("Chi phí hoạt động,").append(report.operatingExpenses().toPlainString()).append("\r\n");
+			return sb.toString();
+		}
+		if (shops.isDistribution() && "sales-by-product".equals(kind)) {
+			sb.append("Mã nhôm,Tên sản phẩm,Loại nhôm,Đơn vị,SL bán,Doanh thu\r\n");
+			for (var row : salesByProduct(from, to, productId, categoryId)) {
+				sb.append(csv(row.productCode())).append(",").append(csv(row.productName())).append(",")
+						.append(csv(row.categoryName())).append(",").append(csv(row.baseUnitName())).append(",")
+						.append(row.quantityBaseSold()).append(",").append(row.revenue()).append("\r\n");
+			}
+			return sb.toString();
+		}
+		if (shops.isDistribution() && "inventory".equals(kind)) {
+			sb.append("Mã nhôm,Tên sản phẩm,Loại nhôm,Đơn vị,Tồn đầu kỳ,Nhập trong kỳ,Xuất trong kỳ,Tồn cuối kỳ\r\n");
+			for (var row : inventoryReport(from, to, categoryId)) {
+				sb.append(csv(row.productCode())).append(",").append(csv(row.productName())).append(",")
+						.append(csv(row.categoryName())).append(",").append(csv(row.baseUnitName())).append(",")
+						.append(row.openingQuantityBase()).append(",").append(row.inQuantityBase()).append(",")
+						.append(row.outQuantityBase()).append(",").append(row.closingQuantityBase()).append("\r\n");
+			}
+			return sb.toString();
+		}
 		switch (kind) {
 			case "sales-by-product" -> {
 				List<ProductSalesRowDto> rows = salesByProduct(from, to, productId, categoryId);

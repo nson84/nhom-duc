@@ -15,7 +15,7 @@ const STORAGE_KEY = "aluminum.session";
 const listeners = new Set<() => void>();
 
 function readSession(): Session | null {
-  const raw = sessionStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -42,11 +42,13 @@ export const authStore = {
   },
   set(next: Session) {
     session = next;
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    sessionStorage.removeItem(STORAGE_KEY);
     emit();
   },
   clear() {
     session = null;
+    localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(STORAGE_KEY);
     emit();
   },
@@ -55,6 +57,14 @@ export const authStore = {
     return () => listeners.delete(listener);
   },
 };
+
+window.addEventListener("storage", (event) => {
+  if (event.key === STORAGE_KEY || event.key === null) {
+    sessionStorage.removeItem(STORAGE_KEY);
+    session = readSession();
+    emit();
+  }
+});
 
 export function useSession() {
   return useSyncExternalStore(authStore.subscribe, authStore.get, authStore.get);

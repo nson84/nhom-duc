@@ -80,7 +80,10 @@ public final class AttendanceDtos {
 			String name,
 			String holidayType,
 			boolean paid,
-			String notes
+			String notes,
+			BigDecimal dayPay,
+			BigDecimal bonusAmount,
+			List<Long> receivedEmployeeIds
 	) {
 	}
 
@@ -89,7 +92,32 @@ public final class AttendanceDtos {
 			@NotBlank(message = "Nhập tên ngày lễ") @Size(max = 150) String name,
 			@NotBlank(message = "Chọn loại ngày lễ") String holidayType,
 			Boolean paid,
-			@Size(max = 500) String notes
+			@Size(max = 500) String notes,
+			@DecimalMin(value = "0", message = "Lương ngày nghỉ không được âm") BigDecimal dayPay,
+			@DecimalMin(value = "0", message = "Tiền thưởng không được âm") BigDecimal bonusAmount,
+			List<@NotNull Long> receivedEmployeeIds
+	) {
+	}
+
+	public record DayKindRequest(
+			@NotNull(message = "Chọn ngày") LocalDate holidayDate,
+			String holidayType,
+			@DecimalMin(value = "0", message = "Lương ngày nghỉ không được âm") BigDecimal dayPay
+	) {
+	}
+
+	public record RollCallItem(
+			@NotNull(message = "Chọn nhân viên") Long employeeId,
+			boolean morningPresent,
+			boolean afternoonPresent,
+			@DecimalMin("0") @jakarta.validation.constraints.DecimalMax("24")
+			@jakarta.validation.constraints.Digits(integer = 2, fraction = 3) BigDecimal overtimeHours
+	) {
+	}
+
+	public record RollCallRequest(
+			@NotNull(message = "Chọn ngày điểm danh") LocalDate workDate,
+			@NotEmpty(message = "Chưa tích có hoặc vắng") List<@Valid RollCallItem> items
 	) {
 	}
 
@@ -142,7 +170,6 @@ public final class AttendanceDtos {
 	}
 
 	public record OvertimeRequest(
-			@NotBlank(message = "Chọn loại tăng ca") String overtimeType,
 			LocalDateTime startAt,
 			LocalDateTime endAt,
 			@NotNull(message = "Nhập số giờ tăng ca")
@@ -157,6 +184,8 @@ public final class AttendanceDtos {
 			Long employeeId,
 			LocalDate workDate,
 			String status,
+			boolean morningPresent,
+			boolean afternoonPresent,
 			LocalDateTime clockIn,
 			LocalDateTime clockOut,
 			BigDecimal workedHours,
@@ -165,6 +194,8 @@ public final class AttendanceDtos {
 			int earlyLeaveMinutes,
 			String notes,
 			BigDecimal dailyRateSnapshot,
+			BigDecimal bonusAmount,
+			String bonusNotes,
 			boolean locked,
 			List<OvertimeDto> overtimes
 	) {
@@ -172,6 +203,8 @@ public final class AttendanceDtos {
 
 	public record AttendanceUpsertRequest(
 			@NotBlank(message = "Chọn trạng thái chấm công") String status,
+			Boolean morningPresent,
+			Boolean afternoonPresent,
 			LocalDateTime clockIn,
 			LocalDateTime clockOut,
 			@Size(max = 500) String notes
@@ -216,7 +249,8 @@ public final class AttendanceDtos {
 			boolean periodClosed,
 			AttendancePolicyDto policy,
 			List<HolidayDto> holidays,
-			List<EmployeeMonthlyRowDto> employees
+			List<EmployeeMonthlyRowDto> employees,
+			List<LocalDate> lockedDates
 	) {
 	}
 
@@ -228,9 +262,14 @@ public final class AttendanceDtos {
 			BigDecimal creditedDays,
 			BigDecimal basePay,
 			BigDecimal overtimePay,
+			BigDecimal bonusPay,
 			BigDecimal allowances,
 			BigDecimal deductions,
-			BigDecimal totalPay
+			BigDecimal totalPay,
+			BigDecimal advanceAmount,
+			BigDecimal overtimeHours,
+			BigDecimal holidayBonusPay,
+			BigDecimal holidayBonusReceived
 	) {
 	}
 
@@ -262,7 +301,14 @@ public final class AttendanceDtos {
 
 	public record PayrollAdjustDetailRequest(
 			@NotNull @DecimalMin(value = "0", message = "Phụ cấp không được âm") BigDecimal allowances,
-			@NotNull @DecimalMin(value = "0", message = "Khấu trừ không được âm") BigDecimal deductions
+			@NotNull @DecimalMin(value = "0", message = "Tiền ứng không được âm") BigDecimal advanceAmount
+	) {
+	}
+
+	public record AttendanceBonusRequest(
+			@NotNull(message = "Nhập tiền thưởng")
+			@DecimalMin(value = "0", message = "Tiền thưởng không được âm") BigDecimal amount,
+			@Size(max = 500) String notes
 	) {
 	}
 

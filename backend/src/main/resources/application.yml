@@ -27,8 +27,8 @@ spring:
 
 aluminum:
   jwt:
-    secret: ${ALUMINUM_JWT_SECRET:local-dev-only-change-before-packaging-32b}
-    ttl-seconds: 28800
+    secret: ${ALUMINUM_JWT_SECRET:}
+    ttl-seconds: -1
   admin:
     username: ${ALUMINUM_ADMIN_USERNAME:admin}
     initial-password: ${ALUMINUM_ADMIN_INITIAL_PASSWORD:Admin@123}

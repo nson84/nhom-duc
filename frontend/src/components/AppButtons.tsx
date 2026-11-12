@@ -2,30 +2,17 @@ import { Button, type ButtonProps } from "antd";
 import type { CSSProperties, ReactNode } from "react";
 
 /**
- * Màu nút theo vai trò — không dùng một màu cho mọi nút.
- * Mỗi nút: nền đặc + border + chữ trắng + icon (@ant-design/icons).
+ * Màu nút theo vai trò, lấy từ design tokens (features/theme/palette.ts):
+ * nền / viền / chữ đều qua CSS variables nên tự đổi theo Light / Dark và đạt AA.
  */
-export const APP_BUTTON_COLORS = {
-  /** Tạo / Thêm / Lưu chính / Primary / In phiếu */
-  create: { bg: "#2f6f8f", border: "#245a73" },
-  /** Sửa / Chỉnh sửa — Goldenrod4 */
-  edit: { bg: "#8B6914", border: "#6B5010" },
-  /** Quay lại / hủy nhẹ — cam */
-  cancel: { bg: "#C2410C", border: "#9A3412" },
-  /** Xóa / Hủy nháp / nguy hiểm — đỏ đậm */
-  delete: { bg: "#7F1D1D", border: "#641616" },
-  /** Xác nhận phiếu — xanh lá đậm */
-  confirm: { bg: "#166534", border: "#14532D" },
-  /** Thu / Chi tiền */
-  pay: { bg: "#0F766E", border: "#0D5F59" },
-  /** Đảo phiếu — cam đất */
-  reverse: { bg: "#EA580C", border: "#C2410C" },
-  /** In phiếu — cùng xanh tạo */
-  print: { bg: "#2f6f8f", border: "#245a73" },
-  /** Phụ (cấu hình, lịch sử, …) */
-  secondary: { bg: "#6B7280", border: "#4B5563" },
-} as const;
+const TONES = ["create", "edit", "cancel", "delete", "confirm", "pay", "reverse", "print", "sync", "secondary"] as const;
 
+export const APP_BUTTON_COLORS = Object.fromEntries(
+  TONES.map((tone) => [
+    tone,
+    { bg: `var(--btn-${tone}-bg)`, border: `var(--btn-${tone}-border)`, color: `var(--btn-${tone}-fg)` },
+  ]),
+) as Record<(typeof TONES)[number], { bg: string; border: string; color: string }>;
 export type AppButtonTone = keyof typeof APP_BUTTON_COLORS;
 
 export function appButtonStyle(tone: AppButtonTone): CSSProperties {
@@ -33,7 +20,7 @@ export function appButtonStyle(tone: AppButtonTone): CSSProperties {
   return {
     backgroundColor: c.bg,
     borderColor: c.border,
-    color: "#fff",
+    color: c.color,
     borderRadius: 999,
   };
 }

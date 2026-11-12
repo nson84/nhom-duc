@@ -9,10 +9,10 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,16 +23,37 @@ public class JwtService {
 
 	private final byte[] secret;
 	private final long ttlSeconds;
-	private final ConcurrentHashMap<String, Long> revokedUntilEpoch = new ConcurrentHashMap<>();
+	private final JdbcTemplate jdbc;
 
 	public JwtService(
 			@Value("${aluminum.jwt.secret}") String secret,
-			@Value("${aluminum.jwt.ttl-seconds:28800}") long ttlSeconds) {
+			@Value("${aluminum.jwt.ttl-seconds:-1}") long ttlSeconds, JdbcTemplate jdbc) {
+		if (secret == null || secret.isBlank()) secret = localSecret();
 		if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
 			throw new IllegalArgumentException("JWT secret phải dài ít nhất 32 byte");
 		}
 		this.secret = secret.getBytes(StandardCharsets.UTF_8);
 		this.ttlSeconds = ttlSeconds;
+		this.jdbc = jdbc;
+	}
+
+	private static String localSecret() {
+		String configured = System.getenv("ALUMINUM_JWT_SECRET_FILE");
+		var file = java.nio.file.Path.of(configured == null || configured.isBlank() ? ".runtime/jwt.key" : configured);
+		try {
+			java.nio.file.Files.createDirectories(file.toAbsolutePath().getParent());
+			if (!java.nio.file.Files.exists(file)) {
+				byte[] bytes = new byte[48];
+				new java.security.SecureRandom().nextBytes(bytes);
+				try {
+					java.nio.file.Files.writeString(file, Base64.getEncoder().encodeToString(bytes),
+						java.nio.file.StandardOpenOption.CREATE_NEW);
+				} catch (java.nio.file.FileAlreadyExistsException ignored) { }
+			}
+			return java.nio.file.Files.readString(file).trim();
+		} catch (java.io.IOException ex) {
+			throw new IllegalStateException("Không đọc/ghi được khóa phiên đăng nhập riêng của máy", ex);
+		}
 	}
 
 	public long ttlSeconds() {
@@ -41,7 +62,6 @@ public class JwtService {
 
 	public String issue(long userId, String username, String role, String shopCode) {
 		Instant now = Instant.now();
-		long exp = now.plusSeconds(ttlSeconds).getEpochSecond();
 		String header = URL_ENCODER.encodeToString(
 				"{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
 		String payloadJson = "{\"uid\":" + userId
@@ -50,13 +70,18 @@ public class JwtService {
 				+ ",\"shop\":\"" + escape(shopCode == null ? "" : shopCode) + "\""
 				+ ",\"jti\":\"" + UUID.randomUUID() + "\""
 				+ ",\"iat\":" + now.getEpochSecond()
-				+ ",\"exp\":" + exp + "}";
+				+ (ttlSeconds < 0 ? "" : ",\"exp\":" + now.plusSeconds(ttlSeconds).getEpochSecond()) + "}";
 		String payload = URL_ENCODER.encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
 		String signingInput = header + "." + payload;
 		return signingInput + "." + sign(signingInput);
 	}
 
 	public JwtClaims parse(String token) {
+		try { return parseToken(token); }
+		catch (IllegalArgumentException | IndexOutOfBoundsException ex) { throw unauthorized("Phiên đăng nhập không hợp lệ"); }
+	}
+
+	private JwtClaims parseToken(String token) {
 		String[] parts = token == null ? new String[0] : token.split("\\.");
 		if (parts.length != 3) {
 			throw unauthorized("Phiên đăng nhập không hợp lệ");
@@ -70,17 +95,14 @@ public class JwtService {
 			throw unauthorized("Phiên đăng nhập không hợp lệ");
 		}
 		Map<String, String> payload = parseFlatObject(decode(parts[1]));
-		long exp = Long.parseLong(payload.get("exp"));
+		long exp = payload.containsKey("exp") ? Long.parseLong(payload.get("exp")) : Long.MAX_VALUE;
 		if (Instant.now().getEpochSecond() >= exp) {
 			throw unauthorized("Phiên đăng nhập đã hết hạn");
 		}
 		String jti = payload.get("jti");
-		Long revokedUntil = revokedUntilEpoch.get(jti);
-		if (revokedUntil != null) {
-			if (revokedUntil > Instant.now().getEpochSecond()) {
-				throw unauthorized("Phiên đăng nhập đã kết thúc");
-			}
-			revokedUntilEpoch.remove(jti);
+		if (jti == null || Boolean.TRUE.equals(jdbc.queryForObject(
+				"SELECT EXISTS (SELECT 1 FROM revoked_login_sessions WHERE token_id = ?)", Boolean.class, jti))) {
+			throw unauthorized("Phiên đăng nhập đã kết thúc");
 		}
 		String shop = payload.get("shop");
 		return new JwtClaims(
@@ -94,7 +116,7 @@ public class JwtService {
 
 	public void revoke(String token) {
 		JwtClaims claims = parse(token);
-		revokedUntilEpoch.put(claims.jti(), claims.expiresAtEpochSecond());
+		jdbc.update("INSERT IGNORE INTO revoked_login_sessions (token_id) VALUES (?)", claims.jti());
 	}
 
 	private String sign(String signingInput) {

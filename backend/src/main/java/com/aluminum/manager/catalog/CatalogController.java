@@ -1,5 +1,6 @@
 package com.aluminum.manager.catalog;
 
+import com.aluminum.manager.catalog.CatalogDtos.CatalogSyncResult;
 import com.aluminum.manager.catalog.CatalogDtos.CategoryDto;
 import com.aluminum.manager.catalog.CatalogDtos.CategoryRequest;
 import com.aluminum.manager.catalog.CatalogDtos.ProductDto;
@@ -36,6 +37,15 @@ public class CatalogController {
 		return ApiResponse.ok(service.categories(), null);
 	}
 
+	/** Chỉ Phân phối → Xưởng: đẩy SP + loại nhôm (khớp mã/tên). Không đồng bộ tồn kho. */
+	@PostMapping("/catalog/sync-to-other-shop")
+	public ApiResponse<CatalogSyncResult> syncCatalogToOtherShop() {
+		CatalogSyncResult result = service.syncCatalogToOtherShop();
+		return ApiResponse.ok(result,
+				"Đã đồng bộ danh mục sang " + result.targetShopName()
+						+ " (loại +" + result.categoriesCreated() + ", SP +" + result.productsCreated() + ")");
+	}
+
 	@PostMapping("/categories")
 	public ApiResponse<CategoryDto> createCategory(@Valid @RequestBody CategoryRequest request) {
 		return ApiResponse.ok(service.createCategory(request), "Đã thêm loại nhôm");
@@ -44,6 +54,17 @@ public class CatalogController {
 	@PutMapping("/categories/{id}")
 	public ApiResponse<CategoryDto> updateCategory(@PathVariable long id, @Valid @RequestBody CategoryRequest request) {
 		return ApiResponse.ok(service.updateCategory(id, request), "Đã lưu loại nhôm");
+	}
+
+	@GetMapping("/categories/{id}/purchase-prices")
+	public ApiResponse<List<PurchasePriceDto>> categoryPurchasePrices(@PathVariable long id) {
+		return ApiResponse.ok(service.purchasePriceHistory(id), null);
+	}
+
+	@PostMapping("/categories/{id}/purchase-prices")
+	public ApiResponse<List<PurchasePriceDto>> recordCategoryPurchasePrice(
+			@PathVariable long id, @Valid @RequestBody PurchasePriceRequest request) {
+		return ApiResponse.ok(service.recordPurchasePrice(id, request), "Đã ghi giá nhập mới");
 	}
 
 	@GetMapping("/products")
@@ -86,16 +107,5 @@ public class CatalogController {
 	public ApiResponse<ProductDto> updateUnit(
 			@PathVariable long id, @PathVariable long unitId, @Valid @RequestBody UnitRequest request) {
 		return ApiResponse.ok(service.updateUnit(id, unitId, request), "Đã lưu đơn vị");
-	}
-
-	@GetMapping("/products/{id}/purchase-prices")
-	public ApiResponse<List<PurchasePriceDto>> purchasePrices(@PathVariable long id) {
-		return ApiResponse.ok(service.purchasePriceHistory(id), null);
-	}
-
-	@PostMapping("/products/{id}/purchase-prices")
-	public ApiResponse<List<PurchasePriceDto>> recordPurchasePrice(
-			@PathVariable long id, @Valid @RequestBody PurchasePriceRequest request) {
-		return ApiResponse.ok(service.recordPurchasePrice(id, request), "Đã ghi giá nhập mới");
 	}
 }

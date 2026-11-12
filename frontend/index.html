@@ -3,7 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Quản lý hàng hóa nhôm</title>
+    <script>
+      // Chống nháy sáng/tối trước khi React khởi động (token đầy đủ do theme-store áp dụng).
+      (function () {
+        try {
+          var saved = localStorage.getItem("aluminum-theme");
+          var dark = saved
+            ? saved === "dark"
+            : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var root = document.documentElement;
+          root.setAttribute("data-theme", dark ? "dark" : "light");
+          root.style.colorScheme = dark ? "dark" : "light";
+          root.style.background = dark ? "#0F172A" : "#F1F5F9";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

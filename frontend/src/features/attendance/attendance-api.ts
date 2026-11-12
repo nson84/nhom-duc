@@ -10,8 +10,8 @@ export type PayRate = {
   dailyRate: number;
   standardHoursPerDay: number;
   overtimeWeekdayRate: number;
-  overtimeRestdayRate: number;
-  overtimeHolidayRate: number;
+  overtimeRestdayRate?: number;
+  overtimeHolidayRate?: number;
 };
 
 export type Employee = {
@@ -47,17 +47,22 @@ export type PayRateInput = {
   dailyRate: number;
   standardHoursPerDay: number;
   overtimeWeekdayRate: number;
-  overtimeRestdayRate: number;
-  overtimeHolidayRate: number;
+  overtimeRestdayRate?: number;
+  overtimeHolidayRate?: number;
 };
+
+export type HolidayKind = "SHOP_CLOSED" | "NATIONAL_HOLIDAY" | "CATHOLIC_HOLIDAY";
 
 export type Holiday = {
   id: number;
   holidayDate: string;
   name: string;
-  holidayType: "PUBLIC_HOLIDAY" | "COMPANY_DAY_OFF";
+  holidayType: HolidayKind;
   paid: boolean;
   notes: string | null;
+  dayPay: number;
+  bonusAmount: number;
+  receivedEmployeeIds: number[];
 };
 
 export type AttendancePolicy = {
@@ -95,6 +100,8 @@ export type AttendanceDay = {
   employeeId: number;
   workDate: string;
   status: "UNMARKED" | "PRESENT" | "HALF_DAY" | "ABSENT" | "PAID_LEAVE" | "UNPAID_LEAVE" | "HOLIDAY";
+  morningPresent: boolean;
+  afternoonPresent: boolean;
   clockIn: string | null;
   clockOut: string | null;
   workedHours: number;
@@ -103,6 +110,8 @@ export type AttendanceDay = {
   earlyLeaveMinutes: number;
   notes: string | null;
   dailyRateSnapshot: number;
+  bonusAmount: number;
+  bonusNotes: string | null;
   locked: boolean;
   overtimes: OvertimeRecord[];
 };
@@ -130,6 +139,7 @@ export type MonthlyAttendanceBoard = {
   policy: AttendancePolicy;
   holidays: Holiday[];
   employees: EmployeeMonthlyRow[];
+  lockedDates: string[];
 };
 
 export type PayrollDetail = {
@@ -140,8 +150,13 @@ export type PayrollDetail = {
   creditedDays: number;
   basePay: number;
   overtimePay: number;
+  bonusPay: number;
   allowances: number;
   deductions: number;
+  advanceAmount: number;
+  overtimeHours: number | null;
+  holidayBonusPay: number;
+  holidayBonusReceived: number | null;
   totalPay: number;
 };
 
@@ -178,6 +193,10 @@ export async function listPayRates(employeeId: number): Promise<PayRate[]> {
   return (await api.get<Envelope<PayRate[]>>(`/api/v1/employees/${employeeId}/pay-rates`)).data.data;
 }
 
+export async function deletePayRate(employeeId: number, rateId: number): Promise<void> {
+  await api.delete(`/api/v1/employees/${employeeId}/pay-rates/${rateId}`);
+}
+
 export async function addPayRate(employeeId: number, input: PayRateInput): Promise<PayRate> {
   return (await api.post<Envelope<PayRate>>(`/api/v1/employees/${employeeId}/pay-rates`, input)).data.data;
 }
@@ -189,7 +208,7 @@ export async function getMonthlyBoard(year: number, month: number): Promise<Mont
 export async function saveAttendanceDay(
   employeeId: number,
   date: string,
-  input: { status: AttendanceDay["status"]; clockIn?: string | null; clockOut?: string | null; notes?: string },
+  input: { status: AttendanceDay["status"]; morningPresent?: boolean; afternoonPresent?: boolean; clockIn?: string | null; clockOut?: string | null; notes?: string },
 ): Promise<AttendanceDay> {
   return (await api.put<Envelope<AttendanceDay>>(`/api/v1/attendance/${employeeId}/${date}`, input)).data.data;
 }
@@ -203,12 +222,19 @@ export async function bulkSaveAttendance(
 export async function saveOvertime(
   attendanceId: number,
   overtimeId: number | undefined,
-  input: { overtimeType: OvertimeRecord["overtimeType"]; overtimeHours: number; approved: boolean; notes?: string },
+  input: { overtimeHours: number; approved: boolean; notes?: string },
 ): Promise<AttendanceDay> {
   const response = overtimeId
     ? await api.put<Envelope<AttendanceDay>>(`/api/v1/overtime/${overtimeId}`, input)
     : await api.post<Envelope<AttendanceDay>>(`/api/v1/attendance/${attendanceId}/overtime`, input);
   return response.data.data;
+}
+
+export async function saveAttendanceBonus(
+  attendanceId: number,
+  input: { amount: number; notes?: string },
+): Promise<AttendanceDay> {
+  return (await api.put<Envelope<AttendanceDay>>(`/api/v1/attendance/${attendanceId}/bonus`, input)).data.data;
 }
 
 export async function listHolidays(year?: number): Promise<Holiday[]> {
@@ -217,12 +243,31 @@ export async function listHolidays(year?: number): Promise<Holiday[]> {
 
 export async function saveHoliday(
   id: number | undefined,
-  input: { holidayDate: string; name: string; holidayType: Holiday["holidayType"]; paid: boolean; notes?: string },
+  input: { holidayDate: string; name: string; holidayType: Holiday["holidayType"]; paid: boolean; notes?: string; dayPay?: number; bonusAmount: number; receivedEmployeeIds: number[] },
 ): Promise<Holiday> {
   const response = id
     ? await api.put<Envelope<Holiday>>(`/api/v1/holidays/${id}`, input)
     : await api.post<Envelope<Holiday>>("/api/v1/holidays", input);
   return response.data.data;
+}
+
+export async function saveDayKind(input: {
+  holidayDate: string;
+  holidayType: HolidayKind | null;
+  dayPay: number;
+}): Promise<Holiday | null> {
+  return (await api.put<Envelope<Holiday | null>>("/api/v1/attendance/day-kind", input)).data.data;
+}
+
+export async function saveRollCall(input: {
+  workDate: string;
+  items: { employeeId: number; morningPresent: boolean; afternoonPresent: boolean; overtimeHours: number }[];
+}): Promise<void> {
+  await api.post("/api/v1/attendance/roll-call", input);
+}
+
+export async function unlockRollCall(workDate: string): Promise<void> {
+  await api.post(`/api/v1/attendance/roll-call/${workDate}/unlock`);
 }
 
 export async function saveAttendancePolicy(input: Omit<AttendancePolicy, "id" | "effectiveTo">): Promise<AttendancePolicy> {
@@ -240,7 +285,7 @@ export async function calculatePayroll(periodId: number): Promise<PayrollPeriod>
 export async function adjustPayrollDetail(
   periodId: number,
   detailId: number,
-  input: { allowances: number; deductions: number },
+  input: { allowances: number; advanceAmount: number },
 ): Promise<PayrollPeriod> {
   return (await api.put<Envelope<PayrollPeriod>>(`/api/v1/payroll/periods/${periodId}/details/${detailId}`, input)).data.data;
 }

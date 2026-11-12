@@ -32,6 +32,11 @@ public final class AttendanceCalculator {
 		};
 	}
 
+	public static String rollCallStatus(boolean morningPresent, boolean afternoonPresent) {
+		if (morningPresent && afternoonPresent) return "PRESENT";
+		return morningPresent || afternoonPresent ? "HALF_DAY" : "ABSENT";
+	}
+
 	public static LocalDateTime resolveClockOut(LocalDateTime clockIn, LocalDateTime clockOut, boolean overnightAllowed) {
 		if (clockIn == null || clockOut == null) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Cần đủ giờ vào và giờ ra", null);

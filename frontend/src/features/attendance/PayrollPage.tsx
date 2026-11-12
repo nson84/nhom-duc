@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Space, Statistic, Table, Tag, message } from "antd";
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Space, Statistic, Table, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toApiError } from "../../services/error-handler";
@@ -20,6 +20,7 @@ export function PayrollPage() {
   const [period, setPeriod] = useState<PayrollPeriod | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingDetail, setEditingDetail] = useState<PayrollDetail | null>(null);
+  const [statement, setStatement] = useState<PayrollDetail | null>(null);
   const [showReopen, setShowReopen] = useState(false);
   const [showPay, setShowPay] = useState(false);
 
@@ -115,7 +116,7 @@ export function PayrollPage() {
                 <Statistic
                   title="Trạng thái kỳ công"
                   value={isClosed ? "Đã chốt khóa" : "Đang mở"}
-                  valueStyle={{ color: isClosed ? "#389e0d" : "#d48806" }}
+                  valueStyle={{ color: isClosed ? "var(--color-success)" : "var(--color-warning)" }}
                 />
               </Card>
             </Col>
@@ -153,31 +154,53 @@ export function PayrollPage() {
             dataSource={period.details}
             pagination={false}
             columns={[
-              { title: "Mã NV", dataIndex: "employeeCode", width: 110 },
-              { title: "Họ và tên", dataIndex: "fullName" },
-              { title: "Ngày công", dataIndex: "creditedDays", align: "right" },
-              { title: "Lương cơ bản", dataIndex: "basePay", align: "right", render: (v: number) => formatMoney(v) },
-              { title: "Tăng ca đã duyệt", dataIndex: "overtimePay", align: "right", render: (v: number) => formatMoney(v) },
-              { title: "Phụ cấp", dataIndex: "allowances", align: "right", render: (v: number) => formatMoney(v) },
-              { title: "Khấu trừ", dataIndex: "deductions", align: "right", render: (v: number) => formatMoney(v) },
+              { title: "Họ và tên", dataIndex: "fullName", align: "center" },
+              { title: "Ngày công", dataIndex: "creditedDays", align: "center" },
+              { title: "Lương cơ bản", dataIndex: "basePay", align: "center", render: (v: number) => formatMoney(v) },
+              { title: "Tăng ca đã duyệt", dataIndex: "overtimePay", align: "center", render: (v: number) => formatMoney(v) },
+              { title: "Thưởng", dataIndex: "bonusPay", align: "center", render: (v: number) => formatMoney(v) },
+              { title: "Phụ cấp", dataIndex: "allowances", align: "center", render: (v: number) => formatMoney(v) },
+              { title: "Ứng tiền lương", dataIndex: "advanceAmount", align: "center", render: (v: number) => formatMoney(v ?? 0) },
               {
                 title: "Thực lĩnh",
                 dataIndex: "totalPay",
-                align: "right",
+                align: "center",
                 render: (v: number) => <b>{formatMoney(v)}</b>,
               },
               {
-                title: "Thao tác",
+                title: "Thao tác", align: "center",
                 render: (_, d) =>
                   isClosed ? (
-                    <Tag color="green">Đã chốt</Tag>
+                    <Button size="small" onClick={() => setStatement(d)}>Xem bảng kê</Button>
                   ) : (
-                    <a onClick={() => setEditingDetail(d)}>Phụ cấp / Khấu trừ</a>
+                    <Button size="small" onClick={() => setEditingDetail(d)}>Phụ cấp và tiền ứng</Button>
                   ),
               },
             ]}
           />
         </>
+      ) : null}
+
+      {statement && period && isClosed ? (
+        <Modal open title={`Bảng kê tiền công tháng ${period.month}/${period.year} — ${statement.fullName}`}
+          footer={null} onCancel={() => setStatement(null)} width={720}>
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="Số ngày công">{statement.creditedDays}</Descriptions.Item>
+            <Descriptions.Item label="Lương cơ bản">{formatMoney(statement.basePay)}</Descriptions.Item>
+            <Descriptions.Item label="Số giờ tăng ca đã duyệt">{statement.overtimeHours ?? "—"}</Descriptions.Item>
+            <Descriptions.Item label="Tiền tăng ca">{formatMoney(statement.overtimePay)}</Descriptions.Item>
+            <Descriptions.Item label="Phụ cấp">{formatMoney(statement.allowances)}</Descriptions.Item>
+            <Descriptions.Item label="Thưởng khác">{formatMoney(statement.bonusPay - (statement.holidayBonusPay ?? 0))}</Descriptions.Item>
+            <Descriptions.Item label="Thưởng lễ trả cùng lương">{formatMoney(statement.holidayBonusPay ?? 0)}</Descriptions.Item>
+            <Descriptions.Item label="Thưởng lễ đã nhận trực tiếp">{statement.holidayBonusReceived == null ? "—" : formatMoney(statement.holidayBonusReceived)}</Descriptions.Item>
+            <Descriptions.Item label="Tiền lương đã ứng">{formatMoney(statement.advanceAmount ?? 0)}</Descriptions.Item>
+            {statement.deductions > 0 && <Descriptions.Item label="Khấu trừ đã ghi trước đây">{formatMoney(statement.deductions)}</Descriptions.Item>}
+            <Descriptions.Item label="Tiền công cuối tháng sau khi trừ ứng"><strong>{formatMoney(statement.totalPay)}</strong></Descriptions.Item>
+            <Descriptions.Item label="Tổng tiền sau khi trả đủ">
+              {formatMoney(statement.totalPay + (statement.advanceAmount ?? 0) + (statement.holidayBonusReceived ?? 0))}
+            </Descriptions.Item>
+          </Descriptions>
+        </Modal>
       ) : null}
 
       {editingDetail && period ? (
@@ -188,7 +211,7 @@ export function PayrollPage() {
             try {
               setPeriod(await adjustPayrollDetail(period.id, editingDetail.id, values));
               setEditingDetail(null);
-              message.success("Đã cập nhật phụ cấp / khấu trừ");
+              message.success("Đã cập nhật phụ cấp và tiền ứng");
             } catch (error) {
               message.error(toApiError(error).message);
             }
@@ -237,13 +260,13 @@ function AdjustModal({
 }: {
   detail: PayrollDetail;
   onClose: () => void;
-  onSubmit: (values: { allowances: number; deductions: number }) => Promise<void>;
+  onSubmit: (values: { allowances: number; advanceAmount: number }) => Promise<void>;
 }) {
-  const [form] = Form.useForm<{ allowances: number; deductions: number }>();
+  const [form] = Form.useForm<{ allowances: number; advanceAmount: number }>();
   return (
     <Modal
       open
-      title={`Phụ cấp & Khấu trừ — ${detail.employeeCode} (${detail.fullName})`}
+      title={`Phụ cấp và ứng tiền lương — ${detail.fullName}`}
       okText="Lưu"
       cancelText="Hủy"
       onCancel={onClose}
@@ -252,13 +275,14 @@ function AdjustModal({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ allowances: detail.allowances, deductions: detail.deductions }}
+        initialValues={{ allowances: detail.allowances, advanceAmount: detail.advanceAmount ?? 0 }}
         onFinish={onSubmit}
       >
         <Form.Item name="allowances" label="Phụ cấp" rules={vndAmountRules}>
           <InputNumber {...vndInputNumberProps} style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item name="deductions" label="Khấu trừ" rules={vndAmountRules}>
+        <Form.Item name="advanceAmount" label="Tiền lương đã ứng" rules={vndAmountRules}
+          extra="Nhập tổng số tiền đã ứng trong tháng. Khoản này được trừ vào tiền công cuối tháng.">
           <InputNumber {...vndInputNumberProps} style={{ width: "100%" }} />
         </Form.Item>
       </Form>

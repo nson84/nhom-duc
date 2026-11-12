@@ -7,10 +7,16 @@ export type DocumentType = "PURCHASE" | "SALE" | "ADJUSTMENT_IN" | "ADJUSTMENT_O
 export type DocumentItem = {
   id: number;
   productId: number;
+  categoryId: number | null;
+  categoryName?: string | null;
   unitId: number | null;
   productCode: string;
   productName: string;
   unitName: string;
+  billingUnit?: string | null;
+  widthM?: number | null;
+  heightM?: number | null;
+  /** Khi bán m²: khối lượng trừ tồn (kg) = quantityBase. */
   quantityDocument: number;
   factorToBase: number;
   quantityBase: number;
@@ -23,6 +29,8 @@ export type DocumentItem = {
   purchasePriceId?: number | null;
   standardCostPerBase?: number | null;
   standardCostTotal?: number | null;
+  factoryPurchaseItemId?: number | null;
+  factoryReferenceCostPerKg?: number | null;
 };
 
 export type Payment = {
@@ -31,6 +39,8 @@ export type Payment = {
   amount: number;
   paymentMethod: string | null;
   note: string | null;
+  /** Tài khoản ghi thu. Trống với lần thu cũ không ghép được nhật ký. */
+  collectedBy?: string | null;
 };
 
 export type StockDocument = {
@@ -40,6 +50,7 @@ export type StockDocument = {
   status: "DRAFT" | "CONFIRMED" | "CANCELLED";
   documentDate: string;
   counterpartyName: string | null;
+  customerId?: number | null;
   issuedBy: string | null;
   receivedBy: string | null;
   reason: string | null;
@@ -58,6 +69,7 @@ export type StockDocument = {
   internal?: boolean;
   internalPairDocumentId?: number | null;
   internalPairDocumentCode?: string | null;
+  trashedAt?: string | null;
 };
 
 export type DocumentSummary = {
@@ -67,17 +79,23 @@ export type DocumentSummary = {
   status: StockDocument["status"];
   documentDate: string;
   counterpartyName: string | null;
+  customerId?: number | null;
   totalAmount: number;
   paymentStatus: StockDocument["paymentStatus"];
   internal?: boolean;
   internalPairDocumentId?: number | null;
   internalPairDocumentCode?: string | null;
+  trashedAt?: string | null;
 };
+
+/** Bộ lọc danh sách phiếu bán / nhập. */
+export type DocumentListFilter = "all" | "unpaid" | "partial" | "paid" | "draft" | "voided" | "trash";
 
 export type DocumentInput = {
   documentType: "PURCHASE" | "SALE";
   documentDate: string;
   counterpartyName?: string;
+  customerId?: number | null;
   issuedBy?: string;
   receivedBy?: string;
   reason?: string;
@@ -86,18 +104,41 @@ export type DocumentInput = {
   notes?: string;
   idempotencyKey?: string;
   internal?: boolean;
-  items: { productId: number; unitId: number; quantityDocument: number; unitPrice: number; lineDiscount: number }[];
+  items: {
+    productId: number;
+    categoryId: number;
+    unitId: number;
+    quantityDocument: number;
+    unitPrice: number;
+    lineDiscount: number;
+    billingUnit?: string;
+    widthM?: number;
+    heightM?: number;
+    /** Bắt buộc khi billingUnit = m2 — kg trừ tồn. */
+    stockQuantityKg?: number;
+    factoryPurchaseItemId?: number;
+  }[];
 };
 
 export type StockBalance = {
   productId: number;
   productCode: string;
   productName: string;
+  categoryId: number;
   categoryName: string;
   baseUnitName: string;
   quantityBase: number;
   averageCostPerBase: number;
   stockValue: number;
+  purchasedKg: number;
+  deliveredKg: number;
+};
+
+export type InventoryCountResult = {
+  adjustedItems: number;
+  shortageKg: number;
+  surplusKg: number;
+  documentCodes: string[];
 };
 
 export type Movement = {
@@ -109,18 +150,33 @@ export type Movement = {
   unitCost: number;
 };
 
-export async function listDocuments(params: { type?: string; status?: string; q?: string; from?: string; to?: string }) {
+export async function listDocuments(params: {
+  type?: string;
+  filter?: DocumentListFilter | string;
+  status?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+}) {
   return (await api.get<Envelope<DocumentSummary[]>>("/api/v1/stock-documents", { params })).data.data;
+}
+
+export async function trashDocument(id: number) {
+  return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/trash`)).data.data;
+}
+
+export async function restoreDocument(id: number) {
+  return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/restore`)).data.data;
 }
 
 export async function getDocument(id: number) {
   return (await api.get<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`)).data.data;
 }
 
-export async function saveDocument(id: number | undefined, input: DocumentInput) {
+export async function saveDocument(id: number | undefined, input: DocumentInput, confirm = false) {
   const response = id
-    ? await api.put<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`, input)
-    : await api.post<Envelope<StockDocument>>("/api/v1/stock-documents", input);
+    ? await api.put<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`, input, { params: { confirm } })
+    : await api.post<Envelope<StockDocument>>("/api/v1/stock-documents", input, { params: { confirm } });
   return response.data.data;
 }
 
@@ -140,6 +196,8 @@ export async function addPayment(
     paymentDate?: string;
     note?: string;
     idempotencyKey: string;
+    collectedBy?: string;
+    paidBy?: string;
   },
 ) {
   return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/payments`, input)).data.data;
@@ -147,6 +205,10 @@ export async function addPayment(
 
 export async function listBalances(params: { q?: string; onlyInStock?: boolean }) {
   return (await api.get<Envelope<StockBalance[]>>("/api/v1/stock-balances", { params })).data.data;
+}
+
+export async function saveInventoryCount(items: { productId: number; categoryId: number; countedQuantityKg: number }[]) {
+  return (await api.post<Envelope<InventoryCountResult>>("/api/v1/stock-balances/count", { items })).data.data;
 }
 
 export async function listMovements(productId: number) {

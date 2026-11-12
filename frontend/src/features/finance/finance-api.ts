@@ -10,12 +10,13 @@ export type FinanceTransaction = {
   category:
     | "SALE_RECEIPT"
     | "PURCHASE_PAYMENT"
-    | "OPERATING_EXPENSE"
+    | "OPERATING_EXPENSE" | "MAINTENANCE"
     | "PAYROLL"
     | "OTHER_INCOME"
     | "OTHER_EXPENSE";
   amount: number;
   description: string | null;
+  spentBy?: string | null;
   referenceType: string | null;
   referenceId: number | null;
   status: "CONFIRMED" | "VOID";
@@ -156,7 +157,8 @@ export async function createFinanceTransaction(input: {
   transactionType: "INCOME" | "EXPENSE";
   category: string;
   amount: number;
-  description: string;
+  description?: string;
+  spentBy?: string;
   idempotencyKey: string;
 }): Promise<FinanceTransaction> {
   return (await api.post<Envelope<FinanceTransaction>>("/api/v1/finance/transactions", input)).data.data;

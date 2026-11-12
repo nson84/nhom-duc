@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Col, Form, Input, Row, Select, Space, Typography, message } from "antd";
+import { Button, Card, Col, Row, Space, Typography } from "antd";
 import {
   CheckCircleFilled,
   EnvironmentOutlined,
@@ -8,10 +8,8 @@ import {
   TrophyFilled,
 } from "@ant-design/icons";
 import { useEffect, useState, type ReactNode } from "react";
-import { toApiError } from "../../services/error-handler";
 import { api } from "../../services/api-client";
-import { requiredNameRules } from "../../utils/name-rules";
-import { requestTypeLabels, submitLead, type LandingContent } from "./landing-api";
+import { type LandingContent } from "./landing-api";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -25,15 +23,6 @@ type ShopInfo = {
   content: LandingContent;
 };
 
-type FormValues = {
-  fullName: string;
-  phone: string;
-  email?: string;
-  requestType: string;
-  message?: string;
-  /** Bẫy spam: ẩn bằng CSS, người thật không thấy nên không điền. */
-  website?: string;
-};
 
 const strengthIcons: ReactNode[] = [
   <ToolFilled key="tool" />,
@@ -49,10 +38,7 @@ const strengthIcons: ReactNode[] = [
  * hình cửa hàng không được hiển thị ở đây. Chữ từng phần lấy từ API (Admin sửa được).
  */
 export function LandingPage() {
-  const [form] = Form.useForm<FormValues>();
   const [info, setInfo] = useState<ShopInfo | null>(null);
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     api
@@ -60,20 +46,6 @@ export function LandingPage() {
       .then((res) => setInfo(res.data.data))
       .catch(() => undefined);
   }, []);
-
-  const onFinish = async (values: FormValues) => {
-    setSending(true);
-    try {
-      await submitLead({ ...values, sourcePage: "landing" });
-      setSent(true);
-      form.resetFields();
-      message.success("Đã gửi thông tin. Chúng tôi sẽ gọi lại sớm.");
-    } catch (error) {
-      message.error(toApiError(error).message);
-    } finally {
-      setSending(false);
-    }
-  };
 
   const shopName = info?.shopName || "Cửa hàng nhôm";
   const phone = info?.shopPhone || "";
@@ -171,94 +143,7 @@ export function LandingPage() {
               </Text>
             </Col>
             <Col xs={24} lg={14}>
-              <Card className="landing-form-card">
-                {sent ? (
-                  <Alert
-                    type="success"
-                    showIcon
-                    message={content?.formSuccessTitle || "Đã nhận thông tin của bạn"}
-                    description={
-                      content?.formSuccessDescription ||
-                      "Cửa hàng sẽ gọi lại sớm. Nếu cần gấp, hãy gọi trực tiếp số điện thoại bên cạnh."
-                    }
-                    action={
-                      <Button size="small" onClick={() => setSent(false)}>
-                        {content?.formAgainLabel || "Gửi thêm"}
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <Form form={form} layout="vertical" onFinish={onFinish} requiredMark={false}>
-                    <Row gutter={[16, 32]}>
-                      <Col xs={24} sm={12}>
-                        <Form.Item
-                          name="fullName"
-                          label="Họ và tên"
-                          rules={requiredNameRules("Nhập họ tên", 150)}
-                        >
-                          <Input placeholder="Nguyễn Văn A" size="large" maxLength={150} />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} sm={12}>
-                        <Form.Item
-                          name="phone"
-                          label="Số điện thoại"
-                          rules={[
-                            { required: true, message: "Nhập số điện thoại" },
-                            {
-                              pattern: /^(0|\+84)[0-9]{8,10}$/,
-                              message: "Số chưa đúng, ví dụ 0912345678",
-                            },
-                          ]}
-                        >
-                          <Input placeholder="0912345678" size="large" inputMode="tel" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                    <Row gutter={[16, 32]}>
-                      <Col xs={24} sm={12}>
-                        <Form.Item
-                          name="requestType"
-                          label="Bạn cần gì?"
-                          initialValue="BAO_GIA"
-                          rules={[{ required: true }]}
-                        >
-                          <Select
-                            size="large"
-                            options={Object.entries(requestTypeLabels).map(([value, label]) => ({
-                              value,
-                              label,
-                            }))}
-                          />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} sm={12}>
-                        <Form.Item
-                          name="email"
-                          label="Email (không bắt buộc)"
-                          rules={[{ type: "email", message: "Email chưa đúng định dạng" }]}
-                        >
-                          <Input placeholder="email@example.com" size="large" inputMode="email" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                    <Form.Item name="message" label="Nhu cầu cụ thể (không bắt buộc)">
-                      <Input.TextArea
-                        rows={3}
-                        maxLength={1000}
-                        showCount
-                        placeholder="Ví dụ: cần 200 kg nhôm loại 1 dày 1,4 ly, giao trong tuần này"
-                      />
-                    </Form.Item>
-                    <Form.Item name="website" className="landing-honeypot" aria-hidden="true">
-                      <Input tabIndex={-1} autoComplete="off" />
-                    </Form.Item>
-                    <Button type="primary" htmlType="submit" size="large" block loading={sending}>
-                      {content?.formSubmitLabel || "Gửi thông tin"}
-                    </Button>
-                  </Form>
-                )}
-              </Card>
+              <Card>Liên hệ trực tiếp qua thông tin cửa hàng để được tư vấn.</Card>
             </Col>
           </Row>
         </div>

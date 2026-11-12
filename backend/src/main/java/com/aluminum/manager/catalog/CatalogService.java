@@ -1,5 +1,6 @@
 package com.aluminum.manager.catalog;
 
+import com.aluminum.manager.catalog.CatalogDtos.CatalogSyncResult;
 import com.aluminum.manager.catalog.CatalogDtos.CategoryDto;
 import com.aluminum.manager.catalog.CatalogDtos.CategoryRequest;
 import com.aluminum.manager.catalog.CatalogDtos.ProductDto;
@@ -8,13 +9,13 @@ import com.aluminum.manager.catalog.CatalogDtos.PurchasePriceDto;
 import com.aluminum.manager.catalog.CatalogDtos.PurchasePriceRequest;
 import com.aluminum.manager.catalog.CatalogDtos.UnitDto;
 import com.aluminum.manager.catalog.CatalogDtos.UnitRequest;
-import com.aluminum.manager.catalog.PurchasePriceService.PriceRow;
 import com.aluminum.manager.catalog.PurchasePriceService.ResolvedPrice;
 import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
 import com.aluminum.manager.common.NameValidation;
 import com.aluminum.manager.security.CurrentAdmin;
 import com.aluminum.manager.shop.ShopAccess;
+import com.aluminum.manager.shop.ShopContext;
 import com.aluminum.manager.system.AuditService;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
@@ -32,39 +33,210 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CatalogService {
 
+	public static final String SELL_WEIGHT = "WEIGHT";
+	public static final String UNIT_KG = "kg";
+	public static final String UNIT_AREA = "m²";
+
 	private final JdbcTemplate jdbc;
 	private final AuditService audit;
 	private final PurchasePriceService purchasePrices;
 	private final Clock clock;
 	private final ShopAccess shops;
+	private final ProductImages images;
 
 	public CatalogService(
-			JdbcTemplate jdbc, AuditService audit, PurchasePriceService purchasePrices, Clock clock, ShopAccess shops) {
+			JdbcTemplate jdbc, AuditService audit, PurchasePriceService purchasePrices, Clock clock, ShopAccess shops,
+			ProductImages images) {
 		this.jdbc = jdbc;
 		this.audit = audit;
 		this.purchasePrices = purchasePrices;
 		this.clock = clock;
 		this.shops = shops;
+		this.images = images;
+	}
+
+	/**
+	 * Chỉ Phân phối → Xưởng: loại khớp theo tên, SP khớp theo mã.
+	 * Loại mới: copy giá; loại đã có: chỉ cập nhật tên/mô tả/trạng thái (không ghi đè giá).
+	 * SP mới: tạo kèm đơn vị; SP đã có: cập nhật tên/ảnh/mô tả/trạng thái. Tồn kho không đụng.
+	 */
+	@Transactional
+	public CatalogSyncResult syncCatalogToOtherShop() {
+		if (!shops.isDistribution()) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Chỉ Phân phối được đồng bộ danh mục sang Xưởng. Xưởng không đồng bộ ngược về Phân phối.",
+					null);
+		}
+		long sourceShopId = shops.currentId();
+		String targetCode = ShopContext.MANUFACTURING;
+		long targetShopId = shops.idOf(targetCode);
+		String targetName = shops.shopName(targetCode);
+
+		int categoriesCreated = 0;
+		int categoriesUpdated = 0;
+		List<CategoryRow> sourceCategories = jdbc.query("""
+				SELECT id, name, description, is_active, reference_purchase_price,
+				       default_selling_price, default_selling_price_ta,
+				       default_selling_price_ton, default_selling_price_m2
+				FROM product_categories WHERE shop_id = ?
+				ORDER BY name
+				""", (rs, i) -> new CategoryRow(
+				rs.getLong("id"),
+				rs.getString("name"),
+				rs.getString("description"),
+				rs.getBoolean("is_active"),
+				rs.getBigDecimal("reference_purchase_price"),
+				rs.getBigDecimal("default_selling_price"),
+				rs.getBigDecimal("default_selling_price_ta"),
+				rs.getBigDecimal("default_selling_price_ton"),
+				orZero(rs.getBigDecimal("default_selling_price_m2"))), sourceShopId);
+
+		for (CategoryRow src : sourceCategories) {
+			Long targetId = jdbc.query("""
+					SELECT id FROM product_categories WHERE shop_id = ? AND name = ?
+					""", (rs, i) -> rs.getLong("id"), targetShopId, src.name()).stream().findFirst().orElse(null);
+			if (targetId == null) {
+				long newId = insert("""
+						INSERT INTO product_categories (
+						    name, description, reference_purchase_price, default_selling_price,
+						    default_selling_price_ta, default_selling_price_ton, default_selling_price_m2,
+						    is_active, shop_id)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+						""", src.name(), blankToNull(src.description()),
+						orZero(src.purchaseKg()), orZero(src.sellKg()), orZero(src.sellTa()),
+						orZero(src.sellTon()), orZero(src.sellM2()), src.active(), targetShopId);
+				purchasePrices.record(newId, orZero(src.purchaseKg()), LocalDate.now(clock),
+						"Đồng bộ từ " + ShopContext.code());
+				categoriesCreated++;
+			} else {
+				jdbc.update("""
+						UPDATE product_categories
+						SET description = ?, is_active = ?
+						WHERE id = ?
+						""", blankToNull(src.description()), src.active(), targetId);
+				categoriesUpdated++;
+			}
+		}
+
+		int productsCreated = 0;
+		int productsUpdated = 0;
+		List<ProductRow> sourceProducts = jdbc.query("""
+				SELECT id, product_code, name, image_path, description, is_active, base_unit_name
+				FROM products WHERE shop_id = ?
+				ORDER BY product_code
+				""", (rs, i) -> new ProductRow(
+				rs.getLong("id"),
+				rs.getString("product_code"),
+				rs.getString("name"),
+				rs.getString("image_path"),
+				rs.getString("description"),
+				rs.getBoolean("is_active"),
+				rs.getString("base_unit_name")), sourceShopId);
+
+		for (ProductRow src : sourceProducts) {
+			String image = images.save(src.imagePath());
+			if (!java.util.Objects.equals(image, src.imagePath())) {
+				jdbc.update("UPDATE products SET image_path = ? WHERE id = ? AND image_path = ?",
+						image, src.id(), src.imagePath());
+			}
+			Long targetId = jdbc.query("""
+					SELECT id FROM products WHERE shop_id = ? AND product_code = ?
+					""", (rs, i) -> rs.getLong("id"), targetShopId, src.code()).stream().findFirst().orElse(null);
+			if (targetId == null) {
+				long newId = insert("""
+						INSERT INTO products (product_code, name, category_id, specification, base_unit_name,
+						                      sell_mode, reference_purchase_price, default_selling_price,
+						                      default_selling_price_ta, default_selling_price_m2, kg_per_m2,
+						                      image_path, description, is_active, shop_id)
+						VALUES (?, ?, NULL, NULL, ?, 'WEIGHT', 0, 0, 0, 0, NULL, ?, ?, ?, ?)
+						""",
+						src.code(), src.name().trim(),
+						src.baseUnit() == null || src.baseUnit().isBlank() ? UNIT_KG : src.baseUnit(),
+						image, blankToNull(src.description()),
+						src.active(), targetShopId);
+				ensureRetailTaUnit(newId, UNIT_KG);
+				ensureTonUnit(newId, UNIT_KG);
+				productsCreated++;
+			} else {
+				jdbc.update("""
+						UPDATE products
+						SET name = ?, image_path = ?, description = ?, is_active = ?
+						WHERE id = ?
+						""", src.name().trim(), image, blankToNull(src.description()),
+						src.active(), targetId);
+				ensureRetailTaUnit(targetId, UNIT_KG);
+				ensureTonUnit(targetId, UNIT_KG);
+				productsUpdated++;
+			}
+		}
+
+		audit.record(CurrentAdmin.get().id(), "SYNC_CATALOG", "shops", String.valueOf(targetShopId),
+				"Đồng bộ danh mục → " + targetCode
+						+ " (loại +" + categoriesCreated + "/~" + categoriesUpdated
+						+ ", SP +" + productsCreated + "/~" + productsUpdated + ")");
+		return new CatalogSyncResult(
+				targetCode, targetName, categoriesCreated, categoriesUpdated, productsCreated, productsUpdated);
 	}
 
 	@Transactional(readOnly = true)
 	public List<CategoryDto> categories() {
-		return jdbc.query("""
-				SELECT id, name, description, is_active FROM product_categories
+		LocalDate today = LocalDate.now(clock);
+		List<CategoryDto> rows = jdbc.query("""
+				SELECT id, name, description, is_active, reference_purchase_price,
+				       default_selling_price, default_selling_price_ta,
+				       default_selling_price_ton, default_selling_price_m2
+				FROM product_categories
 				WHERE 1 = 1
 				""" + shops.shopOnly(null) + """
 				 ORDER BY name
 				""", (rs, i) -> new CategoryDto(
-				rs.getLong("id"), rs.getString("name"), rs.getString("description"), rs.getBoolean("is_active")));
+				rs.getLong("id"),
+				rs.getString("name"),
+				rs.getString("description"),
+				rs.getBoolean("is_active"),
+				rs.getBigDecimal("reference_purchase_price"),
+				null,
+				rs.getBigDecimal("default_selling_price"),
+				rs.getBigDecimal("default_selling_price_ta"),
+				rs.getBigDecimal("default_selling_price_ton"),
+				orZero(rs.getBigDecimal("default_selling_price_m2"))));
+		if (rows.isEmpty()) {
+			return rows;
+		}
+		var prices = purchasePrices.resolveAll(rows.stream().map(CategoryDto::id).toList(), today);
+		return rows.stream().map(c -> {
+			ResolvedPrice eff = prices.get(c.id());
+			return new CategoryDto(
+					c.id(), c.name(), c.description(), c.active(),
+					eff == null ? c.referencePurchasePrice() : eff.pricePerBase(),
+					eff == null ? null : eff.effectiveFrom(),
+					c.defaultSellingPrice(), c.defaultSellingPriceTa(),
+					c.defaultSellingPriceTon(), c.defaultSellingPriceM2());
+		}).toList();
 	}
 
 	@Transactional
 	public CategoryDto createCategory(CategoryRequest request) {
 		NameValidation.requireNoLeadingDigit("Tên loại nhôm", request.name());
+		BigDecimal purchaseKg = orZero(request.referencePurchasePrice());
+		BigDecimal sellKg = orZero(request.defaultSellingPrice());
+		BigDecimal sellTa = request.defaultSellingPriceTa() != null
+				? request.defaultSellingPriceTa()
+				: sellKg.multiply(BigDecimal.valueOf(100));
+		BigDecimal sellTon = request.defaultSellingPriceTon() != null
+				? request.defaultSellingPriceTon()
+				: sellKg.multiply(BigDecimal.valueOf(1000));
+		BigDecimal sellM2 = orZero(request.defaultSellingPriceM2());
 		long id = insert("""
-				INSERT INTO product_categories (name, description, is_active, shop_id) VALUES (?, ?, ?, ?)
-				""", request.name().trim(), blankToNull(request.description()), request.active() == null || request.active(),
-				shops.currentId());
+				INSERT INTO product_categories (
+				    name, description, reference_purchase_price, default_selling_price,
+				    default_selling_price_ta, default_selling_price_ton, default_selling_price_m2,
+				    is_active, shop_id)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				""", request.name().trim(), blankToNull(request.description()),
+				purchaseKg, sellKg, sellTa, sellTon, sellM2,
+				request.active() == null || request.active(), shops.currentId());
+		purchasePrices.record(id, purchaseKg, LocalDate.now(clock), "Giá nhập khi tạo loại nhôm");
 		audit.record(CurrentAdmin.get().id(), "CREATE_CATEGORY", "product_categories", String.valueOf(id), request.name());
 		return category(id);
 	}
@@ -73,13 +245,31 @@ public class CatalogService {
 	public CategoryDto updateCategory(long id, CategoryRequest request) {
 		NameValidation.requireNoLeadingDigit("Tên loại nhôm", request.name());
 		category(id);
+		BigDecimal sellKg = orZero(request.defaultSellingPrice());
+		BigDecimal sellTa = request.defaultSellingPriceTa() != null
+				? request.defaultSellingPriceTa()
+				: sellKg.multiply(BigDecimal.valueOf(100));
+		BigDecimal sellTon = request.defaultSellingPriceTon() != null
+				? request.defaultSellingPriceTon()
+				: sellKg.multiply(BigDecimal.valueOf(1000));
+		BigDecimal sellM2 = orZero(request.defaultSellingPriceM2());
+		BigDecimal purchaseKg = orZero(request.referencePurchasePrice());
 		try {
 			jdbc.update("""
-					UPDATE product_categories SET name = ?, description = ?, is_active = ? WHERE id = ?
+					UPDATE product_categories
+					SET name = ?, description = ?, default_selling_price = ?,
+					    default_selling_price_ta = ?, default_selling_price_ton = ?,
+					    default_selling_price_m2 = ?, is_active = ?
+					WHERE id = ?
 					""", request.name().trim(), blankToNull(request.description()),
+					sellKg, sellTa, sellTon, sellM2,
 					request.active() == null || request.active(), id);
 		} catch (DuplicateKeyException ex) {
 			throw duplicate("Tên loại nhôm đã tồn tại");
+		}
+		ResolvedPrice current = purchasePrices.current(id);
+		if (current == null || purchaseKg.compareTo(current.pricePerBase()) != 0) {
+			purchasePrices.record(id, purchaseKg, LocalDate.now(clock), "Sửa giá nhập loại nhôm");
 		}
 		audit.record(CurrentAdmin.get().id(), "UPDATE_CATEGORY", "product_categories", String.valueOf(id), request.name());
 		return category(id);
@@ -98,24 +288,19 @@ public class CatalogService {
 			args.add(like);
 			args.add(like);
 		}
-		if (categoryId != null) {
-			sql.append(" AND p.category_id = ?");
-			args.add(categoryId);
-		}
 		if (active != null) {
 			sql.append(" AND p.is_active = ?");
 			args.add(active);
 		}
+		// categoryId giữ param API cũ nhưng không lọc SP (SP không gắn loại cố định).
 		sql.append(" ORDER BY p.product_code");
 		List<Long> ids = jdbc.queryForList(sql.toString(), Long.class, args.toArray());
 		if (ids.isEmpty()) {
 			return List.of();
 		}
-		// Một lượt đọc giá cho cả danh sách thay vì mỗi sản phẩm một query.
-		var prices = purchasePrices.resolveAll(ids, asOf == null ? LocalDate.now(clock) : asOf);
 		List<ProductDto> result = new ArrayList<>();
 		for (Long id : ids) {
-			result.add(product(id, prices.get(id)));
+			result.add(product(id));
 		}
 		return result;
 	}
@@ -127,37 +312,24 @@ public class CatalogService {
 
 	@Transactional(readOnly = true)
 	public ProductDto product(long id, LocalDate asOf) {
-		return product(id, purchasePrices.resolve(id, asOf));
-	}
-
-	private ProductDto product(long id, ResolvedPrice effective) {
 		List<ProductDto> rows = jdbc.query("""
-				SELECT p.id, p.product_code, p.name, p.category_id, c.name AS category_name,
-				       p.specification, p.base_unit_name, p.reference_purchase_price,
-				       p.default_selling_price, p.default_selling_price_ta,
+			SELECT p.id, p.product_code, p.name, p.category_id, p.base_unit_name,
 				       p.image_path, p.description, p.is_active,
-				       b.quantity_base, b.average_cost_per_base
+				       COALESCE((
+				           SELECT SUM(b.quantity_base) FROM stock_balances b WHERE b.product_id = p.id
+				       ), 0) AS quantity_base
 				FROM products p
-				JOIN product_categories c ON c.id = p.category_id
-				LEFT JOIN stock_balances b ON b.product_id = p.id
 				WHERE p.id = ? AND p.shop_id = ?
 				""", (rs, i) -> new ProductDto(
 				rs.getLong("id"),
 				rs.getString("product_code"),
 				rs.getString("name"),
-				rs.getLong("category_id"),
-				rs.getString("category_name"),
-				rs.getString("specification"),
+				rs.getObject("category_id", Long.class),
 				rs.getString("base_unit_name"),
-				effective == null ? rs.getBigDecimal("reference_purchase_price") : effective.pricePerBase(),
-				effective == null ? null : effective.effectiveFrom(),
-				rs.getBigDecimal("default_selling_price"),
-				rs.getBigDecimal("default_selling_price_ta"),
-				rs.getString("image_path"),
+				images.display(rs.getString("image_path")),
 				rs.getString("description"),
 				rs.getBoolean("is_active"),
 				orZero(rs.getBigDecimal("quantity_base")),
-				orZero(rs.getBigDecimal("average_cost_per_base")),
 				units(id)), id, shops.currentId());
 		if (rows.isEmpty()) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy sản phẩm", null);
@@ -191,40 +363,34 @@ public class CatalogService {
 	@Transactional
 	public ProductDto createProduct(ProductRequest request) {
 		NameValidation.requireNoLeadingDigit("Tên sản phẩm", request.name());
-		requireCategory(request.categoryId());
+		requireUniqueProductName(request.name(), null);
 		String code = blankToNull(request.productCode());
 		if (code == null) {
 			code = nextProductCode();
 		}
+		String baseUnit = UNIT_KG;
+		if (request.categoryId() != null) category(request.categoryId());
 		long id;
 		try {
 			id = insert("""
 					INSERT INTO products (product_code, name, category_id, specification, base_unit_name,
-					                      reference_purchase_price, default_selling_price,
-					                      default_selling_price_ta, image_path,
-					                      description, is_active, shop_id)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					                      sell_mode, reference_purchase_price, default_selling_price,
+					                      default_selling_price_ta, default_selling_price_m2, kg_per_m2,
+					                      image_path, description, is_active, shop_id)
+					VALUES (?, ?, ?, NULL, ?, 'WEIGHT', 0, 0, 0, 0, NULL, ?, ?, ?, ?)
 					""",
-					code, request.name().trim(), request.categoryId(),
-					blankToNull(request.specification()), request.baseUnitName().trim(),
-					request.referencePurchasePrice(), request.defaultSellingPrice(),
-					sellingPriceTaOrDerived(request),
-					blankToNull(request.imagePath()), blankToNull(request.description()),
+				code, request.name().trim(), request.categoryId(), baseUnit,
+					images.save(request.imagePath()), blankToNull(request.description()),
 					request.active() == null || request.active(), shops.currentId());
 		} catch (DuplicateKeyException ex) {
 			throw duplicate("Mã nhôm đã tồn tại");
 		}
-		String baseUnit = request.baseUnitName().trim();
 		ensureRetailTaUnit(id, baseUnit);
 		ensureTonUnit(id, baseUnit);
-		// Giá nhập đầu tiên mở lịch sử giá từ hôm nay để mọi phiếu sau đều tra được giá chuẩn.
-		purchasePrices.record(id, request.referencePurchasePrice(), LocalDate.now(clock),
-				"Giá nhập khi tạo sản phẩm");
 		audit.record(CurrentAdmin.get().id(), "CREATE_PRODUCT", "products", String.valueOf(id), code);
 		return product(id);
 	}
 
-	/** Nhập lô theo tấn: 1 tấn = 1.000 kg. */
 	private void ensureTonUnit(long productId, String baseUnitName) {
 		if (!"kg".equalsIgnoreCase(baseUnitName)) {
 			return;
@@ -245,7 +411,6 @@ public class CatalogService {
 		}
 	}
 
-	/** Bán lẻ 1 tạ = 100 kg; đơn vị tạ là mặc định trên phiếu bán. */
 	private void ensureRetailTaUnit(long productId, String baseUnitName) {
 		if (!"kg".equalsIgnoreCase(baseUnitName)) {
 			return;
@@ -271,7 +436,10 @@ public class CatalogService {
 	public ProductDto updateProduct(long id, ProductRequest request) {
 		NameValidation.requireNoLeadingDigit("Tên sản phẩm", request.name());
 		ProductDto existing = product(id);
-		requireCategory(request.categoryId());
+		if (!existing.name().trim().equalsIgnoreCase(request.name().trim())) {
+			requireUniqueProductName(request.name(), id);
+		}
+		if (request.categoryId() != null) category(request.categoryId());
 		String code = blankToNull(request.productCode());
 		if (code == null) {
 			code = existing.productCode();
@@ -279,38 +447,36 @@ public class CatalogService {
 		try {
 			jdbc.update("""
 					UPDATE products
-					SET product_code = ?, name = ?, category_id = ?, specification = ?, base_unit_name = ?,
-					    default_selling_price = ?, default_selling_price_ta = ?, image_path = ?,
-					    description = ?, is_active = ?
+					SET product_code = ?, name = ?, category_id = ?, image_path = ?, description = ?, is_active = ?
 					WHERE id = ?
 					""",
-					code, request.name().trim(), request.categoryId(),
-					blankToNull(request.specification()), request.baseUnitName().trim(),
-					request.defaultSellingPrice(), sellingPriceTaOrDerived(request),
-					blankToNull(request.imagePath()), blankToNull(request.description()),
+				code, request.name().trim(), request.categoryId(),
+					images.save(request.imagePath()), blankToNull(request.description()),
 					request.active() == null || request.active(), id);
-			jdbc.update("UPDATE product_units SET unit_name = ? WHERE product_id = ? AND is_base_unit = 1",
-					request.baseUnitName().trim(), id);
 		} catch (DuplicateKeyException ex) {
-			throw duplicate("Mã nhôm hoặc tên đơn vị đã tồn tại");
+			throw duplicate("Mã nhôm đã tồn tại");
 		}
-		String baseUnit = request.baseUnitName().trim();
-		ensureRetailTaUnit(id, baseUnit);
-		ensureTonUnit(id, baseUnit);
-		// Giá nhập chỉ mở mốc mới khi thực sự đổi, tránh làm rác lịch sử mỗi lần lưu sản phẩm.
-		BigDecimal newPrice = request.referencePurchasePrice();
-		ResolvedPrice current = purchasePrices.current(id);
-		if (newPrice != null && (current == null || newPrice.compareTo(current.pricePerBase()) != 0)) {
-			purchasePrices.record(id, newPrice, LocalDate.now(clock), "Sửa giá nhập trong danh mục");
-		}
+		ensureRetailTaUnit(id, UNIT_KG);
+		ensureTonUnit(id, UNIT_KG);
 		audit.record(CurrentAdmin.get().id(), "UPDATE_PRODUCT", "products", String.valueOf(id), code);
 		return product(id);
 	}
 
+	private void requireUniqueProductName(String name, Long excludingId) {
+		String sql = "SELECT COUNT(*) FROM products WHERE shop_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))"
+				+ (excludingId == null ? "" : " AND id <> ?");
+		Integer count = excludingId == null
+				? jdbc.queryForObject(sql, Integer.class, shops.currentId(), name)
+				: jdbc.queryForObject(sql, Integer.class, shops.currentId(), name, excludingId);
+		if (count != null && count > 0) {
+			throw duplicate("Đã có sản phẩm này rồi, vui lòng chọn sản phẩm khác");
+		}
+	}
+
 	@Transactional(readOnly = true)
-	public List<PurchasePriceDto> purchasePriceHistory(long productId) {
-		product(productId);
-		return purchasePrices.history(productId).stream()
+	public List<PurchasePriceDto> purchasePriceHistory(long categoryId) {
+		category(categoryId);
+		return purchasePrices.history(categoryId).stream()
 				.map(row -> new PurchasePriceDto(
 						row.id(), row.effectiveFrom(), row.effectiveTo(),
 						row.pricePerBase(), row.note(), row.open(), row.future()))
@@ -318,15 +484,15 @@ public class CatalogService {
 	}
 
 	@Transactional
-	public List<PurchasePriceDto> recordPurchasePrice(long productId, PurchasePriceRequest request) {
-		product(productId);
+	public List<PurchasePriceDto> recordPurchasePrice(long categoryId, PurchasePriceRequest request) {
+		category(categoryId);
 		ResolvedPrice saved = purchasePrices.record(
-				productId, request.pricePerBase(), request.effectiveFrom(), request.note());
-		audit.record(CurrentAdmin.get().id(), "SET_PURCHASE_PRICE", "product_purchase_prices",
+				categoryId, request.pricePerBase(), request.effectiveFrom(), request.note());
+		audit.record(CurrentAdmin.get().id(), "SET_PURCHASE_PRICE", "category_purchase_prices",
 				String.valueOf(saved.priceId()),
-				"Giá nhập " + productId + " = " + saved.pricePerBase().toPlainString()
+				"Giá nhập loại " + categoryId + " = " + saved.pricePerBase().toPlainString()
 						+ " từ " + saved.effectiveFrom());
-		return purchasePriceHistory(productId);
+		return purchasePriceHistory(categoryId);
 	}
 
 	@Transactional
@@ -398,17 +564,27 @@ public class CatalogService {
 				productId);
 	}
 
-	private CategoryDto category(long id) {
+	public CategoryDto category(long id) {
+		LocalDate today = LocalDate.now(clock);
+		ResolvedPrice eff = purchasePrices.resolve(id, today);
 		return jdbc.query("""
-				SELECT id, name, description, is_active FROM product_categories WHERE id = ? AND shop_id = ?
+				SELECT id, name, description, is_active, reference_purchase_price,
+				       default_selling_price, default_selling_price_ta,
+				       default_selling_price_ton, default_selling_price_m2
+				FROM product_categories WHERE id = ? AND shop_id = ?
 				""", (rs, i) -> new CategoryDto(
-				rs.getLong("id"), rs.getString("name"), rs.getString("description"), 				rs.getBoolean("is_active")),
+				rs.getLong("id"),
+				rs.getString("name"),
+				rs.getString("description"),
+				rs.getBoolean("is_active"),
+				eff == null ? rs.getBigDecimal("reference_purchase_price") : eff.pricePerBase(),
+				eff == null ? null : eff.effectiveFrom(),
+				rs.getBigDecimal("default_selling_price"),
+				rs.getBigDecimal("default_selling_price_ta"),
+				rs.getBigDecimal("default_selling_price_ton"),
+				orZero(rs.getBigDecimal("default_selling_price_m2"))),
 				id, shops.currentId()).stream().findFirst()
 				.orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy loại nhôm", null));
-	}
-
-	private void requireCategory(long id) {
-		category(id);
 	}
 
 	private long insert(String sql, Object... args) {
@@ -434,13 +610,12 @@ public class CatalogService {
 		return new BusinessException(ErrorCode.DUPLICATE_PRODUCT_CODE, message, null);
 	}
 
-	/** Cột ta giữ đồng bộ từ giá / kg (×100); UI chỉ nhập giá / tấn. */
-	private static BigDecimal sellingPriceTaOrDerived(ProductRequest request) {
-		if (request.defaultSellingPriceTa() != null) {
-			return request.defaultSellingPriceTa();
+	public static String normalizeSellMode(String value) {
+		if (value == null || value.isBlank() || "WEIGHT".equalsIgnoreCase(value.trim())
+				|| "AREA".equalsIgnoreCase(value.trim())) {
+			return SELL_WEIGHT;
 		}
-		BigDecimal perKg = request.defaultSellingPrice() == null ? BigDecimal.ZERO : request.defaultSellingPrice();
-		return perKg.multiply(BigDecimal.valueOf(100));
+		return SELL_WEIGHT;
 	}
 
 	private static String blankToNull(String value) {
@@ -452,5 +627,29 @@ public class CatalogService {
 	}
 
 	private record UnitRow(long id, BigDecimal factor, boolean base) {
+	}
+
+	private record CategoryRow(
+			long id,
+			String name,
+			String description,
+			boolean active,
+			BigDecimal purchaseKg,
+			BigDecimal sellKg,
+			BigDecimal sellTa,
+			BigDecimal sellTon,
+			BigDecimal sellM2
+	) {
+	}
+
+	private record ProductRow(
+			long id,
+			String code,
+			String name,
+			String imagePath,
+			String description,
+			boolean active,
+			String baseUnit
+	) {
 	}
 }

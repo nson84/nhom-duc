@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Space, Table, Tag, message } from "antd";
+import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Space, Tag, message } from "antd";
+import { PagedTable } from "../../components/PagedTable";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { toApiError } from "../../services/error-handler";
@@ -84,7 +85,7 @@ export function BackupsPage() {
       ) : null}
 
       {status ? (
-        <Descriptions bordered size="small" column={2} style={{ marginBottom: 16 }}>
+        <Descriptions bordered size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 16 }}>
           <Descriptions.Item label="Giờ sao lưu tự động hằng ngày">{status.backupTime}</Descriptions.Item>
           <Descriptions.Item label="Thời gian lưu giữ">{status.retentionDays} ngày</Descriptions.Item>
           <Descriptions.Item label="Thư mục lưu trữ" span={2}>
@@ -98,15 +99,14 @@ export function BackupsPage() {
         </Descriptions>
       ) : null}
 
-      <p style={{ color: "#5c6b73", marginTop: 0 }}>
+      <p style={{ color: "var(--color-text-secondary)", marginTop: 0 }}>
         Mỗi bản sao lưu đều được kiểm tra kích thước và mã băm toàn vẹn SHA-256. Trước khi phục hồi, hệ thống tự động tạo một bản sao lưu trạng thái hiện tại để phòng ngừa rủi ro.
       </p>
 
-      <Table<BackupLog>
+      <PagedTable<BackupLog>
         rowKey="id"
         loading={loading}
         dataSource={logs}
-        pagination={{ pageSize: 15 }}
         columns={[
           {
             title: "Thời điểm sao lưu",

@@ -1,0 +1,12 @@
+---
+description: Đọc và đồng bộ tài liệu chức năng trước và sau mỗi thay đổi code
+alwaysApply: true
+---
+
+# Đồng bộ tài liệu khi sửa code
+
+Thực hiện đầy đủ quy tắc trong `AGENTS.md`:
+
+1. Trước khi sửa, đọc `docs/feature.md`, `docs/requirements.md` và `FEATURE.md` tại các thư mục frontend/backend liên quan.
+2. Sau khi sửa code, đối chiếu hành vi và cập nhật `FEATURE.md` liên quan cùng các tài liệu yêu cầu/API/dữ liệu/kiểm thử khi bị ảnh hưởng.
+3. Khi thêm hoặc xóa chức năng, bổ sung hoặc cập nhật `FEATURE.md` và mục lục. Ghi rõ phần chưa hỗ trợ và kiểm thử đã thực hiện.

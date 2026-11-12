@@ -29,6 +29,24 @@ public class ShopAccess {
 		return ShopContext.DISTRIBUTION.equals(ShopContext.code());
 	}
 
+	/** Shop còn lại (dùng nội bộ). Đồng bộ danh mục chỉ cho phép Phân phối → Xưởng ở CatalogService. */
+	public String otherShopCode() {
+		return isDistribution() ? ShopContext.MANUFACTURING : ShopContext.DISTRIBUTION;
+	}
+
+	public long otherShopId() {
+		return idOf(otherShopCode());
+	}
+
+	public String shopName(String code) {
+		ensureLoaded();
+		String normalized = ShopContext.normalize(code);
+		String name = jdbc.query("""
+				SELECT name FROM shops WHERE code = ?
+				""", (rs, i) -> rs.getString("name"), normalized).stream().findFirst().orElse(normalized);
+		return name;
+	}
+
 	public void requireManufacturing() {
 		if (isDistribution()) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR,

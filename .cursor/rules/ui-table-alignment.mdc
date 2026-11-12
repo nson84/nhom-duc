@@ -13,6 +13,7 @@ Khi tạo hoặc sửa bảng (`Table` Ant Design / danh sách dạng cột) tr�
 - Ví dụ đúng: cột Giá bán — tiêu đề `"Giá bán"` và giá trị `100.000.000 đ` đều nằm giữa cột.
 - Khi thêm cột mới, mặc định luôn `align: "center"`.
 - Áp dụng cho bảng sản phẩm, kho, chứng từ, nhân sự, tài chính, báo cáo và mọi bảng mới trong `frontend/`.
+- **Bảng in PDF / HTML** (phiếu kho, danh sách nợ, mọi `document.write` / `srcDoc`) cũng căn giữa: mọi `th` và `td` dùng `text-align: center`. Không căn phải số tiền, số lượng, thành tiền.
 
 ```tsx
 // Đúng

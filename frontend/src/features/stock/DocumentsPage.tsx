@@ -1,17 +1,23 @@
 import {
   CheckOutlined,
+  CloseOutlined,
   DeleteOutlined,
   DollarOutlined,
   EditOutlined,
   PlusOutlined,
   PrinterOutlined,
   RetweetOutlined,
+  RollbackOutlined,
   StopOutlined,
+  UserAddOutlined,
 } from "@ant-design/icons";
-import { Alert, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
+import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker } from "react-router-dom";
 import { AppActionButton, appButtonStyle } from "../../components/AppButtons";
+import { PagedTable } from "../../components/PagedTable";
+import { LiveSearch } from "../../components/LiveSearch";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import {
@@ -20,6 +26,7 @@ import {
   purchaseFormDraftKey,
   readSessionDraft,
   writeSessionDraft,
+  type SessionDraftEnvelope,
 } from "../../utils/session-draft";
 import { optionalNameRules, requiredNameRules } from "../../utils/name-rules";
 import {
@@ -28,9 +35,8 @@ import {
   parseQtyInput,
   positiveDecimalRules,
   qtyInputNumberProps,
-  roundVndToThousand,
-  vndAmountRules,
   vndInputNumberProps,
+  isValidPaymentAmountVnd,
   vndUnitPriceRules,
 } from "../../utils/vnd-input";
 import {
@@ -39,24 +45,32 @@ import {
   purchaseUnit,
   suggestPurchasePricePerUnit,
   suggestSalePricePerUnit,
+  suggestSalePricePerWeightUnit,
   taUnit,
   tonUnit,
   type PurchaseWeightUnit,
 } from "../products/product-stock-unit";
-import { useCanWrite } from "../auth/auth-store";
+import { useCanWrite, useSession } from "../auth/auth-store";
 import { useShop } from "../shop/shop-store";
-import { listProducts, type Product } from "../products/products-api";
-import { getSettings } from "../settings/settings-api";
+import { CustomerFormModal } from "../customers/CustomersPage";
+import { CustomerSuggestSearch } from "../customers/CustomerSuggestSearch";
+import { getCustomer, linkDocumentCustomer, listCustomers, type Customer } from "../customers/customers-api";
+import { listCategories, listProducts, savePurchasePrice, type Category, type Product } from "../products/products-api";
+import { addPriceReviewAlert } from "../products/price-review-alerts";
+import { buildSaleInvoiceHtml, printStockDocument } from "./document-print";
+import { listBankAccounts, type BankAccount } from "../settings/bank-accounts-api";
+import { getSettings, type ShopSettings } from "../settings/settings-api";
 import {
   addPayment,
   documentAction,
   getDocument,
-  listBalances,
   listDocuments,
+  restoreDocument,
   reverseDocument,
   saveDocument,
+  trashDocument,
+  type DocumentListFilter,
   type DocumentSummary,
-  type StockBalance,
   type StockDocument,
 } from "./stock-api";
 
@@ -65,36 +79,42 @@ type Kind = "PURCHASE" | "SALE";
 const copy = {
   PURCHASE: {
     title: "Nhập kho",
-    newLabel: "Tạo phiếu nhập",
+    newLabel: "Phiếu nhập",
     counterparty: "Nhà cung cấp",
     payLabel: "Chi tiền",
     paidLabel: "Đã chi",
-    printTitle: "PHIẾU NHẬP KHO",
-    leftSign: "Người giao hàng",
-    rightSign: "Người nhập kho",
   },
   SALE: {
     title: "Bán hàng",
-    newLabel: "Tạo phiếu bán",
+    newLabel: "Phiếu bán",
     counterparty: "Khách hàng",
     payLabel: "Thu tiền",
     paidLabel: "Đã thu",
-    printTitle: "PHIẾU XUẤT KHO / BÁN HÀNG",
-    leftSign: "Người xuất hàng",
-    rightSign: "Người nhận hàng",
   },
 } as const;
 
 const statusTag: Record<string, { color: string; text: string }> = {
   DRAFT: { color: "gold", text: "Nháp" },
   CONFIRMED: { color: "green", text: "Đã xác nhận" },
-  CANCELLED: { color: "default", text: "Đã hủy / đảo" },
+  CANCELLED: { color: "default", text: "Đảo / Hủy" },
 };
 const paymentTag: Record<string, { color: string; text: string }> = {
   UNPAID: { color: "red", text: "Chưa thanh toán" },
   PARTIAL: { color: "orange", text: "Thanh toán một phần" },
   PAID: { color: "green", text: "Đã thanh toán" },
 };
+
+const LIST_FILTER_OPTIONS: { value: DocumentListFilter; label: string }[] = [
+  { value: "all", label: "Tất cả" },
+  { value: "unpaid", label: "Chưa thanh toán" },
+  { value: "partial", label: "Thanh toán một phần" },
+  { value: "paid", label: "Đã thanh toán" },
+  { value: "draft", label: "Nháp" },
+  { value: "voided", label: "Đảo / Hủy" },
+  { value: "trash", label: "Thùng rác" },
+];
+
+const TRASH_RETENTION_DAYS = 90;
 const typeLabel: Record<string, string> = {
   PURCHASE: "Nhập",
   SALE: "Bán",
@@ -115,32 +135,46 @@ function paymentMethodLabel(raw: string | null | undefined): string {
   return value;
 }
 
-/** Cột dòng phiếu — ô đơn giá / thành tiền rộng để số lớn + hậu tố đ không tràn. */
-const purchaseLineColumns = "minmax(180px, 1.1fr) 88px 96px minmax(200px, 1.15fr) minmax(220px, 1.25fr) 56px";
-const saleLineColumns = "minmax(180px, 1.1fr) 96px 100px minmax(200px, 1.15fr) minmax(220px, 1.25fr) 56px";
+/** Cột dòng phiếu nhập — ô đơn giá / thành tiền rộng để số lớn + hậu tố đ không tràn. */
+const purchaseLineColumns =
+  "minmax(160px, 1fr) minmax(140px, 0.8fr) 88px 96px minmax(190px, 1.1fr) minmax(200px, 1.1fr) 56px";
 
 export function DocumentsPage({ kind }: { kind: Kind }) {
   const canWrite = useCanWrite();
   const text = copy[kind];
-  const draftKey = purchaseFormDraftKey(kind);
+  const shop = useShop();
+  const session = useSession();
+  const draftKey = `${purchaseFormDraftKey(kind)}:${shop}:${session?.username}`;
+  const parkedKey = `${draftKey}:parked`;
   const [rows, setRows] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string | undefined>();
+  const [listFilter, setListFilter] = useState<DocumentListFilter>("all");
+  const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [editing, setEditing] = useState<StockDocument | "new" | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
+  const [parked, setParked] = useState(() => readParkedDrafts(parkedKey));
+  const [parkedId, setParkedId] = useState<string>();
   const draftRestoredRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await listDocuments({ type: kind, status, q: query || undefined }));
+      setRows(
+        await listDocuments({
+          type: kind,
+          filter: listFilter,
+          q: query || undefined,
+          from: range?.[0]?.format("YYYY-MM-DD"),
+          to: range?.[1]?.format("YYYY-MM-DD"),
+        }),
+      );
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
       setLoading(false);
     }
-  }, [kind, status, query]);
+  }, [kind, listFilter, query, range]);
 
   useEffect(() => {
     void load();
@@ -153,9 +187,10 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   // F5: mở lại form phiếu nếu còn bản nháp
   useEffect(() => {
     if (loading || draftRestoredRef.current || editing) return;
-    const draft = readSessionDraft<DocumentDraftValues>(draftKey);
+    const draft = readSessionDraft<DocumentDraftValues>(draftKey) as DocumentDraft | null;
     if (!draft) return;
     draftRestoredRef.current = true;
+    setParkedId(draft.parkedId);
     if (draft.targetId === "new") {
       setEditing("new");
       message.info(kind === "PURCHASE" ? "Đã khôi phục bản nháp phiếu nhập" : "Đã khôi phục bản nháp phiếu bán");
@@ -173,6 +208,26 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
       .catch(() => clearSessionDraft(draftKey));
   }, [loading, editing, draftKey, kind]);
 
+  function updateParked(next: ParkedDraft[]) {
+    localStorage.setItem(parkedKey, JSON.stringify(next));
+    setParked(next);
+  }
+
+  async function resumeDraft(draft: ParkedDraft) {
+    try {
+      const doc = draft.targetId === "new" ? "new" : await getDocument(draft.targetId);
+      if (doc !== "new" && doc.status !== "DRAFT") {
+        message.warning("Phiếu này không còn ở trạng thái nháp.");
+        return;
+      }
+      writeSessionDraft(draftKey, draft);
+      setParkedId(draft.parkedId);
+      setEditing(doc);
+    } catch (error) {
+      message.error(toApiError(error).message);
+    }
+  }
+
   return (
     <Card
       title={text.title}
@@ -185,33 +240,63 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
       }
     >
       <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search className="app-search" placeholder="Tìm số phiếu hoặc tên" allowClear onSearch={setQuery} style={{ width: 280 }} />
-        <Select
+        {kind === "SALE" ? (
+          <CustomerSuggestSearch
+            value={query}
+            style={{ width: 340 }}
+            placeholder="Tìm số phiếu, tên hoặc số điện thoại khách"
+            onSearch={setQuery}
+          />
+        ) : (
+          <LiveSearch value={query} onChange={setQuery} placeholder="Tìm số phiếu hoặc tên nhà cung cấp" style={{ width: 400 }} suggestions={rows.flatMap((r) => [r.documentCode, r.counterpartyName ?? ""])} />
+        )}
+        <DatePicker.RangePicker
+          format="DD/MM/YYYY"
+          value={range}
+          onChange={(value) => setRange(value as [Dayjs, Dayjs] | null)}
           allowClear
-          placeholder="Trạng thái"
-          style={{ width: 180 }}
-          value={status}
-          onChange={setStatus}
-          options={Object.entries(statusTag).map(([value, tag]) => ({ value, label: tag.text }))}
+          placeholder={["Từ ngày", "Đến ngày"]}
+        />
+        <Select
+          style={{ width: 220 }}
+          value={listFilter}
+          onChange={setListFilter}
+          options={LIST_FILTER_OPTIONS}
         />
       </Space>
-      <Table<DocumentSummary>
+      <PagedTable<DocumentSummary>
         rowKey="id"
         loading={loading}
         dataSource={rows}
-        pagination={{ pageSize: 20 }}
         onRow={(record) => ({
           onClick: () => setViewing(record.id),
           className: "app-row-clickable",
         })}
         columns={[
-          { title: "Số phiếu", dataIndex: "documentCode", align: "center" },
           {
-            title: "Nội bộ",
-            dataIndex: "internal",
+            title: "Số phiếu",
+            dataIndex: "documentCode",
             align: "center",
-            width: 90,
-            render: (v: boolean) => (v ? <Tag color="gold">Nội bộ</Tag> : "—"),
+            render: (code: string, r) => (
+              <div style={{ lineHeight: 1.35 }}>
+                <div>
+                  {r.internal ? (
+                    <Tag color="gold" style={{ marginInlineEnd: 0 }}>
+                      Nội bộ
+                    </Tag>
+                  ) : (
+                    <Tag style={{ marginInlineEnd: 0 }}>{kind === "SALE" ? "Khách hàng" : "Nhà cung cấp"}</Tag>
+                  )}
+                </div>
+                <div style={{ marginTop: 4, fontWeight: 500 }}>{code}</div>
+                {listFilter === "trash" && r.trashedAt && r.status === "CANCELLED" ? (
+                  <div style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                    Còn {Math.max(0, TRASH_RETENTION_DAYS - dayjs().diff(dayjs(r.trashedAt), "day"))} ngày trong thùng
+                    rác
+                  </div>
+                ) : null}
+              </div>
+            ),
           },
           { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
           { title: text.counterparty, dataIndex: "counterpartyName", align: "center" },
@@ -230,15 +315,51 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           },
         ]}
       />
+      {(listFilter === "all" || listFilter === "draft") && parked.length > 0 && (
+        <Card size="small" title="Phiếu nháp trên thiết bị này" style={{ marginTop: 12 }}>
+          <Space direction="vertical">
+            {parked.map((draft) => (
+              <Button key={draft.parkedId} disabled={editing != null}
+                onClick={() => void resumeDraft(draft)}>
+                Sửa phiếu nháp · {draft.values.counterpartyName || "Chưa nhập đối tác"} · {dayjs(draft.savedAt).format("DD/MM/YYYY HH:mm")}
+              </Button>
+            ))}
+          </Space>
+        </Card>
+      )}
       {editing ? (
         <EditorModal
           kind={kind}
+          draftKey={draftKey}
+          parkedId={parkedId}
           document={editing === "new" ? null : editing}
+          onPark={(draft, saved) => {
+            const id = draft.parkedId ?? crypto.randomUUID();
+            const others = readParkedDrafts(parkedKey).filter((row) => row.parkedId !== id
+              && (draft.targetId === "new" || row.targetId !== draft.targetId));
+            if (!saved || others.length !== parked.length) {
+              updateParked(saved ? others : [{ ...draft, parkedId: id }, ...others]);
+            }
+            clearSessionDraft(draftKey);
+            setParkedId(undefined);
+            setEditing(null);
+            setListFilter("draft");
+            if (saved) void load();
+          }}
           onClose={() => {
             clearSessionDraft(draftKey);
+            setParkedId(undefined);
             setEditing(null);
           }}
           onSaved={(saved) => {
+            if (parkedId) {
+              try {
+                updateParked(parked.filter((draft) => draft.parkedId !== parkedId));
+              } catch {
+                message.warning("Đã lưu phiếu nhưng chưa dọn được bản nháp trên thiết bị.");
+              }
+            }
+            setParkedId(undefined);
             clearSessionDraft(draftKey);
             setEditing(null);
             setViewing(saved.id);
@@ -261,19 +382,27 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
     </Card>
   );
 }
-
 type EditorValues = {
   documentDate: Dayjs;
   counterpartyName?: string;
+  customerId?: number;
   issuedBy?: string;
   receivedBy?: string;
   items: {
     productId?: number;
+    /** Loại nhôm của dòng — chọn sau sản phẩm; giá gợi ý lấy từ loại nhôm. */
+    categoryId?: number;
     unitId?: number;
     quantityDocument?: number;
     unitPrice?: number;
     weightInputUnit?: PurchaseWeightUnit;
     priceInputUnit?: PurchaseWeightUnit;
+    /** kg | m2 — đơn vị tính tiền trên phiếu bán. */
+    billingUnit?: "kg" | "m2";
+    widthM?: number;
+    heightM?: number;
+    /** Bán m²: kg thực tế để trừ tồn (tách với diện tích tính tiền). */
+    stockQuantityKg?: number;
     /** Giá hệ thống đã gợi ý cho dòng này, dùng để biết Admin đã sửa tay hay chưa. */
     suggestedPrice?: number;
   }[];
@@ -281,15 +410,32 @@ type EditorValues = {
 };
 
 type DocumentDraftValues = Omit<EditorValues, "documentDate"> & { documentDate?: string };
+type DocumentDraft = SessionDraftEnvelope<DocumentDraftValues> & { parkedId?: string };
+type ParkedDraft = DocumentDraft & { parkedId: string };
+
+function readParkedDrafts(key: string): ParkedDraft[] {
+  try {
+    const drafts = JSON.parse(localStorage.getItem(key) ?? "[]");
+    return Array.isArray(drafts) ? drafts : [];
+  } catch {
+    return [];
+  }
+}
 
 function EditorModal({
   kind,
+  draftKey,
+  parkedId,
   document,
+  onPark,
   onClose,
   onSaved,
 }: {
   kind: Kind;
+  draftKey: string;
+  parkedId?: string;
   document: StockDocument | null;
+  onPark: (draft: DocumentDraft, saved: boolean) => void;
   onClose: () => void;
   onSaved: (document: StockDocument) => void;
 }) {
@@ -297,32 +443,112 @@ function EditorModal({
   const sellByKg = shop === "MANUFACTURING" && kind === "SALE";
   const canMarkInternal = shop === "DISTRIBUTION" && kind === "SALE";
   const text = copy[kind];
-  const draftKey = purchaseFormDraftKey(kind);
   const targetId = document?.id ?? "new";
   const [form] = Form.useForm<EditorValues>();
   const [products, setProducts] = useState<Product[]>([]);
-  const [balances, setBalances] = useState<StockBalance[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerSuggesting, setCustomerSuggesting] = useState(false);
+  const customerSuggestSeq = useRef(0);
+  const customerSuggestTimer = useRef<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
+  const dirty = useRef(false);
+  const blocker = useBlocker(() => dirty.current || saving);
+  const [offerSaveCustomer, setOfferSaveCustomer] = useState<StockDocument | null>(null);
+  const [saveCustomerForm, setSaveCustomerForm] = useState<StockDocument | null>(null);
+  const idempotencyKey = useMemo(() => parkedId ?? crypto.randomUUID(), [parkedId]);
   const draftAppliedRef = useRef(false);
   const items = Form.useWatch("items", form) ?? [];
-  const documentDate = Form.useWatch("documentDate", form);
   const internalTransfer = Form.useWatch("internal", form) === true;
 
-  const persistDraft = useCallback(() => {
+  const legacyAreaDraft = kind === "SALE" && document?.items.some(
+    (item) => item.billingUnit === "m2" || item.unitName === "m²",
+  );
+
+  const snapshotDraft = useCallback((): DocumentDraft => {
     const values = form.getFieldsValue(true) as EditorValues;
-    writeSessionDraft(draftKey, {
+    return {
       targetId,
+      parkedId: idempotencyKey,
       values: {
         ...values,
         documentDate: values.documentDate ? dayjs(values.documentDate).toISOString() : undefined,
       },
       savedAt: Date.now(),
-    });
-  }, [form, draftKey, targetId]);
+    };
+  }, [form, targetId, idempotencyKey]);
+
+  const persistDraft = useCallback(() => {
+    dirty.current = true;
+    writeSessionDraft(draftKey, snapshotDraft());
+  }, [draftKey, snapshotDraft]);
+
+  const saveDraftDocument = useCallback((values: EditorValues, confirm = false) => {
+    return saveDocument(document?.id, {
+      documentType: kind,
+      documentDate: values.documentDate.format("YYYY-MM-DDTHH:mm:ss"),
+      counterpartyName: values.counterpartyName,
+      customerId: kind === "SALE" ? values.customerId ?? null : undefined,
+      issuedBy: values.issuedBy,
+      receivedBy: values.receivedBy,
+      discountAmount: 0,
+      internal: canMarkInternal ? Boolean(values.internal) : false,
+      idempotencyKey: document ? undefined : idempotencyKey,
+      items: values.items.map((i) => {
+        const unitPrice = Math.round(Number(i.unitPrice ?? 0));
+        const quantityDocument = Number(Number(i.quantityDocument ?? 0).toFixed(6));
+        return {
+          productId: i.productId!,
+          categoryId: i.categoryId!,
+          unitId: i.unitId!,
+          quantityDocument,
+          unitPrice,
+          lineDiscount: 0,
+          billingUnit: "kg",
+        };
+      }),
+    }, confirm);
+  }, [document?.id, kind, canMarkInternal, idempotencyKey]);
+
+  const askToPark = useCallback((onLeave?: () => void, onContinue?: () => void) => Modal.confirm({
+    title: "Bạn muốn tiếp tục hoàn thành phiếu?",
+    content: "Phiếu sẽ nằm trong danh sách Nháp. Phiếu còn thiếu thông tin được giữ trên thiết bị này để bạn nhập tiếp.",
+    okText: "Lưu nháp và rời",
+    cancelText: "Tiếp tục nhập",
+    onOk: async () => {
+      let saved = false;
+      try {
+        const values = await form.validateFields({ validateOnly: true });
+        await saveDraftDocument(values);
+        saved = true;
+      } catch {
+        // A partially completed form must remain recoverable even if the API cannot save it yet.
+      }
+      try {
+        onPark(snapshotDraft(), saved);
+        message.success(saved ? "Đã lưu phiếu nháp" : "Đã lưu phiếu nháp trên thiết bị này");
+        dirty.current = false;
+        onLeave?.();
+      } catch {
+        message.error("Không lưu được bản nháp trên thiết bị. Hãy tiếp tục nhập hoặc thử lưu phiếu.");
+        onContinue?.();
+      }
+    },
+    onCancel: () => onContinue?.(),
+  }), [form, onPark, saveDraftDocument, snapshotDraft]);
 
   useEffect(() => {
-    return bindDraftUnloadGuard(() => Boolean(readSessionDraft(draftKey)));
+    if (blocker.state !== "blocked") return;
+    if (saving) {
+      blocker.reset();
+      return;
+    }
+    const prompt = askToPark(blocker.proceed, blocker.reset);
+    return () => prompt.destroy();
+  }, [blocker, saving, askToPark]);
+
+  useEffect(() => {
+    return bindDraftUnloadGuard(() => dirty.current);
   }, [draftKey]);
 
   useEffect(() => {
@@ -330,72 +556,119 @@ function EditorModal({
     draftAppliedRef.current = true;
     const draft = readSessionDraft<DocumentDraftValues>(draftKey);
     if (!draft || draft.targetId !== targetId) return;
+    dirty.current = true;
     form.setFieldsValue({
       ...draft.values,
+      items: kind === "SALE" ? draft.values.items.map((line) =>
+        line.billingUnit === "m2"
+          ? {
+              ...line,
+              billingUnit: "kg" as const,
+              quantityDocument: line.stockQuantityKg,
+              unitPrice: undefined,
+              widthM: undefined,
+              heightM: undefined,
+              stockQuantityKg: undefined,
+            }
+          : line,
+      ) : draft.values.items,
       documentDate: draft.values.documentDate ? dayjs(draft.values.documentDate) : dayjs(),
     });
   }, [draftKey, targetId, form]);
 
-  // Giá nhập gợi ý phải theo đúng ngày phiếu: nhập lùi ngày thì lấy giá của ngày đó,
-  // không lấy giá đang áp dụng hôm nay.
-  const priceDateKey = documentDate ? documentDate.format("YYYY-MM-DD") : undefined;
-
   useEffect(() => {
-    listProducts({ active: true, asOf: priceDateKey })
-      .then(setProducts)
+    Promise.all([listProducts({ active: true }), listCategories("all")])
+      .then(([p, c]) => {
+        setProducts(p);
+        setCategories(c);
+      })
       .catch((error) => message.error(toApiError(error).message));
-  }, [priceDateKey]);
+  }, []);
 
   useEffect(() => {
-    if (!canMarkInternal) return;
-    listBalances({})
-      .then(setBalances)
-      .catch(() => setBalances([]));
-  }, [canMarkInternal]);
+    if (kind !== "SALE") return;
+    listCustomers({ active: true })
+      .then(setCustomers)
+      .catch(() => setCustomers([]));
+  }, [kind]);
+
+
+  function suggestCustomers(q: string) {
+    if (kind !== "SALE") return;
+    const text = q.trim();
+    if (customerSuggestTimer.current != null) {
+      window.clearTimeout(customerSuggestTimer.current);
+    }
+    const id = ++customerSuggestSeq.current;
+    customerSuggestTimer.current = window.setTimeout(() => {
+      setCustomerSuggesting(Boolean(text));
+      listCustomers({ q: text || undefined, active: true })
+        .then((rows) => {
+          if (id !== customerSuggestSeq.current) return;
+          setCustomers(rows);
+        })
+        .catch(() => {
+          if (id === customerSuggestSeq.current) setCustomers([]);
+        })
+        .finally(() => {
+          if (id === customerSuggestSeq.current) setCustomerSuggesting(false);
+        });
+    }, 180);
+  }
 
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
-  const costByProductId = useMemo(
-    () => new Map(balances.map((b) => [b.productId, b.averageCostPerBase])),
-    [balances],
+  const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const customerOptions = useMemo(
+    () =>
+      customers.map((c) => ({
+        value: c.name,
+        label: c.phone ? `${c.name} — ${c.phone}` : c.name,
+        customerId: c.id,
+        phone: c.phone,
+      })),
+    [customers],
   );
+  /** Giá vốn BQ theo từng cặp sản phẩm + loại nhôm. */
 
-  function costUnitPrice(product: Product, unitId?: number): number {
-    const unit = product.units.find((u) => u.id === unitId) ?? tonUnit(product) ?? purchaseUnit(product, "tấn");
-    const costPerBase = costByProductId.get(product.id) ?? 0;
-    if (!unit || costPerBase <= 0) return 0;
-    return roundVndToThousand(costPerBase * Number(unit.factorToBase));
-  }
 
-  function applyInternalCostPrices() {
+  useEffect(() => {
+    if (!internalTransfer) return;
+    // Xuất nội bộ chỉ theo khối lượng — ép các dòng m² về kg.
     const list = [...((form.getFieldValue("items") as EditorValues["items"] | undefined) ?? [])];
-    const next = list.map((line) => {
-      const product = productMap.get(line?.productId ?? 0);
-      if (!product) return line;
-      const price = costUnitPrice(product, line.unitId);
-      return { ...line, unitPrice: price, suggestedPrice: price };
-    });
-    form.setFieldValue("items", next);
-  }
+    if (list.some((line) => line?.billingUnit === "m2")) {
+      const next = [...list];
+      next.forEach((line, index) => {
+        if (line?.billingUnit !== "m2") return;
+        const product = productMap.get(line.productId ?? 0);
+        if (!product) {
+          next[index] = {
+            ...line,
+            billingUnit: "kg",
+            widthM: undefined,
+            heightM: undefined,
+            stockQuantityKg: undefined,
+          };
+          return;
+        }
+        applySaleBilling(next, index, product, categoryMap.get(line.categoryId ?? 0));
+      });
+      form.setFieldValue("items", next);
+    }
+  }, [internalTransfer, form, productMap, categoryMap]);
 
+  // Khi danh mục loại nhôm tải xong (hoặc khôi phục bản nháp), cập nhật giá gợi ý cho các dòng
+  // chưa bị sửa tay. Mỗi dòng ghi lại giá mà hệ thống đã gợi ý (`suggestedPrice`); chỉ những dòng
+  // còn đúng giá gợi ý đó mới được cập nhật, để không ghi đè giá Admin đã nhập tay.
   useEffect(() => {
-    if (!internalTransfer || balances.length === 0 || products.length === 0) return;
-    applyInternalCostPrices();
-    // Chỉ khi bật nội bộ / có số dư giá vốn — không phụ thuộc mọi lần gõ form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [internalTransfer, balances, products]);
-
-  // Đổi ngày phiếu thì giá chuẩn gợi ý đổi theo. Mỗi dòng ghi lại giá mà hệ thống đã gợi ý
-  // (`suggestedPrice`); chỉ những dòng còn đúng giá gợi ý đó mới được cập nhật, để không ghi đè
-  // giá Admin đã nhập tay.
-  useEffect(() => {
-    if (kind !== "PURCHASE" || products.length === 0) return;
+    if (kind !== "PURCHASE" || products.length === 0 || categories.length === 0) return;
     const list = (form.getFieldValue("items") as EditorValues["items"] | undefined) ?? [];
     let changed = false;
     const next = list.map((line) => {
       const product = productMap.get(line?.productId ?? 0);
-      if (!product) return line;
+      const category = categoryMap.get(line?.categoryId ?? 0);
+      if (!product || !category) return line;
       const weight = line?.weightInputUnit === "tạ" ? "tạ" : "tấn";
-      const suggested = suggestPurchasePricePerUnit(product, weight);
+      const suggested = suggestPurchasePricePerUnit(category, weight);
       const currentPrice = Math.round(Number(line.unitPrice ?? 0));
       const untouched = line.suggestedPrice === undefined ? currentPrice === 0 : currentPrice === line.suggestedPrice;
       if (!untouched) return line;
@@ -404,16 +677,23 @@ function EditorModal({
       return { ...line, unitPrice: suggested, suggestedPrice: suggested };
     });
     if (changed) form.setFieldValue("items", next);
-  }, [products, form, kind, productMap]);
+  }, [products, categories, form, kind, productMap, categoryMap]);
+
+  /** Loại nhôm đang dùng, giữ lại loại đã chọn trên dòng dù đã ngừng dùng. */
+  function categoryOptions(selectedId?: number) {
+    return categories
+      .filter((c) => c.active || c.id === selectedId)
+      .map((c) => ({ value: c.id, label: c.name }));
+  }
 
   /** Ngày hiệu lực của giá đang gợi ý, hiển thị cạnh ô đơn giá để Admin biết giá lấy từ mốc nào. */
-  function priceEffectiveHint(product: Product | undefined) {
-    if (kind !== "PURCHASE" || !product?.purchasePriceEffectiveFrom) return null;
-    return `Giá chuẩn từ ${dayjs(product.purchasePriceEffectiveFrom).format("DD/MM/YYYY")}`;
+  function priceEffectiveHint(category: Category | undefined) {
+    if (kind !== "PURCHASE" || !category?.purchasePriceEffectiveFrom) return null;
+    return `Giá chuẩn từ ${dayjs(category.purchasePriceEffectiveFrom).format("DD/MM/YYYY")}`;
   }
 
   function weightOf(line?: EditorValues["items"][number]): PurchaseWeightUnit {
-    if (sellByKg) return "kg";
+    if (sellByKg) return line?.weightInputUnit === "tạ" || line?.weightInputUnit === "tấn" ? line.weightInputUnit : "kg";
     if (shop === "MANUFACTURING" && kind === "PURCHASE" && line?.weightInputUnit === "tạ") return "tạ";
     return "tấn";
   }
@@ -424,29 +704,69 @@ function EditorModal({
     return tonUnit(product) ?? purchaseUnit(product, "tấn");
   }
 
-  function onProductChange(index: number, productId: number) {
-    const product = productMap.get(productId);
-    if (!product) return;
-    const list = [...(form.getFieldValue("items") as EditorValues["items"])];
+  function applySaleBilling(
+    list: EditorValues["items"],
+    index: number,
+    product: Product,
+    category: Category | undefined,
+  ) {
     const weight = weightOf(list[index]);
     const unit = unitFor(product, weight);
     if (!unit) {
       message.warning("Sản phẩm chưa có đơn vị phù hợp. Hãy Sửa và Lưu lại trong danh mục.");
     }
-    const useCost = canMarkInternal && form.getFieldValue("internal") === true;
-    const suggested = useCost
-      ? costUnitPrice(product, unit?.id)
-      : kind === "PURCHASE"
-        ? suggestPurchasePricePerUnit(product, weight === "kg" ? "tấn" : weight)
-        : unit
-          ? suggestSalePricePerUnit(product, unit)
-          : 0;
-    if (useCost && suggested <= 0) {
-      message.warning(`Sản phẩm ${product.productCode} chưa có giá vốn tồn kho để chuyển nội bộ`);
+    const suggested = category && unit ? suggestSalePricePerUnit(category, unit) : undefined;
+    list[index] = {
+      ...list[index],
+      productId: product.id,
+      billingUnit: "kg",
+      widthM: undefined,
+      heightM: undefined,
+      stockQuantityKg: undefined,
+      weightInputUnit: weight,
+      priceInputUnit: weight,
+      unitId: unit?.id,
+      unitPrice: suggested,
+      suggestedPrice: suggested,
+      quantityDocument: list[index]?.quantityDocument && list[index]?.billingUnit !== "m2"
+        ? list[index].quantityDocument
+        : 1,
+    };
+    return list;
+  }
+
+  /** Chọn sản phẩm rồi loại nhôm: đơn vị theo sản phẩm, đơn giá gợi ý theo loại nhôm của dòng. */
+  function applyLineSelection(index: number, productId: number, categoryId: number | undefined) {
+    const product = productMap.get(productId);
+    if (!product) return;
+    const category = categoryId != null ? categoryMap.get(categoryId) : undefined;
+    let list = [...(form.getFieldValue("items") as EditorValues["items"])];
+    list[index] = { ...list[index], categoryId };
+
+    if (kind === "SALE") {
+      list = applySaleBilling(list, index, product, category);
+      form.setFieldValue("items", list);
+      void form.validateFields([
+        ["items", index, "productId"],
+        ["items", index, "categoryId"],
+        ["items", index, "unitPrice"],
+        ["items", index, "quantityDocument"],
+      ]);
+      return;
     }
+
+    const weight = weightOf(list[index]);
+    const unit = unitFor(product, weight);
+    if (!unit) {
+      message.warning("Sản phẩm chưa có đơn vị phù hợp. Hãy Sửa và Lưu lại trong danh mục.");
+    }
+    const suggested = category
+      ? suggestPurchasePricePerUnit(category, weight === "kg" ? "tấn" : weight)
+      : undefined;
     list[index] = {
       ...list[index],
       productId,
+      billingUnit: "kg",
       weightInputUnit: weight,
       priceInputUnit: weight,
       unitId: unit?.id,
@@ -455,26 +775,55 @@ function EditorModal({
       quantityDocument: list[index]?.quantityDocument ?? 1,
     };
     form.setFieldValue("items", list);
-    // Xóa lỗi validate cũ (nếu có) sau khi hệ thống vừa điền đơn giá hợp lệ.
     void form.validateFields([
       ["items", index, "productId"],
+      ["items", index, "categoryId"],
       ["items", index, "unitPrice"],
       ["items", index, "quantityDocument"],
     ]);
+  }
+
+  function onProductChange(index: number, productId: number) {
+    const product = productMap.get(productId);
+    if (!product) return;
+    const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    const name = normalize(product.name);
+    const matches = categories.filter((category) => {
+      const categoryName = normalize(category.name);
+      return categoryName.length > 0 && name.includes(categoryName);
+    });
+    const categoryId = product.categoryId && categoryMap.has(product.categoryId)
+      ? product.categoryId
+      : matches.length === 1 ? matches[0].id : undefined;
+    applyLineSelection(index, productId, categoryId);
+  }
+
+  function onCategoryChange(index: number, categoryId: number) {
+    const list = form.getFieldValue("items") as EditorValues["items"];
+    const productId = list[index]?.productId;
+    if (!productId) {
+      // Chưa chọn sản phẩm: chỉ ghi nhận loại nhôm, giá sẽ gợi ý khi chọn sản phẩm.
+      const next = [...list];
+      next[index] = { ...next[index], categoryId };
+      form.setFieldValue("items", next);
+      return;
+    }
+    applyLineSelection(index, productId, categoryId);
   }
 
   function validateLineField(index: number, key: "quantityDocument" | "unitPrice" | "productId") {
     void form.validateFields([["items", index, key]]);
   }
 
-  /** Blur đơn giá: chỉ báo lỗi đỏ nếu chưa làm tròn hàng nghìn — không tự sửa im lặng. */
+  /** Blur đơn giá: chỉ báo lỗi đỏ nếu không phải bội 500 (…000 / …500) — không tự sửa im lặng. */
   function onWeightChange(index: number, weight: "tạ" | "tấn") {
     const list = [...(form.getFieldValue("items") as EditorValues["items"])];
     const product = productMap.get(list[index]?.productId ?? 0);
     const unit = product ? unitFor(product, weight) : undefined;
     const currentPrice = Math.round(Number(list[index]?.unitPrice ?? 0));
     const untouched = list[index]?.suggestedPrice === undefined ? currentPrice === 0 : currentPrice === list[index]?.suggestedPrice;
-    const suggested = product ? suggestPurchasePricePerUnit(product, weight) : currentPrice;
+    const category = categoryMap.get(list[index]?.categoryId ?? 0);
+    const suggested = category ? suggestPurchasePricePerUnit(category, weight) : currentPrice;
     list[index] = {
       ...list[index],
       weightInputUnit: weight,
@@ -482,6 +831,28 @@ function EditorModal({
       unitId: unit?.id ?? list[index]?.unitId,
       unitPrice: untouched ? suggested : currentPrice,
       suggestedPrice: untouched ? suggested : list[index]?.suggestedPrice,
+    };
+    form.setFieldValue("items", list);
+  }
+
+  function onSaleWeightChange(index: number, weight: PurchaseWeightUnit) {
+    const list = [...(form.getFieldValue("items") as EditorValues["items"])];
+    const line = list[index];
+    const product = productMap.get(line?.productId ?? 0);
+    const oldFactor = line?.weightInputUnit === "tấn" ? 1000 : line?.weightInputUnit === "tạ" ? 100 : 1;
+    const nextFactor = weight === "tấn" ? 1000 : weight === "tạ" ? 100 : 1;
+    const category = categoryMap.get(line?.categoryId ?? 0);
+    const currentPrice = Number(line?.unitPrice ?? 0);
+    const suggested = category ? suggestSalePricePerWeightUnit(category, weight) : currentPrice * nextFactor / oldFactor;
+    const untouched = line?.suggestedPrice === undefined ? currentPrice === 0 : currentPrice === line.suggestedPrice;
+    list[index] = {
+      ...line,
+      weightInputUnit: weight,
+      priceInputUnit: weight,
+      unitId: product ? unitFor(product, weight)?.id : line?.unitId,
+      quantityDocument: Number(((Number(line?.quantityDocument ?? 0) * oldFactor) / nextFactor).toFixed(6)),
+      unitPrice: Math.round(untouched ? suggested : currentPrice * nextFactor / oldFactor),
+      suggestedPrice: untouched ? Math.round(suggested) : undefined,
     };
     form.setFieldValue("items", list);
   }
@@ -515,10 +886,17 @@ function EditorModal({
   }, 0);
 
   return (
+    <>
     <Modal
-      open
+      open={!offerSaveCustomer && !saveCustomerForm}
       width={1120}
-      title={document ? `Sửa ${document.documentCode}` : text.newLabel}
+      title={
+        document
+          ? `Sửa ${document.documentCode}`
+          : kind === "PURCHASE"
+            ? "Tạo phiếu nhập"
+            : "Tạo phiếu bán"
+      }
       okText={
         document
           ? kind === "PURCHASE"
@@ -532,9 +910,21 @@ function EditorModal({
       confirmLoading={saving}
       okButtonProps={{ style: appButtonStyle(document ? "edit" : "create") }}
       cancelButtonProps={{ style: appButtonStyle("cancel") }}
-      onCancel={onClose}
+      onCancel={() => {
+        if (saving) return;
+        if (dirty.current) askToPark();
+        else onClose();
+      }}
       onOk={() => form.submit()}
     >
+      {legacyAreaDraft ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Phiếu nháp m² đã được chuyển sang bán theo cân. Hãy kiểm tra lại khối lượng và nhập đơn giá / kg trước khi lưu."
+        />
+      ) : null}
       <Form<EditorValues>
         form={form}
         layout="vertical"
@@ -545,15 +935,35 @@ function EditorModal({
             ? {
                 documentDate: dayjs(document.documentDate),
                 counterpartyName: document.counterpartyName ?? undefined,
+                customerId: document.customerId ?? undefined,
                 issuedBy: document.issuedBy ?? undefined,
                 receivedBy: document.receivedBy ?? undefined,
                 internal: document.internal ?? false,
                 items: document.items.map((i) => {
                   const product = productMap.get(i.productId);
+                  const billing: "kg" | "m2" =
+                    i.billingUnit === "m2" || i.unitName === "m²" || i.unitName?.toLowerCase() === "m2"
+                      ? "m2"
+                      : "kg";
+                  if (billing === "m2") {
+                    return {
+                      productId: i.productId,
+                      categoryId: i.categoryId ?? undefined,
+                      unitId: i.unitId ?? undefined,
+                      billingUnit: "kg" as const,
+                      quantityDocument: Number(Number(i.quantityBase).toFixed(6)),
+                      unitPrice: undefined,
+                      suggestedPrice: undefined,
+                      weightInputUnit: sellByKg ? "kg" : "tấn",
+                      priceInputUnit: sellByKg ? "kg" : "tấn",
+                    };
+                  }
                   const keepStored = sellByKg || (shop === "MANUFACTURING" && kind === "PURCHASE");
                   let unitPrice = Math.round(i.unitPrice);
                   let quantityDocument = Number(Number(i.quantityDocument).toFixed(6));
-                  let weight: PurchaseWeightUnit = sellByKg ? "kg" : i.unitName === "tạ" ? "tạ" : "tấn";
+                  let weight: PurchaseWeightUnit = sellByKg
+                    ? i.unitName === "tạ" ? "tạ" : i.unitName === "tấn" ? "tấn" : "kg"
+                    : i.unitName === "tạ" ? "tạ" : "tấn";
                   if (!keepStored && i.unitName !== "tấn") {
                     unitPrice = Math.round(unitPrice * KG_PER_TON);
                     quantityDocument = Number(Math.max(0.000001, quantityDocument / KG_PER_TON).toFixed(6));
@@ -562,7 +972,9 @@ function EditorModal({
                   const unit = product ? unitFor(product, weight) : undefined;
                   return {
                     productId: i.productId,
+                    categoryId: i.categoryId ?? undefined,
                     unitId: unit?.id ?? i.unitId ?? undefined,
+                    billingUnit: "kg" as const,
                     quantityDocument,
                     unitPrice,
                     weightInputUnit: weight,
@@ -577,6 +989,7 @@ function EditorModal({
                 items: [
                   {
                     quantityDocument: 1,
+                    billingUnit: "kg" as const,
                     weightInputUnit: sellByKg ? "kg" : "tấn",
                     priceInputUnit: sellByKg ? "kg" : "tấn",
                   },
@@ -587,29 +1000,79 @@ function EditorModal({
         onFinish={async (values) => {
           setSaving(true);
           try {
-            const saved = await saveDocument(document?.id, {
-              documentType: kind,
-              documentDate: values.documentDate.format("YYYY-MM-DDTHH:mm:ss"),
-              counterpartyName: values.counterpartyName,
-              issuedBy: values.issuedBy,
-              receivedBy: values.receivedBy,
-              discountAmount: 0,
-              internal: canMarkInternal ? Boolean(values.internal) : false,
-              idempotencyKey: document ? undefined : idempotencyKey,
-              items: values.items.map((i) => {
-                const unitPrice = Math.round(Number(i.unitPrice ?? 0));
-                const quantityDocument = Number(Number(i.quantityDocument ?? 0).toFixed(6));
-                return {
-                  productId: i.productId!,
-                  unitId: i.unitId!,
-                  quantityDocument,
-                  unitPrice,
-                  lineDiscount: 0,
-                };
-              }),
+            const changed = new Map<number, { name: string; oldPrice: number; oldFrom?: string | null; newPrice: number }>();
+            const conflicting = new Set<number>();
+            if (kind === "PURCHASE" && !document) {
+              for (const item of values.items) {
+                const category = categoryMap.get(item.categoryId ?? 0);
+                const unit = productMap.get(item.productId ?? 0)?.units.find((u) => u.id === item.unitId);
+                if (!category || !unit || !Number(unit.factorToBase)) continue;
+                const newPrice = Number((Number(item.unitPrice ?? 0) / Number(unit.factorToBase)).toFixed(6));
+                if (newPrice <= 0 || Math.abs(newPrice - category.referencePurchasePrice) < 0.000001) continue;
+                const previous = changed.get(category.id);
+                if (previous && previous.newPrice !== newPrice) conflicting.add(category.id);
+                else changed.set(category.id, {
+                  name: category.name,
+                  oldPrice: category.referencePurchasePrice,
+                  oldFrom: category.purchasePriceEffectiveFrom,
+                  newPrice,
+                });
+              }
+            }
+            const updates = [...changed.entries()].filter(([id]) => !conflicting.has(id));
+            if (conflicting.size) message.warning("Một loại nhôm có nhiều đơn giá trong phiếu; hãy cập nhật giá chuẩn của loại đó thủ công.");
+            const shouldUpdatePrices = updates.length > 0 && await new Promise<boolean>((resolve) => {
+              Modal.confirm({
+                title: "Cập nhật giá nhập loại nhôm?",
+                content: (
+                  <div>
+                    <p>Đơn giá phiếu nhập khác giá hiện tại. Bạn có muốn ghi giá nhập chuẩn mới khi lưu phiếu không?</p>
+                    {updates.map(([id, price]) => (
+                      <div key={id} style={{ marginBottom: 8 }}>
+                        <b>{price.name}</b><br />
+                        Giá cũ: {formatMoney(price.oldPrice * KG_PER_TON)} / tấn
+                        {price.oldFrom ? `, áp dụng từ ${dayjs(price.oldFrom).format("DD/MM/YYYY")}` : ", chưa có mốc hiệu lực"}<br />
+                        Giá mới: {formatMoney(price.newPrice * KG_PER_TON)} / tấn,
+                        {` áp dụng từ ${values.documentDate.format("DD/MM/YYYY")}`}
+                      </div>
+                    ))}
+                    <p>Lịch sử giá nhập sẽ giữ cả hai mốc. Chuông thông báo sẽ nhắc kiểm tra giá bán.</p>
+                  </div>
+                ),
+                okText: "Lưu phiếu và cập nhật giá",
+                cancelText: "Chỉ lưu phiếu",
+                onOk: () => resolve(true),
+                onCancel: () => resolve(false),
+              });
             });
+            const saved = await saveDraftDocument(values, canMarkInternal);
             message.success(kind === "PURCHASE" ? "Đã tạo phiếu nhập" : "Đã lưu phiếu");
-            onSaved(saved);
+            if (shouldUpdatePrices) {
+              for (const [id, price] of updates) {
+                try {
+                  await savePurchasePrice(id, {
+                    pricePerBase: price.newPrice,
+                    effectiveFrom: values.documentDate.format("YYYY-MM-DD"),
+                    note: `Cập nhật từ phiếu nhập ${saved.documentCode}`,
+                  });
+                  addPriceReviewAlert(shop, id, price.name, price.newPrice);
+                } catch (error) {
+                  message.error(`Đã lưu phiếu nhưng chưa cập nhật giá nhập ${price.name}: ${toApiError(error).message}`);
+                }
+              }
+              onSaved(saved);
+              return;
+            }
+            if (
+              kind === "SALE" &&
+              !saved.customerId &&
+              saved.counterpartyName &&
+              saved.counterpartyName.trim()
+            ) {
+              setOfferSaveCustomer(saved);
+            } else {
+              onSaved(saved);
+            }
           } catch (error) {
             message.error(toApiError(error).message);
           } finally {
@@ -617,13 +1080,45 @@ function EditorModal({
           }
         }}
       >
+        <Form.Item name="customerId" hidden>
+          <InputNumber />
+        </Form.Item>
         <Space className="doc-form-meta-row" align="start" wrap size={[16, 32]}>
           <Form.Item name="documentDate" label="Ngày phiếu" rules={[{ required: true, message: "Chọn ngày" }]}>
             <DatePicker showTime format="DD/MM/YYYY HH:mm" />
           </Form.Item>
-          <Form.Item name="counterpartyName" label={text.counterparty} rules={optionalNameRules(200)}>
-            <Input style={{ width: 240 }} maxLength={200} />
-          </Form.Item>
+          {kind === "SALE" ? (
+            <Form.Item name="counterpartyName" label={text.counterparty} rules={optionalNameRules(200)}>
+              <AutoComplete
+                style={{ width: 280 }}
+                options={customerOptions}
+                placeholder="Gõ tên hoặc số điện thoại khách"
+                notFoundContent={customerSuggesting ? "Đang tìm…" : "Không có gợi ý"}
+                filterOption={false}
+                onSearch={suggestCustomers}
+                onSelect={(value, option) => {
+                  const opt = option as { customerId?: number; phone?: string | null };
+                  form.setFieldsValue({
+                    counterpartyName: String(value),
+                    customerId: opt.customerId,
+                  });
+                }}
+                onChange={(value) => {
+                  const match =
+                    customers.find((c) => c.name === value) ??
+                    customers.find((c) => c.phone && c.phone === value);
+                  form.setFieldsValue({
+                    counterpartyName: value,
+                    customerId: match?.id,
+                  });
+                }}
+              />
+            </Form.Item>
+          ) : (
+            <Form.Item name="counterpartyName" label={text.counterparty} rules={optionalNameRules(200)}>
+              <Input style={{ width: 240 }} maxLength={200} />
+            </Form.Item>
+          )}
           <Form.Item
             name="issuedBy"
             label={kind === "SALE" ? "Người xuất" : "Người giao"}
@@ -651,55 +1146,33 @@ function EditorModal({
               <Checkbox
                 onChange={(e) => {
                   if (e.target.checked) {
-                    applyInternalCostPrices();
                   }
                 }}
               >
-                Giao dịch nội bộ (xuất sang xưởng, giá = giá vốn)
+                Giao dịch nội bộ
               </Checkbox>
             </Form.Item>
           ) : null}
         </Space>
-        {internalTransfer ? (
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            message="Xuất nội bộ sang xưởng"
-            description="Đơn giá khóa theo giá vốn tồn (làm tròn hàng nghìn). Khi xác nhận phiếu, hệ thống tự tạo phiếu nhập xưởng cùng mã sản phẩm, cộng tồn xưởng và không tính lãi đoạn chuyển."
-          />
-        ) : null}
         <Form.List name="items">
           {(fields, { add, remove }) => (
-            <>
+            <div className="purchase-lines">
               {kind === "PURCHASE" ? (
                 <div
                   className="purchase-line-grid purchase-line-head"
                   style={{ gridTemplateColumns: purchaseLineColumns }}
                 >
                   <span>Sản phẩm</span>
+                  <span>Loại nhôm</span>
                   <span>Số lượng</span>
                   <span>Đơn vị khối lượng</span>
                   <span>{shop === "MANUFACTURING" ? "Đơn giá" : "Đơn giá / tấn"}</span>
                   <span>Thành tiền</span>
                   <span aria-hidden />
                 </div>
-              ) : (
-                <div
-                  className="purchase-line-grid purchase-line-head"
-                  style={{ gridTemplateColumns: saleLineColumns }}
-                >
-                  <span>Sản phẩm</span>
-                  <span>Đơn vị tính</span>
-                  <span>Số lượng</span>
-                  <span>{sellByKg ? "Đơn giá / kg" : "Đơn giá / tấn"}</span>
-                  <span>Thành tiền</span>
-                  <span aria-hidden />
-                </div>
-              )}
+              ) : null}
               {fields.map((field) => {
                 const current = items[field.name];
-                const product = productMap.get(current?.productId ?? 0);
                 const qty = Number(current?.quantityDocument ?? 0);
                 const lineTotal =
                   kind === "PURCHASE"
@@ -707,7 +1180,7 @@ function EditorModal({
                     : Math.max(0, Math.round(qty * Math.round(Number(current?.unitPrice ?? 0))));
 
                 if (kind === "PURCHASE") {
-                  const priceHint = priceEffectiveHint(product);
+                  const priceHint = priceEffectiveHint(categoryMap.get(current?.categoryId ?? 0));
                   return (
                     <div key={field.key} className="purchase-line-block">
                       <div
@@ -724,7 +1197,23 @@ function EditorModal({
                             placeholder="Chọn sản phẩm"
                             optionFilterProp="label"
                             onChange={(value) => onProductChange(field.name, value)}
-                            options={products.map((p) => ({ value: p.id, label: `${p.productCode} - ${p.name}` }))}
+                            options={products.map((p) => ({
+                              value: p.id,
+                              label: `${p.productCode} - ${p.name}`,
+                            }))}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          name={[field.name, "categoryId"]}
+                          validateFirst
+                          rules={[{ required: true, message: "Chọn loại nhôm" }]}
+                        >
+                          <Select
+                            showSearch
+                            placeholder="Chọn loại nhôm"
+                            optionFilterProp="label"
+                            onChange={(value) => onCategoryChange(field.name, value)}
+                            options={categoryOptions(current?.categoryId)}
                           />
                         </Form.Item>
                         <Form.Item name={[field.name, "quantityDocument"]} validateFirst rules={positiveDecimalRules}>
@@ -750,10 +1239,12 @@ function EditorModal({
                         <Form.Item name={[field.name, "unitPrice"]} validateFirst rules={vndUnitPriceRules}>
                           <InputNumber
                             {...vndInputNumberProps}
-                            placeholder={current?.weightInputUnit === "tạ" ? "Giá một tạ" : "Giá một tấn"}
+                            placeholder={
+                              current?.weightInputUnit === "tạ" ? "Giá một tạ" : "Giá một tấn"
+                            }
                             style={{ width: "100%" }}
                             title={priceHint ?? undefined}
-                            disabled={internalTransfer}
+
                             onBlur={() => onUnitPriceBlur(field.name)}
                           />
                         </Form.Item>
@@ -770,6 +1261,9 @@ function EditorModal({
                           <span aria-hidden />
                         )}
                       </div>
+                      <Form.Item name={[field.name, "billingUnit"]} hidden initialValue="kg">
+                        <Input />
+                      </Form.Item>
                       <Form.Item name={[field.name, "weightInputUnit"]} hidden initialValue="tấn">
                         <Input />
                       </Form.Item>
@@ -784,54 +1278,112 @@ function EditorModal({
                 }
 
                 return (
-                  <div key={field.key} className="purchase-line-block">
-                    <div
-                      className="purchase-line-grid purchase-line-body"
-                      style={{ gridTemplateColumns: saleLineColumns }}
-                    >
+                  <div key={field.key} className="sale-line-card">
+                    <div className="sale-line-card-top">
                       <Form.Item
                         name={[field.name, "productId"]}
+                        label="Sản phẩm"
                         validateFirst
                         rules={[{ required: true, message: "Chọn sản phẩm" }]}
+                        style={{ flex: 1, marginBottom: 0 }}
                       >
                         <Select
                           showSearch
                           placeholder="Chọn sản phẩm"
                           optionFilterProp="label"
                           onChange={(value) => onProductChange(field.name, value)}
-                          options={products.map((p) => ({ value: p.id, label: `${p.productCode} - ${p.name}` }))}
+                          options={products.map((p) => ({
+                            value: p.id,
+                            label: `${p.productCode} - ${p.name}`,
+                          }))}
                         />
                       </Form.Item>
-                      <span className="purchase-line-static">{sellByKg ? "kg" : "tấn"}</span>
-                      <Form.Item name={[field.name, "quantityDocument"]} validateFirst rules={positiveDecimalRules}>
-                        <InputNumber
-                          {...qtyInputNumberProps}
-                          style={{ width: "100%" }}
-                          onBlur={() => onQuantityBlur(field.name)}
+                      <Form.Item
+                        name={[field.name, "categoryId"]}
+                        label="Loại nhôm"
+                        validateFirst
+                        rules={[{ required: true, message: "Chọn loại nhôm" }]}
+                        style={{ flex: 1, marginBottom: 0 }}
+                      >
+                        <Select
+                          showSearch
+                          placeholder="Chọn loại nhôm"
+                          optionFilterProp="label"
+                          onChange={(value) => onCategoryChange(field.name, value)}
+                          options={categoryOptions(current?.categoryId)}
                         />
                       </Form.Item>
-                      <Form.Item name={[field.name, "unitPrice"]} validateFirst rules={vndUnitPriceRules}>
-                        <InputNumber
-                          {...vndInputNumberProps}
-                          style={{ width: "100%" }}
-                          disabled={internalTransfer}
-                          placeholder={internalTransfer ? "Giá vốn gốc" : undefined}
-                          onBlur={() => onUnitPriceBlur(field.name)}
-                        />
-                      </Form.Item>
-                      <span className="purchase-line-static">{formatMoney(lineTotal)}</span>
                       {fields.length > 1 ? (
                         <AppActionButton
                           tone="delete"
-                          className="purchase-line-remove"
+                          className="sale-line-remove"
                           icon={<DeleteOutlined />}
                           aria-label="Xóa dòng"
                           onClick={() => remove(field.name)}
                         />
-                      ) : (
-                        <span aria-hidden />
-                      )}
+                      ) : null}
                     </div>
+
+                    <div className="sale-line-fields sale-line-fields-kg">
+                        <Form.Item
+                          name={[field.name, "quantityDocument"]}
+                          label={sellByKg ? "Khối lượng" : "Khối lượng (tấn)"}
+                          extra={sellByKg ? "Khối lượng nhôm trong thành phẩm đã giao; không gồm kính và phụ kiện." : undefined}
+                          validateFirst
+                          rules={positiveDecimalRules}
+                        >
+                          <InputNumber
+                            {...qtyInputNumberProps}
+                            style={{ width: "100%" }}
+                            onBlur={() => onQuantityBlur(field.name)}
+                          />
+                        </Form.Item>
+                        {sellByKg ? (
+                          <Form.Item label="Đơn vị">
+                            <Select
+                              aria-label="Đơn vị khối lượng"
+                              value={current?.weightInputUnit ?? "kg"}
+                              onChange={(value: PurchaseWeightUnit) => onSaleWeightChange(field.name, value)}
+                              options={[
+                                { value: "kg", label: "kg" },
+                                { value: "tạ", label: "tạ" },
+                                { value: "tấn", label: "tấn" },
+                              ]}
+                              style={{ width: 88 }}
+                            />
+                          </Form.Item>
+                        ) : null}
+                        <Form.Item
+                          name={[field.name, "unitPrice"]}
+                          label={sellByKg ? `Đơn giá / ${current?.weightInputUnit ?? "kg"}` : "Đơn giá / tấn"}
+                          validateFirst
+                          rules={vndUnitPriceRules}
+                          extra={
+                            internalTransfer
+                              ? undefined
+                              : "Lấy từ giá bán của loại nhôm; có thể sửa trên phiếu"
+                          }
+                        >
+                          <InputNumber
+                            {...vndInputNumberProps}
+                            style={{ width: "100%" }}
+
+                            onBlur={() => onUnitPriceBlur(field.name)}
+                          />
+                        </Form.Item>
+                    </div>
+
+                    <div className="sale-line-total">{formatMoney(lineTotal)}</div>
+
+                    <Form.Item name={[field.name, "billingUnit"]} hidden initialValue="kg">
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={[field.name, "weightInputUnit"]} hidden initialValue={sellByKg ? "kg" : "tấn"}>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={[field.name, "priceInputUnit"]} hidden initialValue={sellByKg ? "kg" : "tấn"}>
+                      <Input />
+                    </Form.Item>
                     <Form.Item name={[field.name, "unitId"]} hidden rules={[{ required: true, message: "Chọn đơn vị" }]}>
                       <InputNumber />
                     </Form.Item>
@@ -844,6 +1396,7 @@ function EditorModal({
                 onClick={() =>
                   add({
                     quantityDocument: 1,
+                    billingUnit: "kg" as const,
                     weightInputUnit: sellByKg ? "kg" : "tấn",
                     priceInputUnit: sellByKg ? "kg" : "tấn",
                   })
@@ -851,7 +1404,7 @@ function EditorModal({
               >
                 Thêm dòng
               </AppActionButton>
-            </>
+            </div>
           )}
         </Form.List>
         <div style={{ textAlign: "center", fontSize: 16, marginTop: 16 }}>
@@ -859,6 +1412,69 @@ function EditorModal({
         </div>
       </Form>
     </Modal>
+      {offerSaveCustomer ? (
+        <Modal
+          title="Lưu khách hàng?"
+          open
+          onCancel={() => {
+            const doc = offerSaveCustomer;
+            setOfferSaveCustomer(null);
+            onSaved(doc);
+          }}
+          footer={[
+            <AppActionButton
+              key="skip"
+              tone="cancel"
+              icon={<CloseOutlined />}
+              onClick={() => {
+                const doc = offerSaveCustomer;
+                setOfferSaveCustomer(null);
+                onSaved(doc);
+              }}
+            >
+              Bỏ qua
+            </AppActionButton>,
+            <AppActionButton
+              key="save"
+              tone="create"
+              icon={<UserAddOutlined />}
+              onClick={() => {
+                setSaveCustomerForm(offerSaveCustomer);
+                setOfferSaveCustomer(null);
+              }}
+            >
+              Lưu khách
+            </AppActionButton>,
+          ]}
+        >
+          <p>
+            Tên <b>{offerSaveCustomer.counterpartyName}</b> chưa có trong sổ khách. Bạn có muốn lưu để lần sau
+            chọn nhanh và theo dõi công nợ?
+          </p>
+        </Modal>
+      ) : null}
+      {saveCustomerForm ? (
+        <CustomerFormModal
+          initialName={saveCustomerForm.counterpartyName ?? undefined}
+          onClose={() => {
+            const doc = saveCustomerForm;
+            setSaveCustomerForm(null);
+            onSaved(doc);
+          }}
+          onSaved={async (customer) => {
+            try {
+              await linkDocumentCustomer(saveCustomerForm.id, customer.id);
+              message.success("Đã lưu và gắn khách vào phiếu");
+            } catch (error) {
+              message.error(toApiError(error).message);
+            }
+            const doc = saveCustomerForm;
+            setSaveCustomerForm(null);
+            onSaved(doc);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -877,9 +1493,11 @@ function DetailModal({
 }) {
   const text = copy[kind];
   const [doc, setDoc] = useState<StockDocument | null>(null);
+  const shop = useShop();
   const [busy, setBusy] = useState(false);
   const [paying, setPaying] = useState(false);
   const [reversing, setReversing] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -925,8 +1543,12 @@ function DetailModal({
       onCancel={onClose}
       footer={
         <Space wrap>
-          <AppActionButton tone="print" icon={<PrinterOutlined />} onClick={() => void printDocument(doc, kind)}>
-            In phiếu
+          <AppActionButton
+            tone="print"
+            icon={<PrinterOutlined />}
+            onClick={() => (kind === "SALE" ? setInvoiceOpen(true) : void printStockDocument(doc, kind))}
+          >
+            In PDF
           </AppActionButton>
           {canWrite && doc.status === "DRAFT" ? (
             <>
@@ -949,10 +1571,14 @@ function DetailModal({
                   Modal.confirm({
                     title: "Xác nhận phiếu?",
                     content: doc.internal
-                      ? "Trừ tồn phân phối theo giá vốn và tự tạo phiếu nhập nội bộ bên xưởng (cùng mã SP, cộng tồn xưởng)."
+                      ? undefined
                       : kind === "PURCHASE"
-                        ? "Phiếu sẽ tăng tồn kho và cập nhật giá vốn."
-                        : "Phiếu sẽ trừ tồn kho.",
+                        ? shop === "MANUFACTURING"
+                          ? "Phiếu sẽ ghi khối lượng và tiền nhôm nhập cho quyết toán năm."
+                          : "Phiếu sẽ tăng số lượng tồn kho."
+                        : shop === "MANUFACTURING"
+                          ? "Xác nhận đã giao thành phẩm; khối lượng sẽ được cộng vào báo cáo năm."
+                          : undefined,
                     okText: "Xác nhận",
                     cancelText: "Quay lại",
                     okButtonProps: { style: appButtonStyle("confirm") },
@@ -979,14 +1605,60 @@ function DetailModal({
               Đảo phiếu
             </AppActionButton>
           ) : null}
+          {canWrite &&
+          !doc.trashedAt &&
+          (doc.status === "CANCELLED" || (confirmed && doc.reversedByDocumentId)) ? (
+            <AppActionButton
+              tone="delete"
+              icon={<DeleteOutlined />}
+              loading={busy}
+              onClick={() =>
+                Modal.confirm({
+                  title: "Chuyển vào thùng rác?",
+                  content:
+                    doc.status === "CANCELLED"
+                      ? `Phiếu đã hủy sẽ ẩn khỏi danh sách, giữ tối đa ${TRASH_RETENTION_DAYS} ngày rồi xóa vĩnh viễn.`
+                      : "Phiếu đã đảo sẽ ẩn khỏi danh sách. Số liệu kho và phiếu đảo đi kèm vẫn giữ nguyên.",
+                  okText: "Chuyển thùng rác",
+                  cancelText: "Quay lại",
+                  okButtonProps: { style: appButtonStyle("delete") },
+                  cancelButtonProps: { style: appButtonStyle("cancel") },
+                  onOk: () => run(() => trashDocument(doc.id), "Đã chuyển vào thùng rác"),
+                })
+              }
+            >
+              Chuyển thùng rác
+            </AppActionButton>
+          ) : null}
+          {canWrite && doc.trashedAt ? (
+            <AppActionButton
+              tone="secondary"
+              icon={<RollbackOutlined />}
+              loading={busy}
+              onClick={() => void run(() => restoreDocument(doc.id), "Đã khôi phục phiếu")}
+            >
+              Khôi phục
+            </AppActionButton>
+          ) : null}
         </Space>
       }
     >
-      <Descriptions size="small" column={2} bordered>
+      <Descriptions size="small" column={{ xs: 1, md: 2 }} bordered>
         <Descriptions.Item label="Loại">{typeLabel[doc.documentType]}</Descriptions.Item>
         <Descriptions.Item label="Trạng thái">
           <Tag color={statusTag[doc.status].color}>{statusTag[doc.status].text}</Tag>
-          {doc.internal ? <Tag color="gold" style={{ marginLeft: 8 }}>Nội bộ</Tag> : null}
+          {doc.internal ? (
+            <Tag color="gold" style={{ marginLeft: 8 }}>
+              Nội bộ
+            </Tag>
+          ) : (
+            <Tag style={{ marginLeft: 8 }}>{kind === "SALE" ? "Khách hàng" : "Nhà cung cấp"}</Tag>
+          )}
+          {doc.trashedAt ? (
+            <Tag color="red" style={{ marginLeft: 8 }}>
+              Trong thùng rác
+            </Tag>
+          ) : null}
         </Descriptions.Item>
         <Descriptions.Item label="Ngày">{dayjs(doc.documentDate).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
         <Descriptions.Item label={text.counterparty}>{doc.counterpartyName}</Descriptions.Item>
@@ -995,16 +1667,10 @@ function DetailModal({
         {doc.internalPairDocumentCode ? (
           <Descriptions.Item label="Phiếu cặp nội bộ" span={2}>
             {doc.internalPairDocumentCode}
-            {kind === "SALE" ? " (phiếu nhập xưởng)" : " (phiếu bán phân phối)"}
           </Descriptions.Item>
         ) : null}
-        {doc.internal ? (
-          <Descriptions.Item label="Giá" span={2}>
-            Giá gốc / giá vốn — không thu chi tiền, không tính lãi đoạn chuyển nhà mình
-          </Descriptions.Item>
-        ) : null}
-        {doc.reason ? <Descriptions.Item label="Lý do" span={2}>{doc.reason}</Descriptions.Item> : null}
-        {doc.notes ? <Descriptions.Item label="Ghi chú phiếu" span={2}>{doc.notes}</Descriptions.Item> : null}
+        {!doc.internal && doc.reason ? <Descriptions.Item label="Lý do" span={2}>{doc.reason}</Descriptions.Item> : null}
+        {!doc.internal && doc.notes ? <Descriptions.Item label="Ghi chú phiếu" span={2}>{doc.notes}</Descriptions.Item> : null}
         {doc.reversedByDocumentId ? (
           <Descriptions.Item label="Ghi chú" span={2}>Phiếu này đã được đảo, không còn tính vào báo cáo.</Descriptions.Item>
         ) : null}
@@ -1016,54 +1682,53 @@ function DetailModal({
         pagination={false}
         dataSource={doc.items}
         columns={[
-          { title: "Mã", dataIndex: "productCode", align: "center" },
           { title: "Sản phẩm", dataIndex: "productName", align: "center" },
-          { title: "Đơn vị", dataIndex: "unitName", align: "center" },
-          { title: "Số lượng", dataIndex: "quantityDocument", align: "center", render: (v: number) => formatQtyDisplay(v) },
-          { title: "Đơn giá", dataIndex: "unitPrice", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Loại nhôm", dataIndex: "categoryName", align: "center", render: (v: string | null) => v || "—" },
+          {
+            title: "Đơn vị",
+            align: "center",
+            render: (_: unknown, item: StockDocument["items"][number]) => {
+              if (item.billingUnit === "m2" || item.unitName === "m²") {
+                const w = item.widthM;
+                const h = item.heightM;
+                return w && h ? `m² (${formatQtyDisplay(w)}×${formatQtyDisplay(h)})` : "m²";
+              }
+              return item.unitName;
+            },
+          },
+          {
+            title: "Số lượng",
+            align: "center",
+            render: (_: unknown, item: StockDocument["items"][number]) => {
+              if (item.billingUnit === "m2" || item.unitName === "m²") {
+                return (
+                  <div>
+                    <div>{formatQtyDisplay(item.quantityDocument)} m²</div>
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                      trừ tồn {formatQtyDisplay(item.quantityBase)} kg
+                    </div>
+                  </div>
+                );
+              }
+              return formatQtyDisplay(item.quantityDocument);
+            },
+          },
+          {
+            title: "Đơn giá",
+            dataIndex: "unitPrice",
+            align: "center",
+            render: (v: number, item: StockDocument["items"][number]) =>
+              `${formatMoney(v)}${item.billingUnit === "m2" || item.unitName === "m²" ? " / m²" : ""}`,
+          },
           { title: "Thành tiền", dataIndex: "lineTotal", align: "center", render: (v: number) => formatMoney(v) },
-          // Chỉ hiện sau khi xác nhận phiếu bán — lúc tạo/nháp không cần 3 cột giá vốn.
-          ...(kind === "SALE" && confirmed
-            ? [
-                {
-                  title: "Giá vốn (thực tế)",
-                  dataIndex: "costTotal",
-                  key: "costTotal",
-                  align: "center" as const,
-                  render: (v: number | null) => (v == null ? "—" : formatMoney(v)),
-                },
-                {
-                  title: "Giá vốn chuẩn",
-                  dataIndex: "standardCostTotal",
-                  key: "standardCostTotal",
-                  align: "center" as const,
-                  render: (v: number | null) => (v == null ? "—" : formatMoney(v)),
-                },
-                {
-                  title: "Chênh lệch giá nhập",
-                  key: "priceVariance",
-                  align: "center" as const,
-                  render: (_: unknown, item: StockDocument["items"][number]) => {
-                    if (item.costTotal == null || item.standardCostTotal == null) return "—";
-                    const diff = item.costTotal - item.standardCostTotal;
-                    if (Math.abs(diff) < 0.01) return <span style={{ color: "#8c8c8c" }}>—</span>;
-                    return (
-                      <span style={{ color: diff > 0 ? "#cf1322" : "#389e0d" }}>
-                        {diff > 0 ? "+" : ""}
-                        {formatMoney(diff)}
-                      </span>
-                    );
-                  },
-                },
-              ]
-            : []),
         ]}
       />
       <div style={{ textAlign: "center", marginTop: 16, lineHeight: 1.9 }}>
         <div style={{ fontSize: 16 }}>Tổng thanh toán: <b>{formatMoney(doc.totalAmount)}</b></div>
-        {confirmed ? (
+        {confirmed && !doc.internal ? (
           <div>
-            {text.paidLabel}: {formatMoney(doc.paidAmount)}
+            {text.paidLabel} đến nay: {formatMoney(doc.paidAmount)}
+            {doc.payments.length > 0 ? ` (${doc.payments.length} lần)` : ""}
             {" · "}
             {kind === "PURCHASE" ? "Còn phải chi trả" : "Còn phải thu"}: {formatMoney(remaining)}{" "}
             <Tag color={paymentTag[doc.paymentStatus].color}>{paymentTag[doc.paymentStatus].text}</Tag>
@@ -1071,50 +1736,77 @@ function DetailModal({
         ) : null}
       </div>
       {doc.payments.length > 0 ? (
-        <Table
-          style={{ marginTop: 16 }}
-          size="small"
-          rowKey="id"
-          pagination={false}
-          dataSource={doc.payments}
-          columns={[
-            {
-              title: "Thời gian",
-              dataIndex: "paymentDate",
-              align: "center",
-              render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
-            },
-            {
-              title: "Số tiền",
-              dataIndex: "amount",
-              align: "center",
-              render: (v: number) => formatMoney(v),
-            },
-            {
-              title: "Hình thức thanh toán",
-              dataIndex: "paymentMethod",
-              align: "center",
-              render: (v: string | null) => paymentMethodLabel(v),
-            },
-            {
-              title: kind === "PURCHASE" ? "Còn phải chi trả" : "Còn phải thu",
-              key: "remainingAfter",
-              align: "center",
-              render: (_: unknown, _row, index) => {
-                const paidThrough = doc.payments
-                  .slice(0, index + 1)
-                  .reduce((sum, payment) => sum + Number(payment.amount), 0);
-                return formatMoney(Math.max(0, doc.totalAmount - paidThrough));
+        <>
+          <div style={{ marginTop: 12, marginBottom: 4, textAlign: "center", color: "var(--color-text-secondary)" }}>
+            Lịch sử từng lần thanh toán — mỗi lần ghi rõ ngày giờ
+          </div>
+          <Table
+            style={{ marginTop: 8 }}
+            size="small"
+            rowKey="id"
+            pagination={false}
+            dataSource={doc.payments}
+            columns={[
+              {
+                title: "Thời gian thanh toán",
+                dataIndex: "paymentDate",
+                align: "center",
+                render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
               },
-            },
-            {
-              title: "Ghi chú",
-              dataIndex: "note",
-              align: "center",
-              render: (v: string | null) => v || "—",
-            },
-          ]}
-        />
+              {
+                title: "Số tiền lần này",
+                dataIndex: "amount",
+                align: "center",
+                render: (v: number) => formatMoney(v),
+              },
+              {
+                title: "Hình thức thanh toán",
+                dataIndex: "paymentMethod",
+                align: "center",
+                render: (v: string | null) =>
+                  paymentMethodLabel(kind === "PURCHASE" ? v?.split(/\. Người (?:trả|thu):/u)[0] : v),
+              },
+              ...(kind === "PURCHASE" ? [
+                {
+                  title: "Người trả",
+                  key: "paidBy",
+                  align: "center" as const,
+                  render: (_: unknown, row: StockDocument["payments"][number]) =>
+                    row.paymentMethod?.match(/\. Người trả: (.*?)(?=\. Người thu:|$)/u)?.[1]?.trim() || "—",
+                },
+                {
+                  title: "Người nhận",
+                  key: "receivedBy",
+                  align: "center" as const,
+                  render: (_: unknown, row: StockDocument["payments"][number]) =>
+                    row.paymentMethod?.match(/\. Người thu: (.*)$/u)?.[1]?.trim() || "—",
+                },
+              ] : [{
+                title: "Người thu",
+                dataIndex: "collectedBy",
+                align: "center" as const,
+                render: (v: string | null) => v || "—",
+              }]),
+              {
+                title: kind === "PURCHASE" ? "Còn phải chi trả sau lần này" : "Còn phải thu sau lần này",
+                key: "remainingAfter",
+                align: "center",
+                render: (_: unknown, _row, index) => {
+                  const paidThrough = doc.payments
+                    .slice(0, index + 1)
+                    .reduce((sum, payment) => sum + Number(payment.amount), 0);
+                  return formatMoney(Math.max(0, doc.totalAmount - paidThrough));
+                },
+              },
+              {
+                title: "Ghi chú",
+                dataIndex: "note",
+                align: "center",
+                render: (v: string | null) => v || "—",
+              },
+            ]}
+          />
+        </>
       ) : null}
       {paying ? (
         <PaymentModal
@@ -1128,6 +1820,7 @@ function DetailModal({
           }}
         />
       ) : null}
+      {invoiceOpen ? <SaleInvoiceModal doc={doc} onClose={() => setInvoiceOpen(false)} /> : null}
       {reversing ? (
         <ReverseModal
           onClose={() => setReversing(false)}
@@ -1151,6 +1844,97 @@ function DetailModal({
   );
 }
 
+function SaleInvoiceModal({ doc, onClose }: { doc: StockDocument; onClose: () => void }) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [shop, setShop] = useState<ShopSettings | null>(null);
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [bankId, setBankId] = useState<number | null>(null);
+  const [customerName, setCustomerName] = useState(doc.counterpartyName?.trim() || "");
+  const [html, setHtml] = useState<string | null>(null);
+  const bank = accounts.find((account) => account.id === bankId) ?? null;
+  const bankReady = Boolean(bank?.bankBin && bank.accountNo);
+
+  useEffect(() => {
+    void Promise.all([
+      getSettings().catch(() => null),
+      listBankAccounts().catch(() => [] as BankAccount[]),
+      doc.customerId ? getCustomer(doc.customerId).catch(() => null) : Promise.resolve(null),
+    ]).then(([settings, banks, customer]) => {
+      setShop(settings);
+      setAccounts(banks);
+      setBankId(banks.find((account) => account.isDefault)?.id ?? banks[0]?.id ?? null);
+      const linkedName = customer?.name?.trim();
+      if (linkedName) setCustomerName(linkedName);
+    });
+  }, [doc.id, doc.customerId]);
+
+  useEffect(() => {
+    let active = true;
+    void buildSaleInvoiceHtml({ doc, shop, bank, customerName }).then((next) => {
+      if (active) setHtml(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [doc, shop, bank, customerName]);
+
+  return (
+    <Modal
+      open
+      width={920}
+      title="Hóa đơn bán hàng"
+      onCancel={onClose}
+      footer={
+        <Space wrap>
+          <AppActionButton tone="cancel" icon={<CloseOutlined />} onClick={onClose}>
+            Đóng
+          </AppActionButton>
+          <AppActionButton
+            tone="print"
+            icon={<PrinterOutlined />}
+            disabled={!html}
+            onClick={() => frameRef.current?.contentWindow?.print()}
+          >
+            In / Tải PDF
+          </AppActionButton>
+        </Space>
+      }
+    >
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        {accounts.length > 1 ? (
+          <Select
+            style={{ minWidth: 280 }}
+            value={bankId ?? undefined}
+            onChange={setBankId}
+            options={accounts.map((account) => ({
+              value: account.id,
+              label: `${account.label}${account.isDefault ? " (mặc định)" : ""}`,
+            }))}
+          />
+        ) : null}
+        {doc.internal ? (
+          <Alert type="info" showIcon message="Phiếu nội bộ không gắn mã chuyển khoản." />
+        ) : !bankReady ? (
+          <Alert type="info" showIcon message="Chưa có tài khoản QR. Hóa đơn vẫn in được, chưa kèm mã chuyển khoản." />
+        ) : null}
+        {html ? (
+          <iframe
+            ref={frameRef}
+            title="Xem trước hóa đơn bán hàng"
+            srcDoc={html}
+            style={{ width: "100%", height: "65vh", border: "1px solid var(--color-border)", borderRadius: 8, background: "#e8e8e8" }}
+          />
+        ) : (
+          <Card loading />
+        )}
+        <span style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
+          Bấm “In / Tải PDF” rồi chọn máy in “Lưu thành PDF” hoặc “Microsoft Print to PDF” để tải file PDF.
+        </span>
+      </Space>
+    </Modal>
+  );
+}
+
 function PaymentModal({
   label,
   remaining,
@@ -1168,18 +1952,24 @@ function PaymentModal({
     paymentDate: string;
     note?: string;
     idempotencyKey: string;
+    collectedBy?: string;
+    paidBy?: string;
   }) => Promise<void>;
 }) {
-  const [form] = Form.useForm<{ amount: number; paymentMethod: string; paymentDate: Dayjs; note?: string }>();
+  const session = useSession();
+  const [form] = Form.useForm<{ amount: number; paymentMethod: string; paymentDate: Dayjs; note?: string; collectedBy?: string; paidBy?: string }>();
   const key = useMemo(() => crypto.randomUUID(), []);
   const amountWatch = Form.useWatch("amount", form);
-  const remainingAfter = Math.max(0, remaining - Math.round(Number(amountWatch || 0)));
+  const enteredAmount = Number(amountWatch ?? 0);
+  const isPartialPayment = enteredAmount > 0 && enteredAmount < remaining;
+  const remainingAfter = Math.max(0, remaining - Math.round(enteredAmount));
   const remainingLabel = kind === "PURCHASE" ? "Còn phải chi trả" : "Còn phải thu";
 
   return (
     <Modal
       open
       title={label}
+      width={680}
       okText="Ghi nhận"
       cancelText="Hủy"
       okButtonProps={{ style: appButtonStyle("pay") }}
@@ -1190,14 +1980,49 @@ function PaymentModal({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ amount: remaining, paymentMethod: "CASH", paymentDate: dayjs() }}
+        className="stock-payment-form"
+        initialValues={{
+          amount: remaining,
+          paymentMethod: "CASH",
+          paymentDate: dayjs(),
+          collectedBy: kind === "SALE" ? session?.username ?? "" : undefined,
+        }}
         onFinish={(values) =>
-          onSubmit({
-            amount: values.amount,
-            paymentMethod: values.paymentMethod,
-            paymentDate: values.paymentDate.format("YYYY-MM-DDTHH:mm:ss"),
-            note: values.note,
-            idempotencyKey: key,
+          Modal.confirm({
+            title: kind === "PURCHASE" ? "Xác nhận ghi chi?" : "Xác nhận ghi thu?",
+            content: (
+              <div>
+                <p style={{ margin: "8px 0 4px" }}>
+                  Số tiền: <b>{formatMoney(values.amount)}</b> (
+                  {values.paymentMethod === "TRANSFER" ? "Chuyển khoản" : "Tiền mặt"})
+                </p>
+                <p style={{ margin: "4px 0" }}>
+                  Thời gian: <b>{values.paymentDate.format("DD/MM/YYYY HH:mm")}</b>
+                </p>
+                {kind === "SALE" ? (
+                  <p style={{ margin: "4px 0" }}>
+                    Người thu tiền: <b>{values.collectedBy?.trim()}</b>
+                  </p>
+                ) : null}
+                <p style={{ margin: "4px 0" }}>
+                  {remainingLabel} sau lần này: <b>{formatMoney(Math.max(0, remaining - Math.round(values.amount)))}</b>
+                </p>
+              </div>
+            ),
+            okText: "Ghi nhận",
+            cancelText: "Quay lại",
+            okButtonProps: { style: appButtonStyle("pay") },
+            cancelButtonProps: { style: appButtonStyle("cancel") },
+            onOk: () =>
+              onSubmit({
+                amount: values.amount,
+                paymentMethod: values.paymentMethod,
+                paymentDate: values.paymentDate.format("YYYY-MM-DDTHH:mm:ss"),
+                note: values.note,
+                idempotencyKey: key,
+                collectedBy: values.collectedBy?.trim(),
+                paidBy: values.paidBy?.trim(),
+              }),
           })
         }
       >
@@ -1212,19 +2037,41 @@ function PaymentModal({
           name="amount"
           label={`Số tiền (${remainingLabel} ${formatMoney(remaining)})`}
           rules={[
-            ...vndAmountRules,
             {
               validator: async (_, val) => {
+                if (Number(val) !== remaining && !isValidPaymentAmountVnd(Number(val))) throw new Error("Nhập số tiền dương và là bội 500 đ");
                 if (Number(val) > remaining) throw new Error(`Không vượt ${remainingLabel.toLowerCase()}`);
               },
             },
           ]}
+          extra={isPartialPayment ? (
+            <span role="status">Thanh toán 1 phần</span>
+          ) : (
+            <AppActionButton
+              className="stock-payment-fill"
+              tone="pay"
+              icon={<DollarOutlined />}
+              htmlType="button"
+              onClick={() => form.setFields([{ name: "amount", value: remaining, errors: [] }])}
+            >
+              Thanh toán hết số còn lại
+            </AppActionButton>
+          )}
         >
           <InputNumber {...vndInputNumberProps} style={{ width: "100%" }} />
         </Form.Item>
         <Form.Item label={remainingLabel}>
           <Input value={formatMoney(remainingAfter)} readOnly />
         </Form.Item>
+        {kind === "PURCHASE" && <Form.Item name="paidBy" label="Người trả tiền" rules={requiredNameRules("Nhập người trả tiền", 80)}><Input maxLength={80} /></Form.Item>}
+          <Form.Item
+            name="collectedBy"
+            label={kind === "PURCHASE" ? "Người nhận tiền" : "Người thu tiền"}
+            rules={requiredNameRules("Nhập người thu tiền", 80)}
+            extra="Tên này in trên hóa đơn nợ, mỗi lần thu một người"
+          >
+            <Input maxLength={80} />
+          </Form.Item>
         <Form.Item
           name="paymentMethod"
           label="Hình thức thanh toán"
@@ -1259,7 +2106,7 @@ function ReverseModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (r
       onOk={() => form.submit()}
     >
       <p style={{ marginTop: 0 }}>
-        Phiếu gốc không bị sửa. Hệ thống tạo một phiếu đảo và hoàn tồn kho. Mỗi phiếu chỉ đảo một lần.
+        Phiếu gốc không bị sửa. Hệ thống tạo phiếu đảo để loại phiếu gốc khỏi báo cáo; biến động kho cũ sẽ được hoàn nếu có. Mỗi phiếu chỉ đảo một lần.
       </p>
       <Form form={form} layout="vertical" onFinish={({ reason }) => onSubmit(reason)}>
         <Form.Item name="reason" label="Lý do" rules={[{ required: true, message: "Nhập lý do đảo phiếu" }]}>
@@ -1268,48 +2115,4 @@ function ReverseModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (r
       </Form>
     </Modal>
   );
-}
-
-function escapeHtml(value: string | null | undefined) {
-  return (value ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
-
-async function printDocument(doc: StockDocument, kind: Kind) {
-  const text = copy[kind];
-  const shop = await getSettings().catch(() => null);
-  const rows = doc.items
-    .map(
-      (item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(item.productCode)}</td><td>${escapeHtml(item.productName)}</td>
-      <td>${escapeHtml(item.unitName)}</td><td class="r">${formatQtyDisplay(item.quantityDocument)}</td>
-      <td class="r">${formatMoney(item.unitPrice)}</td><td class="r">${formatMoney(item.lineTotal)}</td></tr>`,
-    )
-    .join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(doc.documentCode)}</title>
-  <style>
-    body{font-family:Arial,sans-serif;font-size:13px;margin:24px;color:#000}
-    h1{text-align:center;font-size:18px;margin:12px 0 4px}
-    table{width:100%;border-collapse:collapse;margin-top:12px}
-    th,td{border:1px solid #333;padding:4px 6px}
-    .r{text-align:right}
-    .center{text-align:center}
-    .sign{display:flex;justify-content:space-between;margin-top:48px;text-align:center}
-    .sign div{width:40%}
-  </style></head><body>
-  <div><b>${escapeHtml(shop?.shopName)}</b><br/>${escapeHtml(shop?.shopAddress)}<br/>${escapeHtml(shop?.shopPhone)}</div>
-  <h1>${text.printTitle}</h1>
-  <div class="center">Số: ${escapeHtml(doc.documentCode)} - Ngày ${dayjs(doc.documentDate).format("DD/MM/YYYY HH:mm")}</div>
-  <p>${text.counterparty}: ${escapeHtml(doc.counterpartyName)}<br/>
-  ${kind === "SALE" ? "Người xuất" : "Người giao"}: ${escapeHtml(doc.issuedBy)} &nbsp; ${kind === "SALE" ? "Người nhận" : "Người nhập"}: ${escapeHtml(doc.receivedBy)}</p>
-  <table><thead><tr><th>Số thứ tự</th><th>Mã hàng</th><th>Tên hàng</th><th>Đơn vị</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
-  <tbody>${rows}</tbody></table>
-  <p class="r"><b>Tổng thanh toán: ${formatMoney(doc.totalAmount)}</b></p>
-  <div class="sign"><div>${text.leftSign}<br/><i>(Ký, ghi rõ họ tên)</i></div><div>${text.rightSign}<br/><i>(Ký, ghi rõ họ tên)</i></div></div>
-  <script>window.onload=function(){window.print()}</script></body></html>`;
-  const frame = window.open("", "_blank", "width=900,height=700");
-  if (!frame) {
-    message.error("Trình duyệt chặn cửa sổ in. Cho phép cửa sổ bật lên rồi thử lại.");
-    return;
-  }
-  frame.document.write(html);
-  frame.document.close();
 }

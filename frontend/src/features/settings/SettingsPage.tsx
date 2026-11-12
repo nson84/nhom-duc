@@ -39,9 +39,11 @@ export function SettingsPage() {
   });
 
   useEffect(() => {
-    getSettings().then(reset).catch((caught: unknown) => {
-      setError(caught instanceof ApiError ? caught.message : "Không tải được cấu hình");
-    });
+    getSettings()
+      .then(reset)
+      .catch((caught: unknown) => {
+        setError(caught instanceof ApiError ? caught.message : "Không tải được cấu hình");
+      });
   }, [reset]);
 
   const onSubmit = handleSubmit(async (values) => {
@@ -60,50 +62,77 @@ export function SettingsPage() {
     <Card
       title="Cài đặt"
       extra={
-        <Space>
+        <Space wrap>
+          <Link to="/tai-khoan-qr">Tài khoản QR nhận tiền</Link>
           <Link to="/noi-dung-gioi-thieu">Sửa nội dung trang giới thiệu</Link>
         </Space>
       }
     >
       <Form layout="vertical" onFinish={onSubmit} style={{ maxWidth: 720 }}>
-        <Controller name="shopName" control={control} render={({ field, fieldState }) => (
-          <Form.Item label="Tên cửa hàng" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
-            <Input {...field} />
-          </Form.Item>
-        )} />
-        <Controller name="shopAddress" control={control} render={({ field, fieldState }) => (
-          <Form.Item label="Địa chỉ" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
-            <Input {...field} />
-          </Form.Item>
-        )} />
-        <Controller name="shopPhone" control={control} render={({ field, fieldState }) => (
-          <Form.Item label="Điện thoại" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
-            <Input {...field} />
-          </Form.Item>
-        )} />
-        <Controller name="backupTime" control={control} render={({ field, fieldState }) => (
-          <Form.Item label="Giờ sao lưu hằng ngày" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
-            <Input {...field} placeholder="22:00" />
-          </Form.Item>
-        )} />
-        <Controller name="backupRetentionDays" control={control} render={({ field, fieldState }) => (
-          <Form.Item label="Số ngày giữ bản sao lưu" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
-            <InputNumber {...field} min={1} max={3650} style={{ width: "100%" }} />
-          </Form.Item>
-        )} />
-        <Controller name="backupDirectory" control={control} render={({ field, fieldState }) => (
-          <Form.Item
-            label="Thư mục sao lưu"
-            extra="Nên chọn ổ khác ổ cài ứng dụng, USB hoặc ổ ngoài."
-            validateStatus={fieldState.error ? "error" : ""}
-            help={fieldState.error?.message}
-          >
-            <Input {...field} placeholder="D:\SaoLuuNhom" />
-          </Form.Item>
-        )} />
+        <Controller
+          name="shopName"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Form.Item label="Tên cửa hàng" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
+              <Input {...field} />
+            </Form.Item>
+          )}
+        />
+        <Controller
+          name="shopAddress"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Form.Item label="Địa chỉ" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
+              <Input {...field} />
+            </Form.Item>
+          )}
+        />
+        <Controller
+          name="shopPhone"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Form.Item label="Điện thoại" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
+              <Input {...field} />
+            </Form.Item>
+          )}
+        />
+        <Controller
+          name="backupTime"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Form.Item label="Giờ sao lưu hằng ngày" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
+              <Input {...field} placeholder="22:00" />
+            </Form.Item>
+          )}
+        />
+        <Controller
+          name="backupRetentionDays"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Form.Item label="Số ngày giữ bản sao lưu" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
+              <InputNumber {...field} min={1} max={3650} style={{ width: "100%" }} />
+            </Form.Item>
+          )}
+        />
+        <Controller
+          name="backupDirectory"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Form.Item
+              label="Thư mục sao lưu"
+              extra="Nên chọn ổ khác ổ cài ứng dụng, USB hoặc ổ ngoài."
+              validateStatus={fieldState.error ? "error" : ""}
+              help={fieldState.error?.message}
+            >
+              <Input {...field} placeholder="D:\SaoLuuNhom" />
+            </Form.Item>
+          )}
+        />
         {message ? <p>{message}</p> : null}
-        {error ? <p style={{ color: "#a33b32" }}>{error}</p> : null}
-        <Button type="primary" htmlType="submit" loading={formState.isSubmitting}>Lưu</Button>
+        {error ? <p style={{ color: "var(--color-danger)" }}>{error}</p> : null}
+        <Button type="primary" htmlType="submit" loading={formState.isSubmitting}>
+          Lưu
+        </Button>
       </Form>
     </Card>
   );

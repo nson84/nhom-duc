@@ -78,7 +78,7 @@ export function ChangePasswordPage() {
               </Form.Item>
             )}
           />
-          {error ? <p style={{ color: "#a33b32" }}>{error}</p> : null}
+          {error ? <p style={{ color: "var(--color-danger)" }}>{error}</p> : null}
           <Button type="primary" htmlType="submit" loading={formState.isSubmitting}>
             Lưu mật khẩu
           </Button>

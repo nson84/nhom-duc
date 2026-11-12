@@ -8,6 +8,8 @@ import com.aluminum.manager.inventory.StockDtos.MovementDto;
 import com.aluminum.manager.inventory.StockDtos.PaymentRequest;
 import com.aluminum.manager.inventory.StockDtos.ReverseRequest;
 import com.aluminum.manager.inventory.StockDtos.StockBalanceDto;
+import com.aluminum.manager.inventory.StockDtos.InventoryCountRequest;
+import com.aluminum.manager.inventory.StockDtos.InventoryCountResult;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -27,6 +29,7 @@ public class StockController {
 
 	private final StockDocumentService service;
 
+
 	public StockController(StockDocumentService service) {
 		this.service = service;
 	}
@@ -34,11 +37,23 @@ public class StockController {
 	@GetMapping("/stock-documents")
 	public ApiResponse<List<DocumentSummary>> list(
 			@RequestParam(required = false) String type,
+			@RequestParam(required = false) String filter,
 			@RequestParam(required = false) String status,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
 			@RequestParam(required = false) String q) {
-		return ApiResponse.ok(service.list(type, status, from, to, q), null);
+		String bucket = filter != null && !filter.isBlank() ? filter : status;
+		return ApiResponse.ok(service.list(type, bucket, from, to, q), null);
+	}
+
+	@PostMapping("/stock-documents/{id}/trash")
+	public ApiResponse<DocumentDto> trash(@PathVariable long id) {
+		return ApiResponse.ok(service.moveToTrash(id), "Đã chuyển vào thùng rác");
+	}
+
+	@PostMapping("/stock-documents/{id}/restore")
+	public ApiResponse<DocumentDto> restore(@PathVariable long id) {
+		return ApiResponse.ok(service.restoreFromTrash(id), "Đã khôi phục phiếu");
 	}
 
 	@GetMapping("/stock-documents/{id}")
@@ -47,12 +62,14 @@ public class StockController {
 	}
 
 	@PostMapping("/stock-documents")
-	public ApiResponse<DocumentDto> create(@Valid @RequestBody DocumentRequest request) {
+	public ApiResponse<DocumentDto> create(@Valid @RequestBody DocumentRequest request, @RequestParam(defaultValue = "false") boolean confirm) {
+		if (confirm) return ApiResponse.ok(service.saveConfirmedSale(null, request), "Đã xác nhận phiếu bán");
 		return ApiResponse.ok(service.createDraft(request), "Đã lưu phiếu nháp");
 	}
 
 	@PutMapping("/stock-documents/{id}")
-	public ApiResponse<DocumentDto> update(@PathVariable long id, @Valid @RequestBody DocumentRequest request) {
+	public ApiResponse<DocumentDto> update(@PathVariable long id, @Valid @RequestBody DocumentRequest request, @RequestParam(defaultValue = "false") boolean confirm) {
+		if (confirm) return ApiResponse.ok(service.saveConfirmedSale(id, request), "Đã xác nhận phiếu bán");
 		return ApiResponse.ok(service.updateDraft(id, request), "Đã lưu phiếu nháp");
 	}
 
@@ -81,6 +98,11 @@ public class StockController {
 			@RequestParam(required = false) String q,
 			@RequestParam(defaultValue = "false") boolean onlyInStock) {
 		return ApiResponse.ok(service.balances(q, onlyInStock), null);
+	}
+
+	@PostMapping("/stock-balances/count")
+	public ApiResponse<InventoryCountResult> count(@Valid @RequestBody InventoryCountRequest request) {
+		return ApiResponse.ok(service.applyPhysicalCount(request.items()), "Đã lưu kiểm kê và điều chỉnh tồn kho");
 	}
 
 	@GetMapping("/stock-movements")

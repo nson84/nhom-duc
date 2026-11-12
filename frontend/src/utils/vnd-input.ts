@@ -79,7 +79,47 @@ export const vndAmountRules: Rule[] = [
   },
 ];
 
-/** Đơn giá: nguyên + làm tròn hàng nghìn (…000). */
+/** Đơn giá hợp lệ kết thúc ,000 hoặc ,500 (bội 500 đ). */
+export const UNIT_PRICE_STEP_ERROR =
+  "Đơn giá phải là bội 500 đ (VD: 75,000 hoặc 75,500)";
+
+/** Thu/chi / trả nợ: cùng bước 500 đ (không nhận số lẻ kiểu 1,111). */
+export const PAYMENT_AMOUNT_STEP_ERROR =
+  "Số tiền phải là bội 500 đ (VD: 1,000 hoặc 1,500)";
+
+/** true nếu số hợp lệ làm đơn giá (0 hoặc bội 500 — dạng …,000 / …,500). */
+export function isValidUnitPriceVnd(n: number | null): boolean {
+  if (n == null || n < 0) return false;
+  if (n === 0) return true;
+  return n % 500 === 0;
+}
+
+/** Alias rõ nghĩa cho số tiền thanh toán / trả nợ. */
+export const isValidPaymentAmountVnd = isValidUnitPriceVnd;
+
+/**
+ * Khi blur ô đơn giá: nếu đang gõ dở (không phải bội 500) → trả về `fallback`
+ * (số đúng trước đó hoặc 0). Không làm tròn / ghi đè trong lúc đang gõ.
+ */
+export function commitUnitPriceOnBlur(raw: unknown, fallback: number): {
+  value: number;
+  reverted: boolean;
+  error: string | null;
+} {
+  if (isEmptyFormNumber(raw)) {
+    return { value: fallback, reverted: false, error: null };
+  }
+  const n = toVndInteger(raw);
+  if (n == null || n < 0) {
+    return { value: fallback, reverted: true, error: "Không nhập số thập phân, chỉ số nguyên" };
+  }
+  if (!isValidUnitPriceVnd(n)) {
+    return { value: fallback, reverted: true, error: UNIT_PRICE_STEP_ERROR };
+  }
+  return { value: n, reverted: false, error: null };
+}
+
+/** Đơn giá: nguyên + bội 500 (…000 hoặc …500). Chỉ chạy khi blur/submit. */
 export const vndUnitPriceRules: Rule[] = [
   {
     validator: async (_, val) => {
@@ -90,8 +130,26 @@ export const vndUnitPriceRules: Rule[] = [
       if (n == null || n < 0) {
         throw new Error("Không nhập số thập phân, chỉ số nguyên");
       }
-      if (n > 0 && n % 1000 !== 0) {
-        throw new Error("Đơn giá phải làm tròn hàng nghìn, không nhập số lẻ (VD: 75,000,000)");
+      if (!isValidUnitPriceVnd(n)) {
+        throw new Error(UNIT_PRICE_STEP_ERROR);
+      }
+    },
+  },
+];
+
+/** Số tiền thu / chi / trả nợ: nguyên + bội 500. */
+export const vndPaymentAmountRules: Rule[] = [
+  {
+    validator: async (_, val) => {
+      if (isEmptyFormNumber(val)) {
+        throw new Error("Nhập số tiền");
+      }
+      const n = toVndInteger(val);
+      if (n == null || n <= 0) {
+        throw new Error("Số tiền phải lớn hơn 0");
+      }
+      if (!isValidPaymentAmountVnd(n)) {
+        throw new Error(PAYMENT_AMOUNT_STEP_ERROR);
       }
     },
   },
@@ -101,7 +159,7 @@ export const vndUnitPriceRules: Rule[] = [
 export const vndInputNumberProps = {
   min: 0 as const,
   precision: 0 as const,
-  step: 1000 as const,
+  step: 500 as const,
   controls: false as const,
   formatter: formatVndInput,
   parser: parseVndInput,

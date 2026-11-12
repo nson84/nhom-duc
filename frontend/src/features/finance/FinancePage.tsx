@@ -1,13 +1,33 @@
 import { StopOutlined } from "@ant-design/icons";
-import { Button, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Table, Tag, message } from "antd";
+import {
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Descriptions,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Statistic,
+  Tag,
+  message,
+} from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionButton } from "../../components/AppButtons";
+import { PagedTable } from "../../components/PagedTable";
+import { LiveSearch } from "../../components/LiveSearch";
 import { useCanWrite, useSession } from "../auth/auth-store";
+import { getYearPeriod, type YearPeriod } from "../dashboard/dashboard-api";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { vndAmountRules, vndInputNumberProps } from "../../utils/vnd-input";
+import { expenseKinds, expenseLabelFromDescription, type ExpenseKind } from "./expense-kinds";
 import {
   createFinanceTransaction,
   getFinanceSummary,
@@ -17,11 +37,10 @@ import {
   type FinanceTransaction,
 } from "./finance-api";
 
-const { RangePicker } = DatePicker;
-
 const categoryLabels: Record<FinanceTransaction["category"], string> = {
   SALE_RECEIPT: "Thu tiền bán hàng",
   PURCHASE_PAYMENT: "Chi trả phiếu nhập kho",
+  MAINTENANCE: "Bảo trì hệ thống",
   OPERATING_EXPENSE: "Chi phí hoạt động",
   PAYROLL: "Chi lương nhân viên",
   OTHER_INCOME: "Thu khác",
@@ -34,14 +53,33 @@ export function FinancePage() {
   const shop = useShop();
   const [scope, setScope] = useState<"shop" | "all">("shop");
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
+  const [year, setYear] = useState(dayjs().year());
+  const [period, setPeriod] = useState<YearPeriod | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState<"INCOME" | "EXPENSE" | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [viewing, setViewing] = useState<FinanceTransaction | null>(null);
   const [voiding, setVoiding] = useState<FinanceTransaction | null>(null);
+
+  useEffect(() => {
+    if (shop === "DISTRIBUTION" && scope !== "all" && categoryFilter === "PAYROLL") setCategoryFilter(undefined);
+  }, [shop, scope, categoryFilter]);
+
+  useEffect(() => {
+    let active = true;
+    setPeriod(null);
+    setSummary(null);
+    getYearPeriod(year).then((value) => {
+      if (!active) return;
+      setPeriod(value);
+      setRange([dayjs(value.periodFrom), dayjs(value.periodTo)]);
+    }).catch((error) => { if (active) message.error(toApiError(error).message); });
+    return () => { active = false; };
+  }, [year, shop]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,14 +115,11 @@ export function FinancePage() {
       title="Sổ thu chi"
       extra={
         canWrite ? (
-          <Space>
-            <Button onClick={() => setCreating("INCOME")}>Lập phiếu thu ngoài</Button>
-            <Button type="primary" onClick={() => setCreating("EXPENSE")}>Lập phiếu chi</Button>
-          </Space>
+          <Button type="primary" onClick={() => setCreating(true)}>Lập phiếu chi</Button>
         ) : null
       }
     >
-      <p style={{ marginTop: 0, color: "#5c6b73" }}>
+      <p style={{ marginTop: 0, color: "var(--color-text-secondary)" }}>
         Khoản thu bán hàng và khoản chi phiếu nhập được tự động liên kết từ phiếu kho để chống ghi trùng. Chi trả nhập hàng được theo dõi riêng, không tính vào chi phí hoạt động trong kỳ.
       </p>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
@@ -96,7 +131,7 @@ export function FinancePage() {
         <Col xs={24} md={6}>
           <Card size="small">
             <Statistic
-              title="Chi phí hoạt động & lương"
+              title={shop === "DISTRIBUTION" && scope !== "all" ? "Chi phí hoạt động" : "Chi phí hoạt động & lương"}
               value={formatMoney(
                 (summary?.operatingExpense ?? 0) + (summary?.payrollExpense ?? 0) + (summary?.otherExpense ?? 0),
               )}
@@ -113,7 +148,7 @@ export function FinancePage() {
             <Statistic
               title="Chênh lệch dòng tiền"
               value={formatMoney(summary?.netCashflow ?? 0)}
-              valueStyle={{ color: (summary?.netCashflow ?? 0) >= 0 ? "#389e0d" : "#cf1322" }}
+              valueStyle={{ color: (summary?.netCashflow ?? 0) >= 0 ? "var(--color-success)" : "var(--color-danger)" }}
             />
           </Card>
         </Col>
@@ -141,14 +176,9 @@ export function FinancePage() {
             ]}
           />
         ) : null}
-        <RangePicker
-          value={range}
-          allowClear={false}
-          format="DD/MM/YYYY"
-          onChange={(vals) => {
-            if (vals?.[0] && vals[1]) setRange([vals[0], vals[1]]);
-          }}
-        />
+        <DatePicker picker="year" aria-label="Năm xem thu chi" allowClear={false}
+          value={dayjs(`${year}-01-01`)} onChange={(value) => value && setYear(value.year())} />
+        {period && <span>Kỳ {year}: {dayjs(period.periodFrom).format("DD/MM/YYYY")} – {dayjs(period.periodTo).format("DD/MM/YYYY")}</span>}
         <Select
           allowClear
           placeholder="Loại phiếu"
@@ -166,24 +196,44 @@ export function FinancePage() {
           style={{ width: 210 }}
           value={categoryFilter}
           onChange={setCategoryFilter}
-          options={Object.entries(categoryLabels).map(([value, label]) => ({ value, label }))}
+          options={Object.entries(categoryLabels)
+            .filter(([value]) => shop !== "DISTRIBUTION" || scope === "all" || value !== "PAYROLL")
+            .map(([value, label]) => ({ value, label }))}
         />
-        <Input.Search className="app-search" placeholder="Tìm số phiếu hoặc diễn giải" allowClear onSearch={setQuery} style={{ width: 280 }} />
+        <LiveSearch value={query} onChange={setQuery} placeholder="Tìm số phiếu hoặc ghi chú" style={{ width: 360 }} suggestions={transactions.flatMap((t) => [t.transactionCode, t.description ?? ""])} />
       </Space>
 
-      <Table<FinanceTransaction>
+      <PagedTable<FinanceTransaction>
         rowKey="id"
         loading={loading}
         dataSource={transactions}
-        pagination={{ pageSize: 20 }}
+        onRow={(record) => ({
+          onClick: () => setViewing(record),
+          className: "app-row-clickable",
+        })}
         columns={[
-          { title: "Số phiếu", dataIndex: "transactionCode", width: 170, align: "center" },
           {
-            title: "Nội bộ",
-            dataIndex: "internal",
+            title: "Số phiếu",
+            dataIndex: "transactionCode",
+            width: 180,
             align: "center",
-            width: 90,
-            render: (v: boolean) => (v ? <Tag color="gold">Nội bộ</Tag> : "—"),
+            render: (code: string, tx) => (
+              <div style={{ lineHeight: 1.35 }}>
+                {tx.internal ? (
+                  <div>
+                    <Tag color="gold" style={{ marginInlineEnd: 0 }}>
+                      Nội bộ
+                    </Tag>
+                  </div>
+                ) : null}
+                <div style={{ marginTop: tx.internal || tx.status !== "CONFIRMED" ? 4 : 0, fontWeight: 500 }}>{code}</div>
+                {tx.status !== "CONFIRMED" ? (
+                  <div style={{ marginTop: 4 }}>
+                    <Tag style={{ marginInlineEnd: 0 }}>Đã hủy</Tag>
+                  </div>
+                ) : null}
+              </div>
+            ),
           },
           {
             title: "Thời gian",
@@ -195,7 +245,7 @@ export function FinancePage() {
           {
             title: "Loại",
             dataIndex: "transactionType",
-            width: 100,
+            width: 88,
             align: "center",
             render: (v: string) => (v === "INCOME" ? <Tag color="green">Thu</Tag> : <Tag color="volcano">Chi</Tag>),
           },
@@ -203,44 +253,40 @@ export function FinancePage() {
             title: "Nhóm",
             dataIndex: "category",
             align: "center",
-            render: (v: FinanceTransaction["category"]) => categoryLabels[v] ?? v,
+            render: (v: FinanceTransaction["category"], tx: FinanceTransaction) =>
+              tx.referenceType === "HOLIDAY_BONUS" ? "Chi thưởng lễ"
+                : tx.referenceType === "MANUAL" ? expenseLabelFromDescription(tx.description) ?? categoryLabels[v] ?? v
+                  : categoryLabels[v] ?? v,
           },
-          { title: "Diễn giải", dataIndex: "description", align: "center" },
           {
             title: "Số tiền",
             dataIndex: "amount",
+            width: 140,
             align: "center",
             render: (v: number) => <b>{formatMoney(v)}</b>,
-          },
-          {
-            title: "Trạng thái",
-            dataIndex: "status",
-            align: "center",
-            render: (v: string) => (v === "CONFIRMED" ? <Tag color="blue">Hợp lệ</Tag> : <Tag>Đã hủy</Tag>),
-          },
-          {
-            title: "Thao tác",
-            align: "center",
-            width: 130,
-            render: (_, tx) =>
-              canWrite && tx.status === "CONFIRMED" && tx.referenceType !== "STOCK_DOCUMENT" ? (
-                <AppActionButton tone="delete" icon={<StopOutlined />} onClick={() => setVoiding(tx)}>
-                  Hủy phiếu
-                </AppActionButton>
-              ) : (
-                "—"
-              ),
           },
         ]}
       />
 
       {creating ? (
         <CreateTxModal
-          type={creating}
-          onClose={() => setCreating(null)}
+          shop={shop}
+          onClose={() => setCreating(false)}
           onSaved={() => {
-            setCreating(null);
+            setCreating(false);
             void load();
+          }}
+        />
+      ) : null}
+
+      {viewing ? (
+        <FinanceDetailModal
+          tx={viewing}
+          canWrite={canWrite}
+          onClose={() => setViewing(null)}
+          onVoid={() => {
+            setVoiding(viewing);
+            setViewing(null);
           }}
         />
       ) : null}
@@ -259,37 +305,94 @@ export function FinancePage() {
   );
 }
 
+function FinanceDetailModal({
+  tx,
+  canWrite,
+  onClose,
+  onVoid,
+}: {
+  tx: FinanceTransaction;
+  canWrite: boolean;
+  onClose: () => void;
+  onVoid: () => void;
+}) {
+  const holidayBonus = tx.referenceType === "HOLIDAY_BONUS";
+  const canVoid = canWrite && tx.status === "CONFIRMED" && tx.referenceType !== "STOCK_DOCUMENT" && !holidayBonus;
+
+  return (
+    <Modal
+      open
+      title={tx.transactionCode}
+      onCancel={onClose}
+      footer={
+        <Space>
+          {canVoid ? (
+            <AppActionButton tone="delete" icon={<StopOutlined />} onClick={onVoid}>
+              Hủy phiếu
+            </AppActionButton>
+          ) : null}
+          <Button onClick={onClose}>Đóng</Button>
+        </Space>
+      }
+    >
+      <Descriptions size="small" column={1} bordered>
+        <Descriptions.Item label="Thời gian">{dayjs(tx.transactionDate).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
+        <Descriptions.Item label="Loại">
+          {tx.transactionType === "INCOME" ? <Tag color="green">Thu</Tag> : <Tag color="volcano">Chi</Tag>}
+          {tx.internal ? (
+            <Tag color="gold" style={{ marginLeft: 8 }}>
+              Nội bộ
+            </Tag>
+          ) : null}
+          {tx.status !== "CONFIRMED" ? <Tag style={{ marginLeft: 8 }}>Đã hủy</Tag> : null}
+        </Descriptions.Item>
+        <Descriptions.Item label="Nhóm">{holidayBonus ? "Chi thưởng lễ"
+          : tx.referenceType === "MANUAL" ? expenseLabelFromDescription(tx.description) ?? categoryLabels[tx.category] ?? tx.category
+            : categoryLabels[tx.category] ?? tx.category}</Descriptions.Item>
+        <Descriptions.Item label="Số tiền">
+          <b>{formatMoney(tx.amount)}</b>
+        </Descriptions.Item>
+        {tx.spentBy && <Descriptions.Item label="Người chi">{tx.spentBy}</Descriptions.Item>}
+        <Descriptions.Item label="Ghi chú">{tx.description || "—"}</Descriptions.Item>
+      </Descriptions>
+      {holidayBonus ? (
+        <p>Chỉnh trạng thái đã nhận trong Lịch nghỉ lễ để cập nhật khoản chi này.</p>
+      ) : tx.referenceType === "STOCK_DOCUMENT" ? (
+        <p style={{ marginTop: 12, marginBottom: 0, color: "var(--color-text-secondary)" }}>
+          Phiếu thu/chi gắn hóa đơn bán hoặc nhập — không hủy riêng tại đây.
+        </p>
+      ) : canVoid ? (
+        <p style={{ marginTop: 12, marginBottom: 0, color: "var(--color-text-secondary)" }}>
+          Phiếu tự lập: có thể hủy nếu ghi nhầm (vẫn giữ lịch sử, không cộng vào báo cáo).
+        </p>
+      ) : null}
+    </Modal>
+  );
+}
+
 function CreateTxModal({
-  type,
+  shop,
   onClose,
   onSaved,
 }: {
-  type: "INCOME" | "EXPENSE";
+  shop: "DISTRIBUTION" | "MANUFACTURING";
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [form] = Form.useForm<{
     transactionDate: Dayjs;
-    category: string;
+    expenseKind: ExpenseKind;
     amount: number;
-    description: string;
+    description?: string;
+    spentBy?: string;
   }>();
   const [saving, setSaving] = useState(false);
   const key = useMemo(() => crypto.randomUUID(), []);
 
-  const options =
-    type === "INCOME"
-      ? [{ value: "OTHER_INCOME", label: "Thu khác (ngoài bán hàng)" }]
-      : [
-          { value: "OPERATING_EXPENSE", label: "Chi phí hoạt động (điện, nước, vận chuyển, vật tư...)" },
-          { value: "PAYROLL", label: "Chi lương nhân viên" },
-          { value: "OTHER_EXPENSE", label: "Chi khác" },
-        ];
-
   return (
     <Modal
       open
-      title={type === "INCOME" ? "Lập phiếu thu ngoài" : "Lập phiếu chi"}
+      title="Lập phiếu chi"
       okText="Lưu phiếu"
       cancelText="Hủy"
       confirmLoading={saving}
@@ -301,20 +404,23 @@ function CreateTxModal({
         layout="vertical"
         initialValues={{
           transactionDate: dayjs(),
-          category: options[0].value,
+          expenseKind: expenseKinds[0].value,
         }}
         onFinish={async (values) => {
           setSaving(true);
           try {
+            const kind = expenseKinds.find((option) => option.value === values.expenseKind);
+            if (!kind) throw new Error("Chọn khoản chi hợp lệ");
             await createFinanceTransaction({
               transactionDate: values.transactionDate.format("YYYY-MM-DDTHH:mm:ss"),
-              transactionType: type,
-              category: values.category,
+              transactionType: "EXPENSE",
+              category: kind.category,
               amount: values.amount,
-              description: values.description,
+              description: values.description?.trim() ? `${kind.label}: ${values.description.trim()}` : kind.label,
+              spentBy: values.spentBy,
               idempotencyKey: key,
             });
-            message.success("Đã ghi nhận phiếu thu/chi");
+            message.success("Đã ghi nhận phiếu chi");
             onSaved();
           } catch (error) {
             message.error(toApiError(error).message);
@@ -326,14 +432,15 @@ function CreateTxModal({
         <Form.Item name="transactionDate" label="Thời gian" rules={[{ required: true }]}>
           <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item name="category" label="Nhóm giao dịch" rules={[{ required: true }]}>
-          <Select options={options} />
+        <Form.Item name="expenseKind" label="Khoản chi" rules={[{ required: true }]}>
+          <Select options={expenseKinds.map(({ value, label }) => ({ value, label }))} />
         </Form.Item>
         <Form.Item name="amount" label="Số tiền" rules={vndAmountRules}>
           <InputNumber {...vndInputNumberProps} style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item name="description" label="Diễn giải" rules={[{ required: true, message: "Nhập diễn giải" }]}>
-          <Input.TextArea rows={3} />
+        {shop === "DISTRIBUTION" && <Form.Item name="spentBy" label="Người chi" rules={[{ required: true, whitespace: true, message: "Nhập người chi" }]}><Input maxLength={150} /></Form.Item>}
+        <Form.Item name="description" label="Ghi chú">
+          <Input.TextArea rows={3} maxLength={400} placeholder="Chi tiết khoản chi, người nhận hoặc lý do (nếu có)" />
         </Form.Item>
       </Form>
     </Modal>

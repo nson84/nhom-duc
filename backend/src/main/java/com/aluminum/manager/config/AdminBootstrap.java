@@ -34,18 +34,13 @@ public class AdminBootstrap implements ApplicationRunner {
 
 	private void ensure(String username, UserRole role, String shopCode) {
 		AdminUser user = adminUsers.findByUsername(username).orElse(null);
+		if (user != null) return;
 		String hash = passwordEncoder.encode(DEFAULT_PASSWORD);
 		if (user == null) {
 			user = new AdminUser(username, hash, role, shopCode);
-			user.setMustChangePassword(false);
+			user.setMustChangePassword(true);
 			adminUsers.save(user);
 			return;
 		}
-		user.setRole(role);
-		user.setShopCode(shopCode);
-		user.setPasswordHash(hash);
-		user.setMustChangePassword(false);
-		user.setActive(true);
-		adminUsers.save(user);
 	}
 }

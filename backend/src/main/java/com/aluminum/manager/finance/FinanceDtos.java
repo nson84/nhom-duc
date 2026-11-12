@@ -22,6 +22,7 @@ public final class FinanceDtos {
 			String category,
 			BigDecimal amount,
 			String description,
+			String spentBy,
 			String referenceType,
 			Long referenceId,
 			String status,
@@ -37,7 +38,8 @@ public final class FinanceDtos {
 			@NotBlank(message = "Chọn nhóm giao dịch") String category,
 			@NotNull(message = "Nhập số tiền")
 			@DecimalMin(value = "0", inclusive = false, message = "Số tiền phải lớn hơn 0") BigDecimal amount,
-			@NotBlank(message = "Nhập diễn giải") @Size(max = 500) String description,
+			@Size(max = 500) String description,
+			@Size(max = 150) String spentBy,
 			@Size(max = 80) String idempotencyKey
 	) {
 	}

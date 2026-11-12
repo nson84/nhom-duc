@@ -30,7 +30,10 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		String method = request.getMethod();
 		UserRole role = admin.role();
 
-		if (role == UserRole.DISTRIBUTION && (isPayrollPath(path) || path.equals("/api/v1/reports/payroll"))) {
+		if (role == UserRole.DISTRIBUTION && (isPayrollPath(path)
+				|| path.equals("/api/v1/reports/payroll")
+				|| (path.equals("/api/v1/reports/export")
+						&& "payroll".equalsIgnoreCase(request.getParameter("type"))))) {
 			forbidden(response, "Tài khoản phân phối không dùng được mục nhân sự / chấm công");
 			return;
 		}
@@ -64,7 +67,9 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		if (path.startsWith("/api/v1/auth/")) {
 			return true;
 		}
-		if (path.startsWith("/api/v1/settings") || path.startsWith("/api/v1/landing-content")) {
+		if (path.startsWith("/api/v1/settings")
+				|| path.startsWith("/api/v1/landing-content")
+				|| path.startsWith("/api/v1/bank-accounts")) {
 			return true;
 		}
 		if (path.startsWith("/api/v1/backups")) {

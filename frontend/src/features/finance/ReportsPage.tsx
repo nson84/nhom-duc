@@ -1,10 +1,15 @@
 import { Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tabs, Tag, message } from "antd";
+import { PagedTable } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { getDocument, listDocuments } from "../stock/stock-api";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
 import { useSession } from "../auth/auth-store";
+import { getYearReport, type YearReport } from "../factory/factory-api";
+import { getYearPeriod, type YearPeriod } from "../dashboard/dashboard-api";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { listCategories, listProducts, type Category, type Product } from "../products/products-api";
 import {
@@ -22,26 +27,90 @@ import {
   type PurchasePriceVarianceRow,
 } from "./finance-api";
 
-const { RangePicker } = DatePicker;
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
+
+function FactoryProfitSummary({ year }: { year: number }) {
+  const [report, setReport] = useState<YearReport | null>(null);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    setReport(null);
+    setError(undefined);
+    void getYearReport(year).then((data) => {
+      if (active) setReport(data);
+    }).catch((reason) => {
+      if (active) setError(toApiError(reason).message);
+    });
+    return () => { active = false; };
+  }, [year]);
+
+  const money = (amount: number | null) => amount == null ? "—" : formatMoney(amount);
+  const metrics: [string, number | null][] = report ? [
+    ["Tổng doanh thu", report.finishedRevenue + report.scrapRevenue],
+    ["Doanh thu thành phẩm", report.finishedRevenue],
+    ["Doanh thu phế liệu", report.scrapRevenue],
+    ["Tổng tiền thực thu", report.finishedCashCollected + report.scrapCashCollected],
+    ["Chi phí nhôm", report.materialCost],
+    ["Chi phí nhân viên", report.payrollCost],
+    ["Chi phí khác", report.otherExpenses],
+    ["Lãi quản trị ước tính", report.estimatedProfit],
+  ] : [];
+
+  return (
+    <>
+      <Space wrap style={{ marginBottom: 16 }}>
+        <span>Báo cáo năm {year}</span>
+        {report && <Tag color={report.countStatus === "CLOSED" ? "green" : "orange"}>
+          {report.countStatus === "CLOSED" ? "Đã chốt" : report.countStatus === "MISSING" ? "Chưa kiểm kê" : "Chưa chốt"}
+        </Tag>}
+        <Link to="/quyet-toan-xuong">Xem chi tiết quyết toán Xưởng</Link>
+      </Space>
+      {error && <Alert type="error" showIcon message={error} />}
+      {!report && !error && <Card loading />}
+      {report?.estimatedProfit == null && report && <Alert type="info" showIcon style={{ marginBottom: 16 }}
+        message="Lợi nhuận sẽ hiển thị khi có số kiểm kê của năm." />}
+      <Row gutter={[16, 16]}>
+        {metrics.map(([label, value]) => (
+          <Col key={label} xs={24} sm={12} xl={6}>
+            <Card size="small"><Statistic title={label} value={money(value)} /></Card>
+          </Col>
+        ))}
+      </Row>
+    </>
+  );
+}
 
 export function ReportsPage() {
   const session = useSession();
   const shop = useShop();
-  const canViewPayroll = session?.role !== "DISTRIBUTION";
   const [book, setBook] = useState<"shop" | "all">("shop");
+  const canViewPayroll = session?.role !== "DISTRIBUTION" && (shop === "MANUFACTURING" || book === "all");
   const asTon = shop === "DISTRIBUTION" && book === "shop";
   const unitLabel = asTon ? "tấn" : "kg";
   const showQty = (kg: number) => qtyFormat.format(asTon ? kgToTon(kg) : kg);
   const showCost = (perKg: number) => formatMoney(asTon ? costPerKgToTon(perKg) : perKg);
   const scope = book === "all" ? "all" as const : undefined;
-  const [activeTab, setActiveTab] = useState<"profit" | "price-variance" | "sales-by-product" | "inventory" | "payroll">(
+  const [activeTab, setActiveTab] = useState<"profit" | "price-variance" | "sales-by-product" | "inventory" | "shrinkage" | "payroll">(
     "profit",
   );
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
   const [categoryId, setCategoryId] = useState<number | undefined>();
   const [productId, setProductId] = useState<number | undefined>();
   const [year, setYear] = useState<number>(() => dayjs().year());
+  const [period, setPeriod] = useState<YearPeriod | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setPeriod(null);
+    setProfit(null);
+    getYearPeriod(year).then((value) => {
+      if (!active) return;
+      setPeriod(value);
+      setRange([dayjs(value.periodFrom), dayjs(value.periodTo)]);
+    }).catch((error) => { if (active) message.error(toApiError(error).message); });
+    return () => { active = false; };
+  }, [year, shop]);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -51,12 +120,47 @@ export function ReportsPage() {
   const [payrollRows, setPayrollRows] = useState<PayrollReportRow[]>([]);
   const [varianceRows, setVarianceRows] = useState<PurchasePriceVarianceRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [shrinkageRows, setShrinkageRows] = useState<{ key: string; date: string; code: string; product: string; category: string; shortageKg: number; surplusKg: number }[]>([]);
+
+  useEffect(() => {
+    if (shop !== "DISTRIBUTION" || book !== "shop") return;
+    let cancelled = false;
+    const from = range[0].format("YYYY-MM-DD");
+    const to = range[1].format("YYYY-MM-DD");
+    Promise.all([
+      listDocuments({ type: "ADJUSTMENT_OUT", from, to }),
+      listDocuments({ type: "ADJUSTMENT_IN", from, to }),
+    ]).then(async ([out, incoming]) => {
+      const details = await Promise.all([...out, ...incoming].map((doc) => getDocument(doc.id)));
+      if (cancelled) return;
+      setShrinkageRows(details
+        .filter((doc) => doc.status === "CONFIRMED" && doc.reason === "Kiểm kê tồn kho Phân phối")
+        .flatMap((doc) => doc.items.map((item) => ({
+          key: `${doc.id}-${item.id}`,
+          date: doc.documentDate,
+          code: doc.documentCode,
+          product: item.productName,
+          category: item.categoryName ?? "",
+          shortageKg: doc.documentType === "ADJUSTMENT_OUT" ? item.quantityBase : 0,
+          surplusKg: doc.documentType === "ADJUSTMENT_IN" ? item.quantityBase : 0,
+        }))));
+    }).catch((error) => { if (!cancelled) message.error(toApiError(error).message); });
+    return () => { cancelled = true; };
+  }, [shop, book, range]);
 
   useEffect(() => {
     if (!canViewPayroll && activeTab === "payroll") {
       setActiveTab("profit");
     }
   }, [canViewPayroll, activeTab]);
+
+  useEffect(() => {
+    if ((shop === "MANUFACTURING" || book === "all") &&
+        (activeTab === "sales-by-product" || activeTab === "inventory") ||
+        (shop === "DISTRIBUTION" && activeTab === "sales-by-product")) {
+      setActiveTab("profit");
+    }
+  }, [shop, book, activeTab]);
 
   useEffect(() => {
     Promise.all([listCategories(scope), listProducts({ scope })])
@@ -100,7 +204,8 @@ export function ReportsPage() {
 
   return (
     <Card
-      title="Báo cáo doanh thu, lợi nhuận, tồn kho & tiền công"
+      title={canViewPayroll ? "Báo cáo doanh thu, lợi nhuận, tồn kho & tiền công"
+        : "Báo cáo doanh thu, lợi nhuận & tồn kho"}
       extra={
         <Space wrap>
           {session?.role === "ADMIN" ? (
@@ -114,17 +219,15 @@ export function ReportsPage() {
               ]}
             />
           ) : null}
-          <RangePicker
-            value={range}
-            allowClear={false}
-            format="DD/MM/YYYY"
-            onChange={(vals) => {
-              if (vals?.[0] && vals[1]) setRange([vals[0], vals[1]]);
-            }}
-          />
+          <DatePicker picker="year" aria-label="Năm xem báo cáo" allowClear={false}
+            value={dayjs(`${year}-01-01`)}
+            onChange={(value) => value && setYear(value.year())} />
+          {period && <span>Kỳ {year}: {dayjs(period.periodFrom).format("DD/MM/YYYY")} – {dayjs(period.periodTo).format("DD/MM/YYYY")}</span>}
           <Button
             type="primary"
-            onClick={() =>
+            disabled={activeTab === "shrinkage" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
+            onClick={() => {
+              if (activeTab === "shrinkage") return;
               void downloadReportCsv({
                 type: activeTab,
                 scope,
@@ -133,8 +236,8 @@ export function ReportsPage() {
                 productId,
                 categoryId,
                 year,
-              })
-            }
+              });
+            }}
           >
             Xuất file CSV (Excel)
           </Button>
@@ -147,34 +250,24 @@ export function ReportsPage() {
         items={[
           {
             key: "profit",
-            label: "Doanh thu & Lợi nhuận",
+            label: shop === "DISTRIBUTION" ? "Doanh thu & Công nợ" : "Doanh thu & Lợi nhuận",
             children: (
               <>
+                {book === "all" ? (
+                  <Alert type="info" showIcon message="Báo cáo gộp theo năm" description={<Link to="/tong-hop-hai-ben">Xem Tổng hợp hai bên</Link>} />
+                ) : shop === "MANUFACTURING" ? (
+                  <FactoryProfitSummary year={year} />
+                ) : (
+                <>
                 <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                   <Col xs={24} md={6}>
                     <Card size="small">
                       <Statistic title="Doanh thu bán hàng" value={formatMoney(profit?.revenue ?? 0)} />
                     </Card>
                   </Col>
-                  <Col xs={24} md={6}>
-                    <Card size="small">
-                      <Statistic title="Giá vốn hàng bán" value={formatMoney(profit?.cogs ?? 0)} />
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={6}>
-                    <Card size="small">
-                      <Statistic title="Lãi gộp (Doanh thu - Giá vốn)" value={formatMoney(profit?.grossProfit ?? 0)} />
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={6}>
-                    <Card size="small">
-                      <Statistic
-                        title="Lợi nhuận thuần dự kiến"
-                        value={formatMoney(profit?.netProfit ?? 0)}
-                        valueStyle={{ color: (profit?.netProfit ?? 0) >= 0 ? "#389e0d" : "#cf1322" }}
-                      />
-                    </Card>
-                  </Col>
+
+
+
                   <Col xs={24} md={6}>
                     <Card size="small">
                       <Statistic
@@ -198,75 +291,20 @@ export function ReportsPage() {
                       <Statistic title="Nhập kho trong kỳ (Vào tồn kho)" value={formatMoney(profit?.purchaseStockValue ?? 0)} />
                     </Card>
                   </Col>
-                  <Col xs={24} md={6}>
-                    <Card size="small">
-                      <Statistic
-                        title="Lãi gộp theo giá nhập chuẩn"
-                        value={formatMoney(profit?.standardGrossProfit ?? 0)}
-                        valueStyle={{ color: (profit?.standardGrossProfit ?? 0) >= 0 ? "#389e0d" : "#cf1322" }}
-                      />
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={6}>
-                    <Card size="small">
-                      <Statistic
-                        title="Chênh lệch giá nhập (thực tế − chuẩn)"
-                        value={formatMoney(profit?.priceVariance ?? 0)}
-                        valueStyle={{ color: (profit?.priceVariance ?? 0) > 0 ? "#cf1322" : "#389e0d" }}
-                      />
-                    </Card>
-                  </Col>
+
+
                 </Row>
-                {profit && !profit.standardCostComplete ? (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    style={{ marginBottom: 16 }}
-                    message="Một số dòng bán cũ chưa có giá nhập chuẩn"
-                    description="Những dòng bán phát sinh trước khi bật lịch sử giá nhập không có chi phí chuẩn, nên chúng đang góp 0 đ vào giá vốn chuẩn. Lãi chuẩn và chênh lệch giá nhập chỉ chính xác từ mốc bắt đầu ghi lịch sử giá."
-                  />
-                ) : null}
-                <Table<DailyRevenueRow>
+
+                <PagedTable<DailyRevenueRow>
                   rowKey="day"
                   loading={loading}
                   dataSource={profit?.dailyRows ?? []}
                   size="small"
-                  pagination={{ pageSize: 31 }}
                   columns={[
                     { title: "Ngày", dataIndex: "day", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
                     { title: "Số phiếu bán", dataIndex: "saleCount", align: "center" },
                     { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
-                    { title: "Giá vốn", dataIndex: "cogs", align: "center", render: (v: number) => formatMoney(v) },
-                    {
-                      title: "Lãi gộp",
-                      dataIndex: "grossProfit",
-                      align: "center",
-                      render: (v: number) => <b>{formatMoney(v)}</b>,
-                    },
-                    {
-                      title: "Giá vốn chuẩn",
-                      dataIndex: "standardCogs",
-                      align: "center",
-                      render: (v: number) => formatMoney(v),
-                    },
-                    {
-                      title: "Lãi gộp chuẩn",
-                      dataIndex: "standardGrossProfit",
-                      align: "center",
-                      render: (v: number) => formatMoney(v),
-                    },
-                    {
-                      title: "Chênh lệch giá nhập",
-                      dataIndex: "priceVariance",
-                      align: "center",
-                      render: (v: number) => (
-                        <span style={{ color: v > 0 ? "#cf1322" : v < 0 ? "#389e0d" : undefined }}>
-                          {v > 0 ? "+" : ""}
-                          {formatMoney(v)}
-                        </span>
-                      ),
-                    },
-                    { title: "Tiền thực thu", dataIndex: "cashCollected", align: "center", render: (v: number) => formatMoney(v) },
+                                        { title: "Tiền thực thu", dataIndex: "cashCollected", align: "center", render: (v: number) => formatMoney(v) },
                     {
                       title: "Chi phí hoạt động",
                       dataIndex: "operatingExpense",
@@ -275,6 +313,8 @@ export function ReportsPage() {
                     },
                   ]}
                 />
+                </>
+                )}
               </>
             ),
           },
@@ -283,6 +323,7 @@ export function ReportsPage() {
             label: "Chênh lệch giá nhập",
             children: (
               <>
+                <Alert type="info" showIcon style={{ marginBottom: 16 }} message="So sánh giá mua trên phiếu với giá nhập chuẩn tại thời điểm nhập. Chênh lệch dương nghĩa là mua cao hơn giá chuẩn." />
                 <Alert
                   type="info"
                   showIcon
@@ -301,16 +342,15 @@ export function ReportsPage() {
                   />
                   <span>
                     Tổng chênh lệch:{" "}
-                    <b style={{ color: varianceRows.reduce((s, r) => s + r.varianceValue, 0) > 0 ? "#cf1322" : "#389e0d" }}>
+                    <b style={{ color: varianceRows.reduce((s, r) => s + r.varianceValue, 0) > 0 ? "var(--color-danger)" : "var(--color-success)" }}>
                       {formatMoney(varianceRows.reduce((s, r) => s + r.varianceValue, 0))}
                     </b>
                   </span>
                 </Space>
-                <Table<PurchasePriceVarianceRow>
+                <PagedTable<PurchasePriceVarianceRow>
                   rowKey={(r) => `${r.productId}-${r.effectiveFrom}-${r.standardPricePerBase}`}
                   loading={loading}
                   dataSource={varianceRows}
-                  pagination={{ pageSize: 20 }}
                   columns={[
                     { title: "Mã nhôm", dataIndex: "productCode", align: "center" },
                     { title: "Tên sản phẩm", dataIndex: "productName", align: "center" },
@@ -350,7 +390,7 @@ export function ReportsPage() {
                       dataIndex: "varianceValue",
                       align: "center",
                       render: (v: number) => (
-                        <b style={{ color: v > 0 ? "#cf1322" : v < 0 ? "#389e0d" : undefined }}>
+                        <b style={{ color: v > 0 ? "var(--color-danger)" : v < 0 ? "var(--color-success)" : undefined }}>
                           {v > 0 ? "+" : ""}
                           {formatMoney(v)}
                         </b>
@@ -392,11 +432,10 @@ export function ReportsPage() {
                     options={products.map((p) => ({ value: p.id, label: `${p.productCode} - ${p.name}` }))}
                   />
                 </Space>
-                <Table<ProductSalesRow>
+                <PagedTable<ProductSalesRow>
                   rowKey="productId"
                   loading={loading}
                   dataSource={productSales}
-                  pagination={{ pageSize: 20 }}
                   columns={[
                     { title: "Mã nhôm", dataIndex: "productCode", width: 130, align: "center" },
                     { title: "Tên sản phẩm", dataIndex: "productName", align: "center" },
@@ -407,37 +446,7 @@ export function ReportsPage() {
                       render: (_, r) => showQty(r.quantityBaseSold),
                     },
                     { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
-                    { title: "Giá vốn", dataIndex: "cogs", align: "center", render: (v: number) => formatMoney(v) },
-                    {
-                      title: "Lãi gộp",
-                      dataIndex: "grossProfit",
-                      align: "center",
-                      render: (v: number) => <b>{formatMoney(v)}</b>,
-                    },
-                    {
-                      title: "Giá vốn chuẩn",
-                      dataIndex: "standardCogs",
-                      align: "center",
-                      render: (v: number) => formatMoney(v),
-                    },
-                    {
-                      title: "Lãi gộp chuẩn",
-                      dataIndex: "standardGrossProfit",
-                      align: "center",
-                      render: (v: number) => formatMoney(v),
-                    },
-                    {
-                      title: "Chênh lệch giá nhập",
-                      dataIndex: "priceVariance",
-                      align: "center",
-                      render: (v: number) => (
-                        <span style={{ color: v > 0 ? "#cf1322" : v < 0 ? "#389e0d" : undefined }}>
-                          {v > 0 ? "+" : ""}
-                          {formatMoney(v)}
-                        </span>
-                      ),
-                    },
-                  ]}
+                                      ]}
                 />
               </>
             ),
@@ -447,7 +456,7 @@ export function ReportsPage() {
             label: "Báo cáo nhập - xuất - tồn",
             children: (
               <>
-                <Space style={{ marginBottom: 16 }}>
+                <Space style={{ marginBottom: 16 }} wrap>
                   <Select
                     allowClear
                     placeholder="Lọc loại nhôm"
@@ -461,11 +470,10 @@ export function ReportsPage() {
                     <b>{formatMoney(inventoryRows.reduce((s, r) => s + r.inventoryValue, 0))}</b>
                   </span>
                 </Space>
-                <Table<InventoryReportRow>
+                <PagedTable<InventoryReportRow>
                   rowKey="productId"
                   loading={loading}
                   dataSource={inventoryRows}
-                  pagination={{ pageSize: 20 }}
                   columns={[
                     { title: "Mã nhôm", dataIndex: "productCode", width: 120, align: "center" },
                     { title: "Tên sản phẩm", dataIndex: "productName", align: "center" },
@@ -494,18 +502,32 @@ export function ReportsPage() {
                       align: "center",
                       render: (v: number) => <b>{showQty(v)}</b>,
                     },
-                    {
-                      title: `Giá vốn BQ / ${unitLabel}`,
-                      dataIndex: "averageCostPerBase",
-                      align: "center",
-                      render: (v: number) => showCost(v),
-                    },
-                    { title: "Giá trị tồn", dataIndex: "inventoryValue", align: "center", render: (v: number) => <b>{formatMoney(v)}</b> },
                   ]}
                 />
               </>
             ),
           },
+          ...(shop === "DISTRIBUTION" && book === "shop" ? [{
+            key: "shrinkage" as const,
+            label: "Hao hụt Phân phối",
+            children: <>
+              <Alert type="info" showIcon style={{ marginBottom: 16 }}
+                message="Hao hụt theo các lần kiểm kê trong khoảng ngày đã chọn"
+                description={<span>Nhập số cân thực tế tại <Link to="/ton-kho">Tồn kho → Kiểm kê / Hao hụt</Link>. Hệ thống ghi phần chênh lệch thành phiếu điều chỉnh và tổng hợp tại đây.</span>} />
+              <Space style={{ marginBottom: 16 }} wrap>
+                <Statistic title="Hao hụt" value={kgToTon(shrinkageRows.reduce((sum, row) => sum + row.shortageKg, 0))} suffix="tấn" precision={3} />
+                <Statistic title="Thừa kiểm kê" value={kgToTon(shrinkageRows.reduce((sum, row) => sum + row.surplusKg, 0))} suffix="tấn" precision={3} />
+              </Space>
+              <PagedTable rowKey="key" dataSource={shrinkageRows} columns={[
+                { title: "Ngày kiểm kê", dataIndex: "date", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
+                { title: "Phiếu điều chỉnh", dataIndex: "code", align: "center" },
+                { title: "Sản phẩm", dataIndex: "product", align: "center" },
+                { title: "Loại nhôm", dataIndex: "category", align: "center" },
+                { title: "Hao hụt (kg)", dataIndex: "shortageKg", align: "center", render: (v: number) => qtyFormat.format(v) },
+                { title: "Thừa (kg)", dataIndex: "surplusKg", align: "center", render: (v: number) => qtyFormat.format(v) },
+              ]} />
+            </>,
+          }] : []),
           ...(canViewPayroll
             ? [
                 {
@@ -513,7 +535,7 @@ export function ReportsPage() {
                   label: "Tổng hợp tiền công",
                   children: (
                     <>
-                      <Space style={{ marginBottom: 16 }}>
+                      <Space style={{ marginBottom: 16 }} wrap>
                         <DatePicker
                           picker="year"
                           allowClear={false}
@@ -580,7 +602,9 @@ export function ReportsPage() {
                 },
               ]
             : []),
-        ]}
+        ].filter((item) => !((shop === "MANUFACTURING" || book === "all") &&
+          (item.key === "sales-by-product" || item.key === "inventory")) &&
+          !(shop === "DISTRIBUTION" && item.key === "sales-by-product"))}
       />
     </Card>
   );

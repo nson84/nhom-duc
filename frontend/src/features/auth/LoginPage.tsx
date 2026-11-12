@@ -16,6 +16,13 @@ const ACCOUNT_OPTIONS = [
   { value: "xuong", label: "xuong — xưởng" },
 ] as const;
 
+/** Mật khẩu mặc định bootstrap (AdminBootstrap) — autofill khi chọn tài khoản. */
+const DEFAULT_PASSWORDS: Record<(typeof ACCOUNT_OPTIONS)[number]["value"], string> = {
+  admin: "123456",
+  phanphoi: "123456",
+  xuong: "123456",
+};
+
 const schema = z.object({
   username: z.enum(["admin", "phanphoi", "xuong"], { message: "Chọn tài khoản" }),
   password: z.string().min(1, "Nhập mật khẩu"),
@@ -26,9 +33,9 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const { control, handleSubmit, formState } = useForm<FormValues>({
+  const { control, handleSubmit, formState, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { username: "admin", password: "" },
+    defaultValues: { username: "admin", password: DEFAULT_PASSWORDS.admin },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -55,7 +62,7 @@ export function LoginPage() {
       <main className="login-panel">
         <div className="login-stack">
           <div className="login-badge" aria-hidden>
-            <span className="login-badge-title">Nhôm Đức</span>
+            <span className="login-badge-title">Nhôm Đúc</span>
             <span className="login-badge-sub">CỬA HÀNG</span>
           </div>
           <div className="login-card">
@@ -79,6 +86,14 @@ export function LoginPage() {
                         className="login-underline-control"
                         popupMatchSelectWidth
                         aria-label="Tài khoản"
+                        onChange={(value: FormValues["username"]) => {
+                          field.onChange(value);
+                          setValue("password", DEFAULT_PASSWORDS[value], {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                          setError(null);
+                        }}
                       />
                     </Form.Item>
                   )}

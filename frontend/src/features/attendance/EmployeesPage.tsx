@@ -1,4 +1,8 @@
+import { DollarOutlined, EditOutlined, SaveOutlined } from "@ant-design/icons";
 import { Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, message } from "antd";
+import { AppActionButton } from "../../components/AppButtons";
+import { PagedTable } from "../../components/PagedTable";
+import { LiveSearch } from "../../components/LiveSearch";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { toApiError } from "../../services/error-handler";
@@ -9,6 +13,7 @@ import {
   addPayRate,
   listEmployees,
   listPayRates,
+  deletePayRate,
   saveEmployee,
   type Employee,
   type PayRate,
@@ -43,7 +48,7 @@ export function EmployeesPage() {
       extra={<Button type="primary" onClick={() => setEditing("new")}>Thêm nhân viên</Button>}
     >
       <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search className="app-search" placeholder="Tìm họ tên hoặc SĐT" allowClear onSearch={setQuery} style={{ width: 280 }} />
+        <LiveSearch value={query} onChange={setQuery} placeholder="Tìm họ tên hoặc SĐT" style={{ width: 360 }} suggestions={employees.flatMap((e) => [e.fullName, e.phone ?? ""])} />
         <Select
           placeholder="Trạng thái làm việc"
           allowClear
@@ -56,27 +61,20 @@ export function EmployeesPage() {
           ]}
         />
       </Space>
-      <Table<Employee>
+      <PagedTable<Employee>
         rowKey="id"
         loading={loading}
         dataSource={employees}
-        pagination={{ pageSize: 20 }}
         columns={[
           { title: "Họ và tên", dataIndex: "fullName", align: "center" },
           { title: "Điện thoại", dataIndex: "phone", align: "center" },
-          {
-            title: "Ngày vào làm",
-            dataIndex: "hireDate",
-            align: "center",
-            render: (v: string | null) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
-          },
           {
             title: "Mức công ngày hiện tại",
             align: "center",
             render: (_, e) => (e.currentPayRate ? formatMoney(e.currentPayRate.dailyRate) : "Chưa thiết lập"),
           },
           {
-            title: "Tăng ca ngày thường / giờ",
+            title: "Tiền tăng ca mỗi giờ",
             align: "center",
             render: (_, e) => (e.currentPayRate ? formatMoney(e.currentPayRate.overtimeWeekdayRate) : "—"),
           },
@@ -90,9 +88,13 @@ export function EmployeesPage() {
             title: "Thao tác",
             align: "center",
             render: (_, e) => (
-              <Space>
-                <a onClick={() => setEditing(e)}>Sửa</a>
-                <a onClick={() => setRatesFor(e)}>Mức công</a>
+              <Space size={8} wrap>
+                <AppActionButton tone="edit" icon={<EditOutlined />} onClick={() => setEditing(e)}>
+                  Sửa
+                </AppActionButton>
+                <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => setRatesFor(e)}>
+                  Mức công
+                </AppActionButton>
               </Space>
             ),
           },
@@ -129,8 +131,6 @@ type EmployeeFormValues = {
   notes?: string;
   initialDailyRate?: number;
   initialOvertimeWeekdayRate?: number;
-  initialOvertimeRestdayRate?: number;
-  initialOvertimeHolidayRate?: number;
 };
 
 function EmployeeModal({
@@ -175,8 +175,6 @@ function EmployeeModal({
                 hireDate: dayjs(),
                 initialDailyRate: 350000,
                 initialOvertimeWeekdayRate: 50000,
-                initialOvertimeRestdayRate: 70000,
-                initialOvertimeHolidayRate: 90000,
               }
         }
         onFinish={async (values) => {
@@ -192,8 +190,6 @@ function EmployeeModal({
               notes: values.notes,
               initialDailyRate: employee ? undefined : values.initialDailyRate,
               initialOvertimeWeekdayRate: employee ? undefined : values.initialOvertimeWeekdayRate,
-              initialOvertimeRestdayRate: employee ? undefined : values.initialOvertimeRestdayRate,
-              initialOvertimeHolidayRate: employee ? undefined : values.initialOvertimeHolidayRate,
             });
             message.success("Đã lưu hồ sơ nhân viên");
             onSaved();
@@ -240,13 +236,7 @@ function EmployeeModal({
             <Form.Item name="initialDailyRate" label="Mức công / ngày">
               <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
             </Form.Item>
-            <Form.Item name="initialOvertimeWeekdayRate" label="Tăng ca thường / giờ">
-              <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
-            </Form.Item>
-            <Form.Item name="initialOvertimeRestdayRate" label="Tăng ca CN / giờ">
-              <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
-            </Form.Item>
-            <Form.Item name="initialOvertimeHolidayRate" label="Tăng ca lễ / giờ">
+            <Form.Item name="initialOvertimeWeekdayRate" label="Tiền tăng ca mỗi giờ">
               <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
             </Form.Item>
           </Space>
@@ -279,10 +269,7 @@ function PayRatesModal({
   const [form] = Form.useForm<{
     effectiveFrom: Dayjs;
     dailyRate: number;
-    standardHoursPerDay: number;
     overtimeWeekdayRate: number;
-    overtimeRestdayRate: number;
-    overtimeHolidayRate: number;
   }>();
 
   const load = useCallback(async () => {
@@ -298,7 +285,7 @@ function PayRatesModal({
   }, [load]);
 
   return (
-    <Modal open title={`Lịch sử mức công — ${employee.fullName}`} footer={null} onCancel={onClose} width={780}>
+    <Modal open title={`Lịch sử mức công — ${employee.fullName}`} footer={null} onCancel={onClose} width={1000}>
       <p style={{ marginTop: 0 }}>
         Mức công mới áp dụng từ ngày hiệu lực được chọn. Kỳ công đã chốt giữ nguyên mức công cũ, không tự thay đổi.
       </p>
@@ -313,13 +300,36 @@ function PayRatesModal({
             title: "Đến ngày",
             dataIndex: "effectiveTo",
             align: "center",
-            render: (v: string | null) => (v ? dayjs(v).format("DD/MM/YYYY") : <Tag color="green">Đang áp dụng</Tag>),
+            render: (v: string | null, rate: PayRate) => v ? dayjs(v).format("DD/MM/YYYY")
+              : dayjs(rate.effectiveFrom).isAfter(dayjs(), "day") ? <Tag color="blue">Chưa áp dụng</Tag>
+              : <Tag color="green">Đang áp dụng</Tag>,
           },
-          { title: "Công / ngày", dataIndex: "dailyRate", align: "center", render: (v: number) => formatMoney(v) },
-          { title: "Giờ chuẩn", dataIndex: "standardHoursPerDay", align: "center" },
-          { title: "TC thường / giờ", dataIndex: "overtimeWeekdayRate", align: "center", render: (v: number) => formatMoney(v) },
-          { title: "TC nghỉ / giờ", dataIndex: "overtimeRestdayRate", align: "center", render: (v: number) => formatMoney(v) },
-          { title: "TC lễ / giờ", dataIndex: "overtimeHolidayRate", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Tiền công mỗi ngày", dataIndex: "dailyRate", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Tiền tăng ca mỗi giờ", dataIndex: "overtimeWeekdayRate", align: "center", render: (v: number) => formatMoney(v) },
+          {
+            title: "Thao tác",
+            align: "center",
+            render: (_, rate) => dayjs(rate.effectiveFrom).isAfter(dayjs(), "day") ? (
+              <Button danger onClick={() => Modal.confirm({
+                title: "Xóa mức công đã đặt trước?",
+                content: `Ngày dự kiến áp dụng: ${dayjs(rate.effectiveFrom).format("DD/MM/YYYY")}`,
+                okText: "Xóa",
+                cancelText: "Quay lại",
+                okButtonProps: { danger: true },
+                onOk: async () => {
+                  try {
+                    await deletePayRate(employee.id, rate.id);
+                  } catch (error) {
+                    message.error(toApiError(error).message);
+                    return;
+                  }
+                  message.success("Đã xóa mức công");
+                  await load();
+                  onChanged();
+                },
+              })}>Xóa</Button>
+            ) : null,
+          },
         ]}
       />
       <Form
@@ -329,20 +339,15 @@ function PayRatesModal({
         initialValues={{
           effectiveFrom: dayjs(),
           dailyRate: employee.currentPayRate?.dailyRate ?? 350000,
-          standardHoursPerDay: employee.currentPayRate?.standardHoursPerDay ?? 8,
           overtimeWeekdayRate: employee.currentPayRate?.overtimeWeekdayRate ?? 50000,
-          overtimeRestdayRate: employee.currentPayRate?.overtimeRestdayRate ?? 70000,
-          overtimeHolidayRate: employee.currentPayRate?.overtimeHolidayRate ?? 90000,
         }}
         onFinish={async (values) => {
           try {
             await addPayRate(employee.id, {
               effectiveFrom: values.effectiveFrom.format("YYYY-MM-DD"),
               dailyRate: values.dailyRate,
-              standardHoursPerDay: values.standardHoursPerDay,
+              standardHoursPerDay: employee.currentPayRate?.standardHoursPerDay ?? 8,
               overtimeWeekdayRate: values.overtimeWeekdayRate,
-              overtimeRestdayRate: values.overtimeRestdayRate,
-              overtimeHolidayRate: values.overtimeHolidayRate,
             });
             message.success("Đã thêm mức công mới");
             await load();
@@ -356,23 +361,18 @@ function PayRatesModal({
           <Form.Item name="effectiveFrom" label="Áp dụng từ ngày" rules={[{ required: true }]}>
             <DatePicker format="DD/MM/YYYY" style={{ width: 150 }} />
           </Form.Item>
-          <Form.Item name="dailyRate" label="Mức công / ngày" rules={[{ required: true }]}>
+          <Form.Item name="dailyRate" label="Tiền công mỗi ngày" rules={[{ required: true }]}>
             <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
           </Form.Item>
-          <Form.Item name="standardHoursPerDay" label="Giờ chuẩn" rules={[{ required: true }]}>
-            <InputNumber min={1} max={24} style={{ width: 100 }} />
-          </Form.Item>
-          <Form.Item name="overtimeWeekdayRate" label="TC thường / giờ">
-            <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
-          </Form.Item>
-          <Form.Item name="overtimeRestdayRate" label="TC ngày nghỉ / giờ">
-            <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
-          </Form.Item>
-          <Form.Item name="overtimeHolidayRate" label="TC lễ / giờ">
+          <Form.Item name="overtimeWeekdayRate" label="Tiền tăng ca mỗi giờ">
             <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
           </Form.Item>
         </Space>
-        <Button type="primary" htmlType="submit">Thiết lập mức công mới</Button>
+        <div>
+          <AppActionButton tone="create" icon={<SaveOutlined />} htmlType="submit">
+            Lưu tiền công
+          </AppActionButton>
+        </div>
       </Form>
     </Modal>
   );

@@ -1,4 +1,4 @@
-import type { Product, ProductUnit } from "./products-api";
+import type { Category, Product, ProductUnit } from "./products-api";
 
 /** Đơn vị tồn kho mặc định — theo kg; bán lẻ thường theo tạ (100 kg). */
 export const DEFAULT_STOCK_UNIT = "kg";
@@ -77,16 +77,36 @@ function roundToThousand(value: number): number {
   return Math.round(value / 1000) * 1000;
 }
 
-export function suggestPurchasePricePerUnit(product: Product, unit: PurchaseWeightUnit): number {
-  const base = product.referencePurchasePrice;
-  const raw = Math.round(base * weightFactor(unit));
-  return roundToThousand(raw);
+/** Giá nhập gợi ý theo đơn vị khối lượng, từ giá nhập (đ/kg) của loại nhôm. */
+export function suggestPurchasePricePerUnit(
+  category: Category | undefined | null,
+  unit: PurchaseWeightUnit,
+): number {
+  const base = Number(category?.referencePurchasePrice) || 0;
+  return roundToThousand(Math.round(base * weightFactor(unit)));
 }
 
-/** Gợi ý đơn giá bán = giá / kg (từ giá bán / tấn) × hệ số đơn vị dòng. */
-export function suggestSalePricePerUnit(product: Product, unit: ProductUnit): number {
-  const raw = Math.round((Number(product.defaultSellingPrice) || 0) * unit.factorToBase);
-  return roundToThousand(raw);
+/** Giá bán gợi ý theo kg / tạ / tấn từ loại nhôm (ưu tiên giá riêng từng đơn vị nếu có). */
+export function suggestSalePricePerWeightUnit(
+  category: Category | undefined | null,
+  unit: PurchaseWeightUnit,
+): number {
+  if (!category) return 0;
+  const perKg = Number(category.defaultSellingPrice) || 0;
+  if (unit === "tấn") {
+    return roundToThousand(Number(category.defaultSellingPriceTon) || Math.round(perKg * KG_PER_TON));
+  }
+  if (unit === "tạ") {
+    return roundToThousand(Number(category.defaultSellingPriceTa) || Math.round(perKg * KG_PER_TA));
+  }
+  return roundToThousand(perKg);
+}
+
+/** Gợi ý đơn giá bán theo đơn vị khối lượng của dòng từ loại nhôm. */
+export function suggestSalePricePerUnit(category: Category | undefined | null, unit: ProductUnit): number {
+  if (unit.unitName === "tấn") return suggestSalePricePerWeightUnit(category, "tấn");
+  if (unit.unitName === RETAIL_UNIT_TA) return suggestSalePricePerWeightUnit(category, "tạ");
+  return suggestSalePricePerWeightUnit(category, "kg");
 }
 
 /** Giá user nhập (theo priceUnit) → giá lưu trên phiếu (theo đơn vị khối lượng). */

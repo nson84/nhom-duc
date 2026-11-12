@@ -5,6 +5,10 @@ import com.aluminum.manager.common.ErrorCode;
 
 public final class StockConfirmationPolicy {
 
+	public static boolean skipsStock(boolean distribution, String type) {
+		return !distribution && "SALE".equals(type);
+	}
+
 	private StockConfirmationPolicy() {
 	}
 

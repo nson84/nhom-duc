@@ -30,6 +30,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
+import java.util.Base64;
+import org.springframework.beans.factory.annotation.Value;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,31 +46,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class BackupService {
 
 	private static final Logger log = LoggerFactory.getLogger(BackupService.class);
-	private static final String BACKUP_HEADER = "-- ALUMINUM_MANAGER_BACKUP_V1";
+	private static final String BACKUP_HEADER = "-- ALUMINUM_MANAGER_BACKUP_V2";
 	private static final String BACKUP_FOOTER = "-- ALUMINUM_MANAGER_BACKUP_END";
 	private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
-
-	private static final List<String> DATA_TABLES = List.of(
-			"shops",
-			"app_settings",
-			"product_categories",
-			"products",
-			"product_units",
-			"stock_balances",
-			"document_sequences",
-			"stock_documents",
-			"stock_document_items",
-			"stock_movements",
-			"employees",
-			"employee_pay_rates",
-			"holidays",
-			"attendance_policies",
-			"attendance_records",
-			"overtime_records",
-			"payroll_periods",
-			"payroll_details",
-			"financial_transactions",
-			"sales_payments");
 
 	private final JdbcTemplate jdbc;
 	private final DataSource dataSource;
@@ -75,6 +56,11 @@ public class BackupService {
 	private final AuditService audit;
 	private final Clock clock;
 	private volatile LocalDate lastScheduledRunDate;
+	@Value("${ALUMINUM_IMAGE_DIR:image}")
+	private String imageDirectory;
+	// Authentication and backup history belong to this installation, not the business restore.
+	private static final Set<String> LOCAL_TABLES = Set.of("flyway_schema_history", "backup_logs",
+			"admin_users", "revoked_login_sessions", "audit_logs");
 
 	public BackupService(
 			JdbcTemplate jdbc,
@@ -171,7 +157,7 @@ public class BackupService {
 		}
 	}
 
-	public BackupLogDto restoreBackup(long backupId, RestoreRequest request) {
+	public synchronized BackupLogDto restoreBackup(long backupId, RestoreRequest request) {
 		if (!"KHOI PHUC".equals(request.confirmText().trim().toUpperCase())) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 					"Cần nhập đúng chuỗi xác nhận: KHOI PHUC", null);
@@ -206,7 +192,7 @@ public class BackupService {
 				|| !content.startsWith(BACKUP_HEADER)
 				|| !content.trim().endsWith(BACKUP_FOOTER)) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-					"File sao lưu không đúng định dạng hoặc bị cắt cụt, từ chối phục hồi", null);
+					"Bản sao lưu không đầy đủ, thuộc định dạng cũ hoặc bị cắt cụt; cần bản V2 để phục hồi an toàn", null);
 		}
 
 		String actualSha = sha256(bytes);
@@ -222,6 +208,11 @@ public class BackupService {
 					"Không tạo được bản sao lưu an toàn trước khi phục hồi: " + preBackup.errorMessage(), null);
 		}
 
+		try {
+			restoreImages(content);
+		} catch (IOException ex) {
+			throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Không phục hồi được ảnh: " + ex.getMessage(), null);
+		}
 		executeRestoreSql(content);
 		audit.record(adminId, "RESTORE_BACKUP", "backup_logs", String.valueOf(backupId),
 				"Phục hồi từ " + target.backupPath() + ". Lý do: " + request.reason().trim()
@@ -229,7 +220,7 @@ public class BackupService {
 		return target;
 	}
 
-	private BackupLogDto performBackup(String prefix, Long adminId) {
+	private synchronized BackupLogDto performBackup(String prefix, Long adminId) {
 		ShopSettings settings = settingsService.get();
 		Path dir = resolveBackupDirectory(settings.backupDirectory());
 		LocalDateTime started = LocalDateTime.now(clock);
@@ -277,10 +268,21 @@ public class BackupService {
 
 		try (Connection conn = dataSource.getConnection();
 				Statement stmt = conn.createStatement()) {
-			for (int i = DATA_TABLES.size() - 1; i >= 0; i--) {
-				sb.append("DELETE FROM `").append(DATA_TABLES.get(i)).append("`;\n");
+			conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+			conn.setAutoCommit(false);
+			stmt.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT");
+			List<String> tables = new ArrayList<>();
+			try (ResultSet rs = stmt.executeQuery("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")) {
+				while (rs.next()) if (!LOCAL_TABLES.contains(rs.getString(1))) tables.add(rs.getString(1));
 			}
-			for (String table : DATA_TABLES) {
+			// Product insert triggers create default units; restore products before replacing those rows.
+			tables.sort(java.util.Comparator.comparingInt(t -> "products".equals(t) ? 0 : 1));
+			sb.append("-- Tables: ").append(String.join(",", tables)).append("\n");
+			for (int i = tables.size() - 1; i >= 0; i--) {
+				sb.append("DELETE FROM `").append(tables.get(i)).append("`;\n");
+			}
+			Set<String> images = new java.util.HashSet<>();
+			for (String table : tables) {
 				if ("product_units".equals(table) || "stock_balances".equals(table)) {
 					sb.append("DELETE FROM `").append(table).append("`;\n");
 				}
@@ -304,12 +306,19 @@ public class BackupService {
 								sb.append(", ");
 							}
 							Object val = rs.getObject(c);
+							if (val instanceof String value && value.startsWith("product-image:")) images.add(value.substring(14));
 							sb.append(toSqlLiteral(val));
 						}
 						sb.append(");\n");
 					}
 				}
 			}
+			for (String image : images) {
+				Path imagePath = safeImagePath(image);
+				sb.append("-- IMAGE ").append(image).append(' ')
+					.append(Base64.getEncoder().encodeToString(Files.readAllBytes(imagePath))).append('\n');
+			}
+			conn.commit();
 		}
 
 		sb.append("SET FOREIGN_KEY_CHECKS = 1;\n");
@@ -339,6 +348,7 @@ public class BackupService {
 				throw new BusinessException(ErrorCode.INTERNAL_ERROR,
 						"Lỗi khi phục hồi dữ liệu: " + ex.getMessage(), null);
 			} finally {
+				try (Statement reset = conn.createStatement()) { reset.execute("SET FOREIGN_KEY_CHECKS = 1"); }
 				conn.setAutoCommit(prevAutoCommit);
 			}
 		} catch (BusinessException ex) {
@@ -364,6 +374,29 @@ public class BackupService {
 				} catch (IOException ignored) {
 				}
 			}
+		}
+	}
+
+	private Path safeImagePath(String name) throws IOException {
+		if (!name.matches("[a-f0-9-]{36}\\.[a-zA-Z0-9.+-]+")) throw new IOException("Tên ảnh không hợp lệ");
+		return Path.of(imageDirectory).toAbsolutePath().normalize().resolve(name);
+	}
+
+	private void restoreImages(String content) throws IOException {
+		for (String line : content.split("\\r?\\n")) {
+			if (!line.startsWith("-- IMAGE ")) continue;
+			String[] parts = line.substring(9).split(" ", 2);
+			if (parts.length != 2) throw new IOException("Ảnh trong bản sao lưu không đầy đủ");
+			Path target = safeImagePath(parts[0]);
+			byte[] bytes = Base64.getDecoder().decode(parts[1]);
+			String expected = java.util.UUID.nameUUIDFromBytes(bytes).toString();
+			if (!parts[0].startsWith(expected + ".")) throw new IOException("Nội dung ảnh không khớp tên");
+			Files.createDirectories(target.getParent());
+			Path temp = Files.createTempFile(target.getParent(), "restore-", ".tmp");
+			try {
+				Files.write(temp, bytes);
+				Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			} finally { Files.deleteIfExists(temp); }
 		}
 	}
 

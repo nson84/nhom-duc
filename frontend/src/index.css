@@ -8,15 +8,32 @@ body,
   margin: 0;
 }
 
+/* Trang đã đăng nhập: cửa sổ không cuộn. Chỉ vùng nội dung cuộn. */
+html:has(.app-shell),
+body:has(.app-shell),
+#root:has(.app-shell),
+.ant-app:has(.app-shell) {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
+/* Token màu: xem features/theme/palette.ts (ghi vào :root khi khởi động / đổi theme). */
+:root {
+  --card-border: 1px solid var(--color-border);
+  --radius-card: 12px;
+  --theme-duration: 180ms;
+}
 body {
-  background: #f3f5f7;
-  color: #1c2430;
+  background: var(--color-bg);
+  color: var(--color-text);
   font-family: "Segoe UI", sans-serif;
 }
 
@@ -53,7 +70,7 @@ body {
 
 .login-stack {
   position: relative;
-  width: min(560px, 60vw);
+  width: min(560px, 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -240,19 +257,591 @@ body {
   display: flex;
   align-items: center;
   padding: 0 20px;
-  color: #f4f7f8;
+  min-width: 0;
+  overflow: hidden;
+  /* Gộp với thanh header thành một khối: cùng nền, cùng đường viền dưới, không vạch ngăn dọc */
+  background: var(--color-surface);
+  color: var(--color-text);
   font-weight: 650;
   letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.brand-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-mark {
+  display: none;
+  font-size: 18px;
+}
+
+.app-sider.is-collapsed .brand-full {
+  display: none;
+}
+
+.app-sider.is-collapsed .brand-mark {
+  display: block;
+}
+
+.app-sider.is-collapsed .brand-block {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.app-shell {
+  background: var(--color-bg) !important;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.app-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: transparent !important;
+}
+
+.app-sider {
+  background: var(--color-sidebar) !important;
+  border-inline-end: none;
+}
+
+.app-sider.ant-layout-sider {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.app-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-sider .ant-menu,
+.app-nav-menu.ant-menu {
+  background: var(--color-sidebar) !important;
+  border: none !important;
+  border-inline-end: none !important;
+  padding: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.app-sider .ant-menu-item,
+.app-nav-menu .ant-menu-item {
+  border-radius: 8px;
+}
+
+.app-sider .ant-menu-item .anticon {
+  color: inherit;
+}
+
+.app-header {
+  position: relative;
+  z-index: 20;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 64px !important;
+  line-height: 1.4 !important;
+  padding: 0 16px !important;
+  background: var(--color-surface) !important;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px 12px;
+  flex-wrap: nowrap;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.app-header-shop {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.app-header-shop .shop-switch {
+  max-width: 100%;
+}
+
+.app-header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.app-user-trigger {
+  cursor: pointer;
+}
+
+.app-header-role {
+  margin-inline-end: 0 !important;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-avatar {
+  background: var(--color-primary) !important;
+  color: var(--color-primary-contrast) !important;
+  font-weight: 700;
+}
+
+.theme-toggle.ant-btn {
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface) !important;
+}
+
+.theme-toggle.ant-btn:hover {
+  color: var(--color-primary) !important;
+  border-color: var(--color-primary);
+  background: var(--color-table-hover) !important;
 }
 
 .app-content {
   margin: 16px;
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: transparent;
 }
 
+/* Card / bảng: bo 12px, nổi khỏi nền bằng shadow (sáng) hoặc border (tối) */
+.app-content .ant-card {
+  background: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--color-shadow-card);
+  color: var(--color-text);
+}
+
+/*
+ * Khung (thẻ) của mỗi trang luôn kéo dài hết chiều cao màn hình, kể cả khi chỉ có 1 bản ghi hoặc rỗng.
+ * Bảng chiếm phần giữa, phân trang dính đáy khung. Áp dụng tự động cho thẻ duy nhất của trang
+ * (.app-content > .ant-card:only-child) hoặc thẻ gắn class app-fill-card.
+ */
+.app-content .ant-card.app-fill-card,
+.app-content > .ant-card:only-child:not(.startup-card) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.app-content .ant-card.app-fill-card > .ant-card-body,
+.app-content > .ant-card:only-child:not(.startup-card) > .ant-card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+.app-content .ant-card.app-fill-card > .ant-card-body > .ant-table-wrapper,
+.app-content > .ant-card:only-child:not(.startup-card) > .ant-card-body > .ant-table-wrapper {
+  flex: 1 1 auto;
+}
+.app-content .ant-card .ant-card-head {
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.app-content .ant-card .ant-card-head-title {
+  color: var(--color-text);
+  font-weight: 650;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.app-content .ant-table-wrapper .ant-table {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.ant-table-wrapper .ant-table-cell {
+  text-align: center !important;
+  vertical-align: middle;
+}
+
+.app-content .ant-table-thead > tr > th {
+  background: var(--color-table-header) !important;
+  color: var(--color-text) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  font-weight: 650;
+}
+
+.app-content .ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--color-border) !important;
+  color: var(--color-text);
+}
+
+.app-content .ant-table-tbody > tr:hover > td {
+  background: var(--color-table-hover) !important;
+}
+
+.app-content .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: var(--color-primary-soft) !important;
+}
+
+.app-content .ant-table-placeholder .ant-empty-description,
+.app-content .ant-empty-description {
+  color: var(--color-text-secondary);
+}
+
+/* Phân trang chuẩn: căn giữa, có nút về trang đầu / cuối */
+.app-pager {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+
+.app-pager-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app-pager .app-pager-btn.ant-btn {
+  min-width: 36px;
+  height: 36px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+  font-weight: 600;
+}
+
+.app-pager .app-pager-btn.ant-btn:not(:disabled):hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-table-hover);
+}
+
+.app-pager .app-pager-btn.ant-btn:disabled {
+  color: var(--color-text-disabled);
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.app-pager .app-pager-page.is-active.ant-btn,
+.app-pager .app-pager-page.is-active.ant-btn:hover {
+  color: var(--color-primary-contrast) !important;
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.app-pager-gap {
+  min-width: 28px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  user-select: none;
+}
+
+.app-pager-summary {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.app-content .ant-alert {
+  border-radius: var(--radius-card);
+}
+
+.app-content .ant-statistic-title {
+  color: var(--color-text-secondary);
+}
+
+.app-content .ant-statistic-content {
+  color: var(--color-text);
+}
+
+.app-content .ant-descriptions-item-label {
+  color: var(--color-text-secondary);
+}
+
+.app-content .ant-descriptions-item-content {
+  color: var(--color-text);
+}
+
+/* ===== Form: placeholder, focus, disabled, validation ===== */
+input::placeholder,
+textarea::placeholder,
+.ant-select-selection-placeholder,
+.ant-picker-input > input::placeholder {
+  color: var(--color-text-placeholder) !important;
+  opacity: 1;
+}
+
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker {
+  color: var(--color-text);
+}
+
+.ant-input-disabled,
+.ant-input[disabled],
+.ant-input-number-disabled,
+.ant-select-disabled .ant-select-selector,
+.ant-picker-disabled {
+  background: var(--color-surface-muted) !important;
+  color: var(--color-text-disabled) !important;
+  border-color: var(--color-border) !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused,
+.ant-input-number-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px var(--color-focus-ring) !important;
+}
+
+.ant-form-item-has-error .ant-input,
+.ant-form-item-has-error .ant-input-affix-wrapper,
+.ant-form-item-has-error .ant-select-selector,
+.ant-form-item-has-error .ant-picker,
+.ant-form-item-has-error .ant-input-number {
+  border-color: var(--color-danger) !important;
+}
+
+.ant-form-item-explain-error {
+  color: var(--color-danger) !important;
+}
+
+.ant-form-item-label > label {
+  color: var(--color-text);
+}
+
+.ant-form-item-extra {
+  color: var(--color-text-secondary);
+}
+
+/* Dropdown, popup, tooltip, popover */
+.ant-select-dropdown,
+.ant-picker-dropdown .ant-picker-panel-container,
+.ant-dropdown .ant-dropdown-menu,
+.ant-popover .ant-popover-inner {
+  background: var(--color-surface-elevated) !important;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--color-shadow-overlay) !important;
+}
+
+.ant-select-item,
+.ant-dropdown-menu-item,
+.ant-picker-cell-in-view {
+  color: var(--color-text);
+}
+
+.ant-select-item-option-active:not(.ant-select-item-option-disabled),
+.ant-dropdown-menu-item:hover {
+  background: var(--color-table-hover) !important;
+}
+
+.ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: var(--color-primary-soft) !important;
+  font-weight: 650;
+}
+
+.roll-call-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.roll-call-summary > .ant-card {
+  border: 1px solid var(--color-border);
+}
+
+.stock-payment-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.stock-payment-form > .ant-form-item {
+  margin-bottom: 0;
+}
+
+.stock-payment-fill {
+  margin-top: 6px;
+}
+
+@media (max-width: 575px) {
+  .stock-payment-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.price-alert-dropdown .ant-dropdown-menu {
+  width: min(390px, calc(100vw - 24px));
+  max-height: min(540px, 70vh);
+  overflow-y: auto;
+}
+
+.price-alert-dropdown .price-alert-item {
+  padding: 10px 12px;
+}
+
+.price-alert-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.price-alert-avatar {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 19px;
+}
+
+.price-alert-copy {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.price-alert-copy small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-primary);
+}
+
+.price-alert-unread {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #52a5ff;
+}
+
+.ant-select-item-empty,
+.ant-empty-description {
+  color: var(--color-text-secondary);
+}
+
+/* Nền mờ của modal / drawer */
+.ant-modal-mask,
+.ant-drawer-mask {
+  background: var(--color-overlay) !important;
+}
+
+/* Thanh cuộn theo theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+/* Liên kết / focus bàn phím */
+a {
+  color: var(--color-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Chuyển theme mượt 150–200ms, tắt khi người dùng giảm chuyển động */
+body,
+.app-shell,
+.app-sider,
+.app-header,
+.app-content .ant-card,
+.app-content .ant-table-wrapper .ant-table,
+.ant-modal .ant-modal-content,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker,
+.ant-btn,
+.ant-menu,
+.ant-tag {
+  transition:
+    background-color var(--theme-duration) ease,
+    border-color var(--theme-duration) ease,
+    color var(--theme-duration) ease,
+    box-shadow var(--theme-duration) ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .startup-screen {
   min-height: 100vh;
   width: 100%;
@@ -285,153 +874,208 @@ body {
   }
 }
 
-/* Nút hành động — mỗi tone một màu (không ép chung nâu Sienna) */
+/* Nút hành động — màu theo vai trò, lấy từ token (đổi theo Light / Dark, đạt AA) */
 .app-action-button.ant-btn {
-  color: #fff !important;
+  font-weight: 600;
 }
 
 .app-action-button.ant-btn .anticon {
-  color: #fff !important;
+  color: inherit !important;
 }
 
-.app-action-button.app-btn-create.ant-btn {
-  background-color: #2f6f8f !important;
-  border-color: #245a73 !important;
+.app-action-button.ant-btn:not(:disabled):hover,
+.app-action-button.ant-btn:not(:disabled):focus-visible {
+  filter: brightness(var(--btn-hover-brightness));
 }
-.app-action-button.app-btn-create.ant-btn:not(:disabled):hover {
-  background-color: #245a73 !important;
-  border-color: #1c485c !important;
+
+.app-action-button.ant-btn:not(:disabled):active {
+  filter: brightness(calc(var(--btn-hover-brightness) * 0.95));
+}
+
+.app-action-button.ant-btn:disabled,
+.app-action-button.ant-btn.ant-btn-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-action-button.ant-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.app-action-button.app-btn-create.ant-btn {
+  background-color: var(--btn-create-bg) !important;
+  border-color: var(--btn-create-border) !important;
+  color: var(--btn-create-fg) !important;
 }
 
 .app-action-button.app-btn-edit.ant-btn {
-  background-color: #8b6914 !important;
-  border-color: #6b5010 !important;
-}
-.app-action-button.app-btn-edit.ant-btn:not(:disabled):hover {
-  background-color: #6b5010 !important;
-  border-color: #523c0c !important;
+  background-color: var(--btn-edit-bg) !important;
+  border-color: var(--btn-edit-border) !important;
+  color: var(--btn-edit-fg) !important;
 }
 
 .app-action-button.app-btn-cancel.ant-btn {
-  background-color: #c2410c !important;
-  border-color: #9a3412 !important;
-}
-.app-action-button.app-btn-cancel.ant-btn:not(:disabled):hover {
-  background-color: #9a3412 !important;
-  border-color: #7c2d12 !important;
+  background-color: var(--btn-cancel-bg) !important;
+  border-color: var(--btn-cancel-border) !important;
+  color: var(--btn-cancel-fg) !important;
 }
 
 .app-action-button.app-btn-delete.ant-btn {
-  background-color: #7f1d1d !important;
-  border-color: #641616 !important;
-}
-.app-action-button.app-btn-delete.ant-btn:not(:disabled):hover {
-  background-color: #641616 !important;
-  border-color: #450a0a !important;
+  background-color: var(--btn-delete-bg) !important;
+  border-color: var(--btn-delete-border) !important;
+  color: var(--btn-delete-fg) !important;
 }
 
 .app-action-button.app-btn-confirm.ant-btn {
-  background-color: #166534 !important;
-  border-color: #14532d !important;
-}
-.app-action-button.app-btn-confirm.ant-btn:not(:disabled):hover {
-  background-color: #14532d !important;
-  border-color: #052e16 !important;
+  background-color: var(--btn-confirm-bg) !important;
+  border-color: var(--btn-confirm-border) !important;
+  color: var(--btn-confirm-fg) !important;
 }
 
 .app-action-button.app-btn-pay.ant-btn {
-  background-color: #0f766e !important;
-  border-color: #0d5f59 !important;
-}
-.app-action-button.app-btn-pay.ant-btn:not(:disabled):hover {
-  background-color: #0d5f59 !important;
-  border-color: #0a4a45 !important;
+  background-color: var(--btn-pay-bg) !important;
+  border-color: var(--btn-pay-border) !important;
+  color: var(--btn-pay-fg) !important;
 }
 
 .app-action-button.app-btn-reverse.ant-btn {
-  background-color: #ea580c !important;
-  border-color: #c2410c !important;
-}
-.app-action-button.app-btn-reverse.ant-btn:not(:disabled):hover {
-  background-color: #c2410c !important;
-  border-color: #9a3412 !important;
+  background-color: var(--btn-reverse-bg) !important;
+  border-color: var(--btn-reverse-border) !important;
+  color: var(--btn-reverse-fg) !important;
 }
 
 .app-action-button.app-btn-print.ant-btn {
-  background-color: #2f6f8f !important;
-  border-color: #245a73 !important;
+  background-color: var(--btn-print-bg) !important;
+  border-color: var(--btn-print-border) !important;
+  color: var(--btn-print-fg) !important;
 }
-.app-action-button.app-btn-print.ant-btn:not(:disabled):hover {
-  background-color: #245a73 !important;
-  border-color: #1c485c !important;
+
+.app-action-button.app-btn-sync.ant-btn {
+  background-color: var(--btn-sync-bg) !important;
+  border-color: var(--btn-sync-border) !important;
+  color: var(--btn-sync-fg) !important;
 }
 
 .app-action-button.app-btn-secondary.ant-btn {
-  background-color: #6b7280 !important;
-  border-color: #4b5563 !important;
-}
-.app-action-button.app-btn-secondary.ant-btn:not(:disabled):hover {
-  background-color: #4b5563 !important;
-  border-color: #374151 !important;
+  background-color: var(--btn-secondary-bg) !important;
+  border-color: var(--btn-secondary-border) !important;
+  color: var(--btn-secondary-fg) !important;
 }
 
-/* Nút X đóng modal chi tiết phiếu — đỏ đậm */
+/* Modal nổi rõ trên nền sáng/tối */
+.ant-modal .ant-modal-content {
+  background: var(--color-surface-elevated) !important;
+  border: var(--card-border);
+  border-radius: var(--radius-card) !important;
+  box-shadow: var(--color-shadow-overlay) !important;
+  color: var(--color-text);
+}
+
+.ant-modal .ant-modal-header {
+  background: var(--color-surface-elevated) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+.ant-modal .ant-modal-title {
+  color: var(--color-text) !important;
+}
+
+.ant-modal .ant-modal-close {
+  color: var(--color-text-secondary) !important;
+}
+
+.ant-modal .ant-modal-close:hover {
+  color: var(--color-text) !important;
+  background: var(--color-table-hover) !important;
+}
+
+.ant-modal .ant-modal-footer {
+  border-top: 1px solid var(--color-border);
+}
+
+/* Nút X đóng modal chi tiết phiếu — đỏ */
 .doc-detail-modal .ant-modal-close {
-  color: #7f1d1d;
+  color: var(--color-danger) !important;
 }
 .doc-detail-modal .ant-modal-close:hover {
-  color: #450a0a;
-  background: rgba(127, 29, 29, 0.08);
+  color: var(--color-danger) !important;
+  background: var(--color-danger-soft) !important;
 }
-
 /*
- * Thanh tìm kiếm: một khung bo góc, bỏ border/vạch dọc thừa giữa ô và nút.
+ * Thanh tìm kiếm Ant Design 6 (Space.Compact): một khung bo góc duy nhất.
+ * Class nút: .ant-input-search-btn (không còn -button).
  */
 .app-search.ant-input-search,
-.ant-input-search.ant-space-compact {
-  border: 1px solid #d0d7de;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #fff;
-  transition: border-color 0.2s, box-shadow 0.2s;
+.ant-input-search.app-search,
+.ant-space-compact.app-search {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+  transition: border-color 0.2s;
 }
 
 .app-search.ant-input-search:hover,
-.ant-input-search.ant-space-compact:hover,
+.ant-input-search.app-search:hover,
+.ant-space-compact.app-search:hover,
 .app-search.ant-input-search:focus-within,
-.ant-input-search.ant-space-compact:focus-within {
-  border-color: #2f6f8f;
-  box-shadow: 0 0 0 2px rgba(47, 111, 143, 0.12);
+.ant-input-search.app-search:focus-within,
+.ant-space-compact.app-search:focus-within {
+  border-color: var(--color-primary) !important;
+  box-shadow: none !important;
 }
 
-.ant-input-search.ant-space-compact > .ant-input-compact-item:not(.ant-input-compact-last-item) {
+.app-search > .ant-input-compact-item,
+.app-search > .ant-btn-compact-item {
   margin-inline-end: 0 !important;
 }
 
-.app-search.ant-input-search .ant-input-affix-wrapper,
-.app-search.ant-input-search .ant-input,
-.ant-input-search.ant-space-compact .ant-input-compact-first-item .ant-input-affix-wrapper,
-.ant-input-search.ant-space-compact .ant-input-compact-first-item > .ant-input {
+/* Gỡ border / radius / shadow chồng của ô + nút bên trong khung */
+.app-search .ant-input-affix-wrapper,
+.app-search .ant-input,
+.app-search .ant-btn,
+.app-search .ant-input-compact-item,
+.app-search .ant-btn-compact-item {
   border: none !important;
-  box-shadow: none !important;
+  border-inline-start: none !important;
+  border-inline-end: none !important;
   border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.app-search .ant-input-affix-wrapper,
+.app-search .ant-input-compact-first-item {
   background: transparent !important;
 }
 
-.app-search.ant-input-search .ant-input-search-button.ant-btn,
-.ant-input-search .ant-input-search-button.ant-btn {
+.app-search .ant-input-search-btn.ant-btn,
+.app-search button.ant-input-search-btn {
   border: none !important;
-  box-shadow: none !important;
   border-radius: 0 !important;
-  border-inline-start: none !important;
-  background: #2f6f8f !important;
-  color: #fff !important;
+  border-inline-start: 1px solid var(--color-border) !important;
+  box-shadow: none !important;
+  background: var(--color-primary) !important;
+  color: var(--color-primary-contrast) !important;
 }
 
-.app-search.ant-input-search .ant-input-search-button.ant-btn:hover,
-.ant-input-search .ant-input-search-button.ant-btn:hover {
-  background: #245a73 !important;
-  color: #fff !important;
+.app-search .ant-input-search-btn.ant-btn:hover,
+.app-search button.ant-input-search-btn:hover {
+  background: var(--color-primary-hover) !important;
+  color: var(--color-primary-contrast) !important;
+}
+
+.live-search {
+  align-items: stretch;
+  gap: 6px;
+}
+.live-search-reset.ant-btn {
+  height: 32px;
+  width: 34px;
+  padding-inline: 0;
+  border-radius: 8px !important;
+  font-weight: 500;
 }
 
 /* Bảng: cả dòng bấm được để xem chi tiết */
@@ -439,7 +1083,7 @@ body {
   cursor: pointer;
 }
 .ant-table-tbody > tr.app-row-clickable:hover > td {
-  background: #f0f7fa !important;
+  background: var(--color-table-hover) !important;
 }
 
 /* Suffix trong InputNumber / Input (?, v.v.) ? kh?ng v?ch d?c */
@@ -451,7 +1095,8 @@ body {
 /* ===== Landing page c?ng khai (/gioi-thieu) ===== */
 .landing {
   min-height: 100vh;
-  background: #fff;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .landing-wrap {
@@ -463,28 +1108,32 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--color-surface);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid #e6ebee;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .landing-header-inner {
-  height: 64px;
+  min-height: 64px;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 8px 0;
 }
 
 .landing-header-inner strong {
   font-size: 17px;
   letter-spacing: -0.01em;
-  color: #1e2933;
+  color: var(--color-text);
 }
 
 .landing-hero {
   padding: 72px 0 56px;
-  background: linear-gradient(160deg, #f2f7f9 0%, #ffffff 60%);
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .landing-hero h1.ant-typography {
@@ -497,7 +1146,7 @@ body {
 
 .landing-lead {
   font-size: 17px;
-  color: #4a5a63;
+  color: var(--color-text-secondary);
   max-width: 60ch;
   margin-bottom: 24px !important;
 }
@@ -508,8 +1157,9 @@ body {
 
 .landing-card {
   height: 100%;
-  background: #f8fafb;
-  border-radius: 10px;
+  background: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
 }
 
 .landing-card h4.ant-typography {
@@ -519,27 +1169,27 @@ body {
 
 .landing-icon {
   font-size: 22px;
-  color: #2f6f8f;
+  color: var(--color-primary);
 }
 
 .landing-chip {
   display: inline-block;
   padding: 6px 14px;
   border-radius: 999px;
-  background: #eef4f7;
-  color: #2f6f8f;
+  background: var(--color-primary-soft);
+  color: var(--color-text);
   font-size: 14px;
 }
 
 .landing-contact {
   padding: 48px 0 64px;
-  background: #f3f7f9;
+  background: var(--color-surface-muted);
   margin-top: 24px;
 }
 
 .landing-form-card {
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(30, 41, 51, 0.08);
+  box-shadow: var(--color-shadow-card);
 }
 
 /* B?y spam: gi?u kh?i ngu?i d?ng nhung bot v?n th?y trong DOM. */
@@ -554,8 +1204,9 @@ body {
 
 .landing-footer {
   padding: 20px 0;
-  border-top: 1px solid #e6ebee;
-  background: #fff;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
 }
 
 /*
@@ -589,17 +1240,25 @@ body {
 }
 
 /* Dòng phiếu nhập: tiêu đề + ô nhập thẳng cột; khoảng cách dọc ≈ 1 dòng control (32px) */
+.purchase-lines {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
 .purchase-line-grid {
   display: grid;
   column-gap: 10px;
   width: 100%;
+  min-width: 960px;
   align-items: start;
 }
 
 .purchase-line-head {
   margin-bottom: 12px;
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--color-text-secondary);
   line-height: 1.2;
   align-items: end;
 }
@@ -607,10 +1266,6 @@ body {
 .purchase-line-head > span {
   white-space: nowrap;
   text-align: center;
-}
-
-.purchase-line-head > span:first-child {
-  text-align: left;
 }
 
 .purchase-line-block {
@@ -652,10 +1307,10 @@ body {
   font-size: 14px;
   line-height: 1.5714;
   text-align: center;
-  color: rgba(0, 0, 0, 0.88);
-  background: #ffffff;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
 }
 
 .purchase-line-body .ant-input-number {
@@ -672,7 +1327,78 @@ body {
 
 .purchase-line-remove .anticon {
   font-size: 14px;
-  color: #fff;
+  color: inherit;
+}
+
+/* Phiếu bán: mỗi dòng là một khối chọn Kg | m² theo mockup */
+.sale-line-card {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+}
+
+.sale-line-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sale-line-remove {
+  margin-top: 30px;
+  min-width: 32px;
+  height: 32px;
+  padding-inline: 8px;
+}
+
+.sale-line-remove .anticon {
+  font-size: 14px;
+  color: inherit;
+}
+
+.sale-line-billing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sale-line-billing-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.sale-line-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.sale-line-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 12px 16px;
+  margin-bottom: 8px;
+}
+
+.sale-line-fields .ant-form-item {
+  margin-bottom: 0;
+}
+
+.sale-line-area {
+  grid-column: 1 / -1;
+  color: var(--color-success);
+  font-size: 14px;
+}
+
+.sale-line-total {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-success);
+  text-align: right;
 }
 
 /* Hàng meta (ngày, NCC…) cách khối dòng hàng ≈ 1 dòng */
@@ -687,4 +1413,310 @@ body {
 
 .document-editor-form > .ant-form-item {
   margin-bottom: 32px;
+}
+
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.page-toolbar h2 {
+  margin: 0;
+}
+
+/* Hai nút lọc ngày biểu đồ: riêng biệt, bo tròn, có khoảng cách */
+.chart-day-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.chart-day-toggle > button {
+  appearance: none;
+  margin: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: #4b5563;
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.chart-day-toggle > button.is-active {
+  background: #fff;
+  border-color: #fff;
+  color: #111827;
+  font-weight: 650;
+}
+
+html[data-theme="light"] .chart-day-toggle > button {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #4b5563;
+}
+
+html[data-theme="light"] .chart-day-toggle > button.is-active {
+  background: #fff;
+  border-color: var(--color-primary);
+  color: #111827;
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.app-content .ant-card .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.app-content .ant-card .ant-card-head {
+  height: auto;
+  min-height: 48px;
+}
+
+.app-content .ant-card .ant-card-extra {
+  max-width: 100%;
+}
+
+.app-content .ant-space:not(.ant-space-compact) {
+  max-width: 100%;
+  flex-wrap: wrap !important;
+}
+
+.app-content .ant-table-wrapper,
+.ant-modal .ant-table-wrapper,
+.app-content .ant-tabs,
+.app-content .ant-descriptions {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.app-content .ant-statistic-content-value {
+  overflow-wrap: anywhere;
+}
+
+.app-nav-drawer .ant-drawer-body {
+  padding: 0;
+  background: var(--color-sidebar);
+}
+
+.app-nav-drawer .ant-drawer-header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-nav-drawer .ant-drawer-title {
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-nav-drawer .ant-drawer-content {
+  background: var(--color-sidebar);
+}
+
+/* Điện thoại và iPad dọc: menu dạng ngăn kéo, nội dung full chiều ngang */
+@media (max-width: 991px) {
+  .app-content {
+    margin: 12px;
+  }
+
+  .app-content .ant-card.app-fill-card,
+  .app-content > .ant-card:only-child:not(.startup-card) {
+    min-height: 100%;
+  }
+}
+
+@media (max-width: 991px) {
+  .app-header.ant-layout-header {
+    height: auto !important;
+    min-height: 64px;
+    padding: 8px 12px !important;
+  }
+
+  .app-header-bar {
+    flex-wrap: wrap;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-header.ant-layout-header {
+    padding: 8px 12px !important;
+  }
+
+  .nav-toggle {
+    order: 1;
+  }
+
+  .app-header-end {
+    order: 2;
+  }
+
+  .app-header-shop {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .app-header-shop .shop-switch {
+    width: 100%;
+  }
+
+  .app-header-shop .shop-switch .ant-segmented-item {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .app-header-shop .shop-switch .ant-segmented-item-label {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+    padding-block: 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .app-header-role {
+    display: none;
+  }
+
+  .app-content {
+    margin: 10px;
+  }
+
+  .app-content .ant-card .ant-card-body {
+    padding: 16px;
+  }
+
+  .app-content .ant-card .ant-card-extra {
+    margin-inline-start: 0 !important;
+    width: 100%;
+  }
+
+  .app-content .ant-card .ant-card-extra > .ant-space {
+    width: 100%;
+  }
+
+  .app-content .ant-card .ant-card-extra .ant-space-item:has(.ant-select),
+  .app-content .ant-card .ant-card-extra .ant-space-item:has(.ant-picker) {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .app-content .ant-card .ant-card-extra .ant-segmented-item-label {
+    white-space: normal;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .app-content .ant-card .ant-card-extra .ant-select,
+  .app-content .ant-card .ant-card-extra .ant-picker,
+  .app-content .ant-card .ant-card-extra .ant-segmented,
+  .app-content .ant-card-body > .ant-space > .ant-space-item:has(.ant-input-search),
+  .app-content .ant-card-body > .ant-space > .ant-space-item:has(.ant-select),
+  .app-content .ant-card-body > .ant-space > .ant-space-item:has(.ant-picker) {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .app-content .ant-card-body > .ant-space > .ant-space-item:has(.ant-input-search) > *,
+  .app-content .ant-card-body > .ant-space > .ant-space-item:has(.ant-select) > *,
+  .app-content .ant-card-body > .ant-space > .ant-space-item:has(.ant-picker) > * {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .page-toolbar {
+    align-items: stretch;
+  }
+
+  .page-toolbar .ant-picker {
+    width: 100%;
+  }
+
+  .sale-line-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .sale-line-card-top {
+    flex-wrap: wrap;
+  }
+
+  .landing-wrap {
+    width: min(1120px, 100% - 48px);
+  }
+
+  .landing-hero {
+    padding: 36px 0 28px;
+  }
+
+  .landing-header-inner .ant-space {
+    width: 100%;
+  }
+
+  .login-card {
+    min-height: 0;
+  }
+
+  .login-card-body {
+    padding: 72px 20px 28px;
+  }
+
+  .login-submit {
+    width: 100%;
+  }
+
+  .login-underline-control.ant-select .ant-select-content,
+  .login-underline-control.ant-select .ant-select-selection-item,
+  .login-underline-control.ant-input-affix-wrapper input,
+  .login-underline-control.ant-input {
+    font-size: 16px;
+  }
+
+  .ant-modal {
+    max-width: calc(100vw - 16px) !important;
+    top: 8px;
+    margin: 0 auto;
+    padding-bottom: 8px;
+  }
+
+  .ant-modal .ant-modal-body {
+    max-height: calc(100dvh - 148px);
+    overflow: auto;
+  }
+
+  .app-pager-summary {
+    text-align: center;
+    padding-inline: 8px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .ant-modal {
+    max-width: calc(100vw - 32px) !important;
+  }
+
+  .app-content .ant-card .ant-card-head-title {
+    flex: 1 1 160px;
+  }
+
+  .app-content .ant-card .ant-card-extra {
+    margin-inline-start: 0 !important;
+  }
+
+  .app-content .ant-card.app-fill-card,
+  .app-content > .ant-card:only-child:not(.startup-card) {
+    min-height: 100%;
+  }
 }

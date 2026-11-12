@@ -1,14 +1,17 @@
 package com.aluminum.manager.attendance;
 
 import com.aluminum.manager.attendance.AttendanceDtos.AttendanceDayDto;
+import com.aluminum.manager.attendance.AttendanceDtos.AttendanceBonusRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.AttendancePolicyDto;
 import com.aluminum.manager.attendance.AttendanceDtos.AttendancePolicyRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.AttendanceUpsertRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.BulkAttendanceRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.EmployeeDto;
 import com.aluminum.manager.attendance.AttendanceDtos.EmployeeRequest;
+import com.aluminum.manager.attendance.AttendanceDtos.DayKindRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.HolidayDto;
 import com.aluminum.manager.attendance.AttendanceDtos.HolidayRequest;
+import com.aluminum.manager.attendance.AttendanceDtos.RollCallRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.MonthlyAttendanceBoardDto;
 import com.aluminum.manager.attendance.AttendanceDtos.OvertimeRequest;
 import com.aluminum.manager.attendance.AttendanceDtos.PayPayrollRequest;
@@ -24,6 +27,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -87,6 +91,12 @@ public class AttendanceController {
 		return ApiResponse.ok(service.addPayRate(id, request), "Đã lưu mức công mới");
 	}
 
+	@DeleteMapping("/employees/{id}/pay-rates/{rateId}")
+	public ApiResponse<Void> deletePayRate(@PathVariable long id, @PathVariable long rateId) {
+		service.deletePayRate(id, rateId);
+		return ApiResponse.ok(null, "Đã xóa mức công");
+	}
+
 	// ---------- Holidays & Policy ----------
 
 	@GetMapping("/holidays")
@@ -103,6 +113,12 @@ public class AttendanceController {
 	public ApiResponse<HolidayDto> updateHoliday(
 			@PathVariable long id, @Valid @RequestBody HolidayRequest request) {
 		return ApiResponse.ok(service.saveHoliday(id, request), "Đã cập nhật ngày nghỉ lễ");
+	}
+
+	@PutMapping("/attendance/day-kind")
+	public ApiResponse<HolidayDto> setDayKind(@Valid @RequestBody DayKindRequest request) {
+		HolidayDto saved = service.setDayKind(request);
+		return ApiResponse.ok(saved, saved == null ? "Đã bỏ loại ngày" : "Đã lưu loại ngày");
 	}
 
 	@GetMapping("/attendance/policy")
@@ -137,10 +153,29 @@ public class AttendanceController {
 		return ApiResponse.ok(service.bulkUpsert(request), "Đã lưu bảng chấm công");
 	}
 
+	@PostMapping("/attendance/roll-call")
+	public ApiResponse<Void> saveRollCall(@Valid @RequestBody RollCallRequest request) {
+		service.saveRollCall(request);
+		return ApiResponse.ok(null, "Đã lưu và khóa phiếu điểm danh");
+	}
+
+	@PostMapping("/attendance/roll-call/{date}/unlock")
+	public ApiResponse<Void> unlockRollCall(
+			@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+		service.unlockRollCall(date);
+		return ApiResponse.ok(null, "Đã mở lại phiếu điểm danh");
+	}
+
 	@PostMapping("/attendance/{id}/overtime")
 	public ApiResponse<AttendanceDayDto> addOvertime(
 			@PathVariable long id, @Valid @RequestBody OvertimeRequest request) {
 		return ApiResponse.ok(service.addOvertime(id, request), "Đã thêm tăng ca");
+	}
+
+	@PutMapping("/attendance/{id}/bonus")
+	public ApiResponse<AttendanceDayDto> saveBonus(
+			@PathVariable long id, @Valid @RequestBody AttendanceBonusRequest request) {
+		return ApiResponse.ok(service.saveBonus(id, request), "Đã lưu tiền thưởng");
 	}
 
 	@PutMapping("/overtime/{id}")
