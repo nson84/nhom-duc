@@ -97,3 +97,7 @@ Tạo phiếu bán Phân phối xác nhận và trừ tồn trong một giao d�
 ### Bổ sung giao diện Tổng tồn kho
 
 Phân phối hiển thị tổng giá trị tồn sổ, số kg đã nhập, đã giao và tồn sổ, có thể kiểm kê thực tế từng cặp sản phẩm/loại; số tổng không bị thay đổi khi tìm kiếm trong bảng. Xưởng hiển thị tóm tắt nhập, giao, phế liệu đã bán và hao hụt ước tính theo báo cáo quyết toán của năm hiện tại (không trừ tồn từng lần giao); có liên kết sang Quyết toán Xưởng. Chỉ tiêu phế liệu hiện là **đã bán**, không đại diện cho toàn bộ phế liệu chưa bán.
+
+Khi kiểm kê Phân phối, người vận hành có thể khai số kg vụn nằm trong phần thiếu so với tồn sổ. Hao hụt thuần bằng phần thiếu trừ vụn. Cả lần cân không lệch tồn cũng lưu dấu vết; các số vụn/hao hụt ở trang Tồn kho là **bản chụp lần kiểm kê gần nhất theo từng SP/loại**, không phải tổng phát sinh trong năm. Chốt kỳ từ chối nếu còn sản phẩm/loại chưa kiểm kê, tồn đã phát sinh giao dịch sau cân hoặc có biến động sau ngày kết thúc kỳ (không thể dùng số cân hiện tại làm tồn quá khứ).
+
+Xưởng: trang Tồn kho có thể chọn năm, hiển thị thêm vụn đã bán và vụn chưa bán theo kiểm kê năm; tồn cuối kỳ và hao hụt theo báo cáo Xưởng, không trừ hàng mỗi lần bán.
