@@ -767,7 +767,15 @@ public class StockDocumentService {
 			Balance balance = lockBalance(item.productId(), item.categoryId());
 			BigDecimal counted = item.countedQuantityKg().setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
 			BigDecimal delta = counted.subtract(balance.quantity()).setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
-			if (delta.signum() == 0) continue;
+			if (delta.signum() == 0) {
+				jdbc.update("""
+						INSERT INTO distribution_inventory_count_evidence
+						(shop_id, product_id, category_id, counted_quantity_kg, counted_at)
+						VALUES (?, ?, ?, ?, NOW(3))
+						ON DUPLICATE KEY UPDATE counted_quantity_kg = VALUES(counted_quantity_kg), counted_at = VALUES(counted_at)
+						""", shops.currentId(), item.productId(), item.categoryId(), counted);
+				continue;
+			}
 			Long unitIdValue = jdbc.queryForObject("""
 					SELECT id FROM product_units WHERE product_id = ? AND unit_name = 'tấn' AND is_active = 1
 					""", Long.class, item.productId());
@@ -781,6 +789,12 @@ public class StockDocumentService {
 			DocumentDto draft = createDraft(request);
 			DocumentDto confirmed = confirm(draft.id());
 			codes.add(confirmed.documentCode());
+			jdbc.update("""
+					INSERT INTO distribution_inventory_count_evidence
+					(shop_id, product_id, category_id, counted_quantity_kg, counted_at)
+					VALUES (?, ?, ?, ?, NOW(3))
+					ON DUPLICATE KEY UPDATE counted_quantity_kg = VALUES(counted_quantity_kg), counted_at = VALUES(counted_at)
+					""", shops.currentId(), item.productId(), item.categoryId(), counted);
 			if (delta.signum() < 0) shortage = shortage.add(delta.abs()); else surplus = surplus.add(delta);
 		}
 		if (!codes.isEmpty()) audit.record(CurrentAdmin.get().id(), "DISTRIBUTION_INVENTORY_COUNT", "stock_balances",
