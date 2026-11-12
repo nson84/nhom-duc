@@ -139,9 +139,6 @@ export function AppShell() {
       if (item.key === "/quyet-toan-xuong" && shop === "DISTRIBUTION") {
         return false;
       }
-      if (item.key === "/ton-kho" && shop === "MANUFACTURING") {
-        return false;
-      }
       return true;
     });
   }, [role, shop]);
