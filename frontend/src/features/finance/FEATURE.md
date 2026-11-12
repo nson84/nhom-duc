@@ -45,3 +45,7 @@ Phân phối ghi nước, bánh cho đội giao nhôm, bảo trì trong chi phí
 Báo cáo Phân phối hiển thị doanh thu, thực thu và công nợ.
 
 Phiếu chi Phân phối có nhóm bảo trì và người chi. Ghi chú phiếu chi là tùy chọn ở cả hai bên. Phân phối ẩn tab bán theo sản phẩm.
+
+### Lãi gộp vật tư tham khảo theo hóa đơn / tháng
+
+Tab **Lãi gộp hóa đơn / tháng** có doanh thu, giá vật tư tham khảo theo ngày giao và lãi vật tư ước tính cho từng hóa đơn, kèm tổng theo tháng. Không trừ tiền công, phụ kiện, hao hụt và chi phí hoạt động; **không** dùng làm lãi đã quyết toán. Nếu thiếu giá vốn tham khảo, số lãi để trống thay vì giả định giá vốn bằng 0. Dữ liệu lấy từ `GET /api/v1/reports/invoice-margins`, chỉ hiện một sổ (không gộp cả hai).
