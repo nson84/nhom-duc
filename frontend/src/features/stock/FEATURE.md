@@ -33,7 +33,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 - Danh sách: nhãn **Nội bộ** / **Khách hàng** trên số phiếu; lọc mặc định **Chưa thanh toán**; Thùng rác cho phiếu **đã hủy / đã đảo**
 - Khách hàng: **dropdown tìm kiếm** sổ khách; gõ tên mới được; sau lưu phiếu nếu chưa gắn khách → hỏi **Lưu khách hàng?**
 - Mỗi dòng: chọn **SP → loại nhôm** → đơn giá autofill từ loại
-- **Cách bán**: chỉ theo cân. Xưởng nhập kg/tạ/tấn thành phẩm đã giao (quy đổi kg nhôm, không gồm phụ kiện); Phân phối bán tấn. Phiếu bán xưởng mới không trừ tồn; Phân phối cũng không trừ tồn khi xác nhận phiếu bán mới. Đơn giá lấy từ loại nhôm và có thể sửa trên phiếu
+- **Cách bán**: chỉ theo cân. Xưởng nhập kg/tạ/tấn thành phẩm đã giao (quy đổi kg nhôm, không gồm phụ kiện); Phân phối bán tấn. Phiếu bán xưởng mới không trừ tồn; Phân phối trừ tồn ngay khi xác nhận phiếu bán (thiếu tồn sẽ báo lỗi). Đơn giá lấy từ loại nhôm và có thể sửa trên phiếu
 - Xưởng phải gắn khách mua trước khi xác nhận để cộng sản lượng và công nợ theo người. Phiếu xác nhận là hàng đã giao, không tạo đơn đặt hàng hoặc số còn phải giao
 - Khi tạo hoặc sửa phiếu bán Xưởng, ô chọn đơn vị nằm ngang hàng với ô khối lượng trên màn hình rộng. Giá nhập tham chiếu được lưu nội bộ và ẩn trên biểu mẫu lẫn chi tiết phiếu bán.
 - Phiếu m² đã xác nhận vẫn xem/in/đảo theo dữ liệu cũ. Phiếu nháp m² phải chuyển sang cân và nhập lại đơn giá trước khi xác nhận
