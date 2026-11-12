@@ -57,7 +57,8 @@ public class CatalogService {
 
 	/**
 	 * Chỉ Phân phối → Xưởng: loại khớp theo tên, SP khớp theo mã.
-	 * Loại mới: copy giá; loại đã có: chỉ cập nhật tên/mô tả/trạng thái (không ghi đè giá).
+	 * Loại mới: copy giá nhập tham khảo, KHÔNG copy giá bán thành phẩm.
+	 * Loại đã có: đồng bộ giá nhập tham khảo và giữ nguyên giá bán của Xưởng.
 	 * SP mới: tạo kèm đơn vị; SP đã có: cập nhật tên/ảnh/mô tả/trạng thái. Tồn kho không đụng.
 	 */
 	@Transactional
@@ -103,17 +104,23 @@ public class CatalogService {
 						    is_active, shop_id)
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 						""", src.name(), blankToNull(src.description()),
-						orZero(src.purchaseKg()), orZero(src.sellKg()), orZero(src.sellTa()),
-						orZero(src.sellTon()), orZero(src.sellM2()), src.active(), targetShopId);
+						orZero(src.purchaseKg()), BigDecimal.ZERO, BigDecimal.ZERO,
+						BigDecimal.ZERO, BigDecimal.ZERO, src.active(), targetShopId);
 				purchasePrices.record(newId, orZero(src.purchaseKg()), LocalDate.now(clock),
 						"Đồng bộ từ " + ShopContext.code());
 				categoriesCreated++;
 			} else {
 				jdbc.update("""
 						UPDATE product_categories
-						SET description = ?, is_active = ?
+						SET description = ?, is_active = ?, reference_purchase_price = ?
 						WHERE id = ?
-						""", blankToNull(src.description()), src.active(), targetId);
+						""", blankToNull(src.description()), src.active(), orZero(src.purchaseKg()), targetId);
+				// Đồng bộ mốc giá nhập tham khảo, không đụng các trường giá bán của Xưởng.
+				var currentPrice = purchasePrices.resolve(targetId, LocalDate.now(clock));
+				if (currentPrice == null || currentPrice.pricePerBase().compareTo(orZero(src.purchaseKg())) != 0) {
+					purchasePrices.record(targetId, orZero(src.purchaseKg()), LocalDate.now(clock),
+							"Đồng bộ giá nhập từ " + ShopContext.code());
+				}
 				categoriesUpdated++;
 			}
 		}
