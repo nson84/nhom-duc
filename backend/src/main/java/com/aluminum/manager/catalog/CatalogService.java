@@ -93,6 +93,9 @@ public class CatalogService {
 				orZero(rs.getBigDecimal("default_selling_price_m2"))), sourceShopId);
 
 		for (CategoryRow src : sourceCategories) {
+			// Ưu tiên giá nhập có hiệu lực hôm nay, không ghi đè giá bán Xưởng.
+			var sourcePrice = purchasePrices.resolve(src.id(), LocalDate.now(clock));
+			BigDecimal referencePrice = sourcePrice == null ? orZero(src.purchaseKg()) : sourcePrice.pricePerBase();
 			Long targetId = jdbc.query("""
 					SELECT id FROM product_categories WHERE shop_id = ? AND name = ?
 					""", (rs, i) -> rs.getLong("id"), targetShopId, src.name()).stream().findFirst().orElse(null);
@@ -104,9 +107,9 @@ public class CatalogService {
 						    is_active, shop_id)
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 						""", src.name(), blankToNull(src.description()),
-						orZero(src.purchaseKg()), BigDecimal.ZERO, BigDecimal.ZERO,
+						referencePrice, BigDecimal.ZERO, BigDecimal.ZERO,
 						BigDecimal.ZERO, BigDecimal.ZERO, src.active(), targetShopId);
-				purchasePrices.record(newId, orZero(src.purchaseKg()), LocalDate.now(clock),
+				if (referencePrice.signum() > 0) purchasePrices.record(newId, referencePrice, LocalDate.now(clock),
 						"Đồng bộ từ " + ShopContext.code());
 				categoriesCreated++;
 			} else {
@@ -114,11 +117,11 @@ public class CatalogService {
 						UPDATE product_categories
 						SET description = ?, is_active = ?, reference_purchase_price = ?
 						WHERE id = ?
-						""", blankToNull(src.description()), src.active(), orZero(src.purchaseKg()), targetId);
+						""", blankToNull(src.description()), src.active(), referencePrice, targetId);
 				// Đồng bộ mốc giá nhập tham khảo, không đụng các trường giá bán của Xưởng.
 				var currentPrice = purchasePrices.resolve(targetId, LocalDate.now(clock));
-				if (currentPrice == null || currentPrice.pricePerBase().compareTo(orZero(src.purchaseKg())) != 0) {
-					purchasePrices.record(targetId, orZero(src.purchaseKg()), LocalDate.now(clock),
+				if (referencePrice.signum() > 0 && (currentPrice == null || currentPrice.pricePerBase().compareTo(referencePrice) != 0)) {
+					purchasePrices.record(targetId, referencePrice, LocalDate.now(clock),
 							"Đồng bộ giá nhập từ " + ShopContext.code());
 				}
 				categoriesUpdated++;
