@@ -76,6 +76,17 @@ export type ProfitReport = {
   dailyRows: DailyRevenueRow[];
 };
 
+export type InvoiceGrossMargin = {
+  documentId: number;
+  documentCode: string;
+  documentDate: string;
+  customerName: string;
+  revenue: number;
+  estimatedMaterialCost: number | null;
+  estimatedGrossProfit: number | null;
+  costComplete: boolean;
+};
+
 export type ProductSalesRow = {
   productId: number;
   productCode: string;
@@ -170,6 +181,10 @@ export async function voidFinanceTransaction(id: number, reason: string): Promis
 
 export async function getProfitReport(from: string, to: string, scope?: "all"): Promise<ProfitReport> {
   return (await api.get<Envelope<ProfitReport>>("/api/v1/reports/profit", { params: { from, to, scope } })).data.data;
+}
+
+export async function getInvoiceMargins(from: string, to: string): Promise<InvoiceGrossMargin[]> {
+  return (await api.get<Envelope<InvoiceGrossMargin[]>>("/api/v1/reports/invoice-margins", { params: { from, to } })).data.data;
 }
 
 export async function getSalesByProductReport(params: {
