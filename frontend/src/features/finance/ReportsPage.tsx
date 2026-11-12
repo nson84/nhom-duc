@@ -245,7 +245,7 @@ export function ReportsPage() {
             type="primary"
             disabled={activeTab === "shrinkage" || activeTab === "invoice-margins" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
             onClick={() => {
-              if (activeTab === "shrinkage") return;
+              if (activeTab === "shrinkage" || activeTab === "invoice-margins") return;
               void downloadReportCsv({
                 type: activeTab,
                 scope,
