@@ -454,6 +454,54 @@ public class FinanceService {
 				dailyRows);
 	}
 
+	/**
+	 * Ước tính lãi gộp vật tư của phiếu bán theo giá nhập tham khảo tại ngày giao.
+	 * Không suy diễn giá vốn thực tế, nhân công, phụ kiện hoặc hao hụt từ các khoản này.
+	 */
+	@Transactional(readOnly = true)
+	public List<FinanceDtos.InvoiceGrossMarginDto> invoiceGrossMargins(LocalDate from, LocalDate to) {
+		DateRange period = range(from, to);
+		Timestamp start = Timestamp.valueOf(period.from().atStartOfDay());
+		Timestamp end = Timestamp.valueOf(period.to().plusDays(1).atStartOfDay());
+		String sql = shops.apply("""
+				SELECT d.id, d.document_code, DATE(d.document_date) AS sale_day,
+				       COALESCE(d.counterparty_name, 'Khách chưa gắn') AS customer_name,
+				       d.total_amount AS revenue,
+				       SUM(i.quantity_base * COALESCE(
+				           i.factory_reference_cost_per_kg,
+				           i.standard_cost_per_base_snapshot,
+				           (SELECT cpp.price_per_base FROM category_purchase_prices cpp
+				            WHERE cpp.category_id = i.category_id
+				              AND cpp.effective_from <= DATE(d.document_date)
+				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1)
+				       )) AS reference_cost,
+				       SUM(CASE WHEN COALESCE(
+				           i.factory_reference_cost_per_kg, i.standard_cost_per_base_snapshot,
+				           (SELECT cpp.price_per_base FROM category_purchase_prices cpp
+				            WHERE cpp.category_id = i.category_id
+				              AND cpp.effective_from <= DATE(d.document_date)
+				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1)
+				       ) IS NULL THEN 1 ELSE 0 END) AS missing_cost
+				FROM stock_documents d
+				JOIN stock_document_items i ON i.document_id = d.id
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				  AND d.is_internal = 0
+				  AND d.document_date >= ? AND d.document_date < ?
+				GROUP BY d.id, d.document_code, DATE(d.document_date),
+				         d.counterparty_name, d.total_amount
+				ORDER BY sale_day DESC, d.id DESC
+				""");
+		return jdbc.query(sql, (rs, index) -> {
+			BigDecimal revenue = scaleMoney(rs.getBigDecimal("revenue"));
+			boolean complete = rs.getInt("missing_cost") == 0;
+			BigDecimal cost = complete ? scaleMoney(rs.getBigDecimal("reference_cost")) : null;
+			return new FinanceDtos.InvoiceGrossMarginDto(
+					rs.getLong("id"), rs.getString("document_code"),
+					rs.getDate("sale_day").toLocalDate(), rs.getString("customer_name"),
+					revenue, cost, cost == null ? null : revenue.subtract(cost), complete);
+		}, start, end);
+	}
+
 	@Transactional(readOnly = true)
 	public List<ProductSalesRowDto> salesByProduct(
 			LocalDate from, LocalDate to, Long productId, Long categoryId) {
