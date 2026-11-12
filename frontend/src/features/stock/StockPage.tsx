@@ -31,6 +31,7 @@ export function StockPage() {
   const [countSaving, setCountSaving] = useState(false);
   const [countBalances, setCountBalances] = useState<StockBalance[]>([]);
   const [countedKg, setCountedKg] = useState<Record<string, number | null>>({});
+  const [scrapKg, setScrapKg] = useState<Record<string, number | null>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -60,14 +61,15 @@ export function StockPage() {
   const countRows = useMemo(() => countBalances.map((row) => {
     const key = `${row.productId}-${row.categoryId}`;
     const actualKg = countedKg[key] ?? null;
-    return { ...row, key, actualKg };
-  }), [countBalances, countedKg]);
+    return { ...row, key, actualKg, scrapKg: scrapKg[key] ?? 0 };
+  }), [countBalances, countedKg, scrapKg]);
 
   async function saveCount() {
     const items = countRows.flatMap((row) => row.actualKg == null ? [] : [{
       productId: row.productId,
       categoryId: row.categoryId,
       countedQuantityKg: row.actualKg,
+      scrapKg: row.scrapKg,
     }]);
     if (!items.length) {
       message.warning("Nhập số kg cân thực tế cho ít nhất một dòng.");
@@ -79,6 +81,7 @@ export function StockPage() {
       message.success("Đã lưu số cân kiểm kê.");
       setCountOpen(false);
       setCountedKg({});
+      setScrapKg({});
       const next = await listBalances({ q: query || undefined });
       setRows(next);
       setAllBalances(await listBalances({ onlyInStock: false }));
@@ -94,7 +97,9 @@ export function StockPage() {
     value: acc.value + Number(row.stockValue || 0),
     purchased: acc.purchased + Number(row.purchasedKg || 0),
     delivered: acc.delivered + Number(row.deliveredKg || 0),
-  }), { quantity: 0, value: 0, purchased: 0, delivered: 0 });
+    scrap: acc.scrap + Number(row.latestCountScrapKg || 0),
+    loss: acc.loss + Number(row.latestCountLossKg || 0),
+  }), { quantity: 0, value: 0, purchased: 0, delivered: 0, scrap: 0, loss: 0 });
 
   return (
     <Card title="Tồn kho" extra={<Space>
@@ -103,6 +108,7 @@ export function StockPage() {
           setCountBalances(allRows.filter((row) => row.purchasedKg > 0 || row.quantityBase > 0)
             .sort((a, b) => a.categoryName.localeCompare(b.categoryName, "vi")));
           setCountedKg({});
+          setScrapKg({});
           setCountOpen(true);
         }).catch((error) => message.error(toApiError(error).message));
       }}>Kiểm kê / Hao hụt</AppActionButton>}
@@ -112,6 +118,8 @@ export function StockPage() {
         <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã nhập (kg)" value={qtyFormat.format(total.purchased)} /></Card></Col>
         <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã giao (kg)" value={qtyFormat.format(total.delivered)} /></Card></Col>
         <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tồn sổ (kg)" value={qtyFormat.format(total.quantity)} /></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Vụn nhôm kiểm kê gần nhất (kg)" value={qtyFormat.format(total.scrap)} /></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Hao hụt thực kiểm gần nhất (kg)" value={qtyFormat.format(total.loss)} /></Card></Col>
       </Row> : <>
         <Alert style={{ marginBottom: 12 }} type="info" showIcon message="Xưởng không trừ kho khi giao thành phẩm; tồn và hao hụt được quyết toán theo kiểm kê cuối kỳ." description={<Link to="/quyet-toan-xuong">Mở quyết toán Xưởng để kiểm kê từng loại nhôm và chốt kỳ</Link>} />
         <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
@@ -123,6 +131,7 @@ export function StockPage() {
           <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Giá trị nguyên liệu cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} /></Card></Col>
         </Row>
       </>}
+      {asTon && <Alert type="info" showIcon style={{ marginBottom: 12 }} message="Số vụn và hao hụt chỉ là lần kiểm kê gần nhất của từng loại, không cộng dồn theo năm. Muốn chốt kỳ phải cân đủ các loại đã phát sinh." />}
       {asTon && <Space style={{ marginBottom: 16 }} wrap>
         <LiveSearch value={query} onChange={setQuery} placeholder="Tìm mã hoặc tên" style={{ width: 360 }} suggestions={rows.flatMap((r) => [r.productCode, r.productName, r.categoryName])} />
       </Space>}
@@ -164,8 +173,8 @@ export function StockPage() {
           showIcon
           type="info"
           style={{ marginBottom: 16 }}
-          message="Hao hụt = tồn sổ − số cân thực tế"
-          description="Số nhập và số giao lấy từ các phiếu đã xác nhận, gồm cả giao nội bộ. Chỉ nhập số kg cân được. Để trống dòng chưa kiểm kê, hoặc nhập 0 nếu đã cân và kho không còn hàng."
+          message="Chênh lệch = tồn sổ − nguyên liệu thực cân; hao hụt thuần = chênh lệch thiếu − vụn nhôm"
+          description="Nhập số kg nguyên liệu còn trong kho và kg vụn nằm trong phần thiếu so với tồn sổ. Vụn không được lớn hơn phần thiếu. Để trống khối lượng nguyên liệu nếu loại chưa kiểm kê; nhập 0 nếu đã cân và không còn hàng. Thống kê giữ lần kiểm kê mới nhất theo từng loại."
         />
         <PagedTable
           rowKey="key"
@@ -182,9 +191,14 @@ export function StockPage() {
               <InputNumber min={0} step={0.001} precision={3} value={row.actualKg} style={{ width: 150 }}
                 onChange={(value) => setCountedKg((current) => ({ ...current, [row.key]: value }))} />
             ) },
-            { title: "Hao hụt (kg)", align: "center", render: (_, row) => {
+            { title: "Vụn nhôm trong chênh lệch (kg)", align: "center", render: (_, row) => (
+              <InputNumber min={0} max={row.actualKg == null ? undefined : Math.max(0, row.quantityBase - row.actualKg)}
+                step={0.001} precision={3} value={row.scrapKg} style={{ width: 145 }}
+                onChange={(value) => setScrapKg((current) => ({ ...current, [row.key]: value }))} />
+            ) },
+            { title: "Hao hụt thuần (kg)", align: "center", render: (_, row) => {
               if (row.actualKg == null) return "—";
-              const rounded = Math.round((row.quantityBase - row.actualKg) * 1000) / 1000;
+              const rounded = Math.round((row.quantityBase - row.actualKg - row.scrapKg) * 1000) / 1000;
               return <span style={{ color: rounded > 0 ? "var(--color-danger)" : rounded < 0 ? "var(--color-success)" : undefined }}>
                 {rounded < 0 ? `Thừa ${qtyFormat.format(-rounded)}` : qtyFormat.format(rounded)}
               </span>;
