@@ -21,6 +21,7 @@ export function StockPage() {
   const canWrite = useCanWrite();
   const asTon = shop === "DISTRIBUTION";
   const [rows, setRows] = useState<StockBalance[]>([]);
+  const [allBalances, setAllBalances] = useState<StockBalance[]>([]);
   const [factoryReport, setFactoryReport] = useState<YearReport | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,10 @@ export function StockPage() {
       .catch((error) => message.error(toApiError(error).message))
       .finally(() => setLoading(false));
   }, [query]);
+
+  useEffect(() => {
+    listBalances({ onlyInStock: false }).then(setAllBalances).catch(() => setAllBalances([]));
+  }, [shop]);
 
   useEffect(() => {
     if (asTon) { setFactoryReport(null); return; }
@@ -76,6 +81,7 @@ export function StockPage() {
       setCountedKg({});
       const next = await listBalances({ q: query || undefined });
       setRows(next);
+      setAllBalances(await listBalances({ onlyInStock: false }));
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
@@ -83,7 +89,7 @@ export function StockPage() {
     }
   }
 
-  const total = rows.reduce((acc, row) => ({
+  const total = allBalances.reduce((acc, row) => ({
     quantity: acc.quantity + Number(row.quantityBase || 0),
     value: acc.value + Number(row.stockValue || 0),
     purchased: acc.purchased + Number(row.purchasedKg || 0),
