@@ -1,4 +1,4 @@
-import { Alert, Card, InputNumber, Modal, Space, Tag, message } from "antd";
+import { Alert, Card, Col, InputNumber, Modal, Row, Space, Statistic, Tag, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import dayjs from "dayjs";
@@ -11,6 +11,8 @@ import { useShop } from "../shop/shop-store";
 import { listBalances, listMovements, saveInventoryCount, type Movement, type StockBalance } from "./stock-api";
 import { AppActionButton } from "../../components/AppButtons";
 import { useCanWrite } from "../auth/auth-store";
+import { getYearReport, type YearReport } from "../factory/factory-api";
+import { Link } from "react-router-dom";
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
 
@@ -19,6 +21,7 @@ export function StockPage() {
   const canWrite = useCanWrite();
   const asTon = shop === "DISTRIBUTION";
   const [rows, setRows] = useState<StockBalance[]>([]);
+  const [factoryReport, setFactoryReport] = useState<YearReport | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<StockBalance | null>(null);
@@ -35,6 +38,11 @@ export function StockPage() {
       .catch((error) => message.error(toApiError(error).message))
       .finally(() => setLoading(false));
   }, [query]);
+
+  useEffect(() => {
+    if (asTon) { setFactoryReport(null); return; }
+    getYearReport(dayjs().year()).then(setFactoryReport).catch(() => setFactoryReport(null));
+  }, [asTon]);
 
   useEffect(() => {
     if (!selected) return;
@@ -75,6 +83,13 @@ export function StockPage() {
     }
   }
 
+  const total = rows.reduce((acc, row) => ({
+    quantity: acc.quantity + Number(row.quantityBase || 0),
+    value: acc.value + Number(row.stockValue || 0),
+    purchased: acc.purchased + Number(row.purchasedKg || 0),
+    delivered: acc.delivered + Number(row.deliveredKg || 0),
+  }), { quantity: 0, value: 0, purchased: 0, delivered: 0 });
+
   return (
     <Card title="Tồn kho" extra={<Space>
       {asTon && canWrite && <AppActionButton tone="secondary" icon={<AuditOutlined />} onClick={() => {
@@ -86,10 +101,26 @@ export function StockPage() {
         }).catch((error) => message.error(toApiError(error).message));
       }}>Kiểm kê / Hao hụt</AppActionButton>}
     </Space>}>
-      <Space style={{ marginBottom: 16 }} wrap>
+      {asTon ? <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Giá trị tồn sổ hiện tại" value={formatMoney(total.value)} /></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã nhập (kg)" value={qtyFormat.format(total.purchased)} /></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã giao (kg)" value={qtyFormat.format(total.delivered)} /></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tồn sổ (kg)" value={qtyFormat.format(total.quantity)} /></Card></Col>
+      </Row> : <>
+        <Alert style={{ marginBottom: 12 }} type="info" showIcon message="Xưởng không trừ kho khi giao thành phẩm; tồn và hao hụt được quyết toán theo kiểm kê cuối kỳ." description={<Link to="/quyet-toan-xuong">Mở quyết toán Xưởng để kiểm kê từng loại nhôm và chốt kỳ</Link>} />
+        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Tiền nhập nguyên liệu trong kỳ" value={formatMoney(factoryReport?.purchaseValue ?? 0)} /></Card></Col>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Khối lượng nhập (kg)" value={qtyFormat.format(factoryReport?.purchasedKg ?? 0)} /></Card></Col>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Đã giao khách (kg)" value={qtyFormat.format(factoryReport?.finishedSoldKg ?? 0)} /></Card></Col>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Vụn nhôm đã bán (kg)" value={qtyFormat.format(factoryReport?.scrapSoldKg ?? 0)} /></Card></Col>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Hao hụt ước tính (kg)" value={factoryReport?.estimatedLossKg == null ? "Chưa kiểm kê" : qtyFormat.format(factoryReport.estimatedLossKg)} /></Card></Col>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Giá trị nguyên liệu cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} /></Card></Col>
+        </Row>
+      </>}
+      {asTon && <Space style={{ marginBottom: 16 }} wrap>
         <LiveSearch value={query} onChange={setQuery} placeholder="Tìm mã hoặc tên" style={{ width: 360 }} suggestions={rows.flatMap((r) => [r.productCode, r.productName, r.categoryName])} />
-      </Space>
-      <PagedTable<StockBalance>
+      </Space>}
+      {asTon && <PagedTable<StockBalance>
         rowKey={(r) => `${r.productId}-${r.categoryId}`}
         loading={loading}
         dataSource={rows}
@@ -112,7 +143,7 @@ export function StockPage() {
             },
           },
         ]}
-      />
+      />}
       <Modal
         open={countOpen}
         title="Kiểm kê tồn kho và tính hao hụt"
