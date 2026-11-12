@@ -44,6 +44,17 @@ public class DashboardService {
 				  AND status = 'CONFIRMED'
 				  AND document_date >= ? AND document_date < ?
 				""", range);
+		BigDecimal purchaseAmount = money("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM stock_documents
+				WHERE document_type = 'PURCHASE' AND status = 'CONFIRMED'
+				  AND document_date >= ? AND document_date < ?
+				""", range);
+		BigDecimal deliveredKg = money("""
+				SELECT COALESCE(SUM(i.quantity_base), 0)
+				FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				  AND d.document_date >= ? AND d.document_date < ?
+				""", range);
 		BigDecimal cogs = money("""
 				SELECT COALESCE(SUM(i.cost_total_snapshot), 0)
 				FROM stock_document_items i
@@ -93,7 +104,9 @@ public class DashboardService {
 				shops.isDistribution() ? debts(range, true) : null,
 				shops.isDistribution() ? debts(range, false) : null,
 				shops.isDistribution() ? cashExpenses(range) : null,
-				shops.isDistribution() ? closing(range) : null);
+				shops.isDistribution() ? closing(range) : null,
+				purchaseAmount,
+				deliveredKg);
 	}
 
 	private BigDecimal cashExpenses(DateRange range) {
