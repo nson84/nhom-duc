@@ -45,3 +45,7 @@ Kiểm tra bộ lọc tên năm trên Tổng quan, Báo cáo, Thu chi: khi chọ
 Kiểm tra form phiếu chi ở cả hai sổ có đúng năm lựa chọn mới; lưu từng mục và xác nhận danh sách, chi tiết, Sổ cuối năm hiển thị tên khoản chi. Xác nhận bốn khoản đầu tính vào chi phí hoạt động, khoản sửa chữa vào bảo trì, và chi trả phiếu nhập vẫn chỉ ghi trên phiếu nhập.
 
 Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên tiếp khi kỳ tháng chưa có: các yêu cầu tạo/lấy kỳ đồng thời phải cùng trả về một kỳ, không hiện lỗi ràng buộc trùng `(period_year, period_month)`.
+# Kiểm thử bổ sung cho báo cáo lãi gộp hóa đơn
+
+- Nếu một dòng thiếu giá tham khảo hoặc giá tham khảo bằng 0, lãi của hóa đơn và tổng tháng phải để trống thay vì coi giá vốn bằng 0.
+- Cặp sản phẩm/loại từng có biến động kho nhưng hiện tồn 0 vẫn phải xuất hiện trong popup kiểm kê Phân phối để ghi nhận bằng chứng đã cân.

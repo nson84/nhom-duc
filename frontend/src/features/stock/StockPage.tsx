@@ -108,8 +108,7 @@ export function StockPage() {
     <Card title="Tồn kho" extra={<Space>
       {asTon && canWrite && <AppActionButton tone="secondary" icon={<AuditOutlined />} onClick={() => {
         void listBalances({ onlyInStock: false }).then((allRows) => {
-          setCountBalances(allRows.filter((row) => row.purchasedKg > 0 || row.quantityBase > 0)
-            .sort((a, b) => a.categoryName.localeCompare(b.categoryName, "vi")));
+          setCountBalances(allRows.sort((a, b) => a.categoryName.localeCompare(b.categoryName, "vi")));
           setCountedKg({});
           setScrapKg({});
           setCountOpen(true);

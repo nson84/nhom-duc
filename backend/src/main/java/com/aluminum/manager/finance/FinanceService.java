@@ -468,19 +468,19 @@ public class FinanceService {
 				       COALESCE(d.counterparty_name, 'Khách chưa gắn') AS customer_name,
 				       d.total_amount AS revenue,
 				       SUM(i.quantity_base * COALESCE(
-				           i.factory_reference_cost_per_kg,
-				           i.standard_cost_per_base_snapshot,
-				           (SELECT cpp.price_per_base FROM category_purchase_prices cpp
+				           NULLIF(i.factory_reference_cost_per_kg, 0),
+				           NULLIF(i.standard_cost_per_base_snapshot, 0),
+				           NULLIF((SELECT cpp.price_per_base FROM category_purchase_prices cpp
 				            WHERE cpp.category_id = i.category_id
 				              AND cpp.effective_from <= DATE(d.document_date)
-				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1)
+				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1), 0)
 				       )) AS reference_cost,
 				       SUM(CASE WHEN COALESCE(
-				           i.factory_reference_cost_per_kg, i.standard_cost_per_base_snapshot,
-				           (SELECT cpp.price_per_base FROM category_purchase_prices cpp
+				           NULLIF(i.factory_reference_cost_per_kg, 0), NULLIF(i.standard_cost_per_base_snapshot, 0),
+				           NULLIF((SELECT cpp.price_per_base FROM category_purchase_prices cpp
 				            WHERE cpp.category_id = i.category_id
 				              AND cpp.effective_from <= DATE(d.document_date)
-				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1)
+				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1), 0)
 				       ) IS NULL THEN 1 ELSE 0 END) AS missing_cost
 				FROM stock_documents d
 				JOIN stock_document_items i ON i.document_id = d.id
@@ -491,15 +491,20 @@ public class FinanceService {
 				         d.counterparty_name, d.total_amount
 				ORDER BY sale_day DESC, d.id DESC
 				""");
-		return jdbc.query(sql, (rs, index) -> {
-			BigDecimal revenue = scaleMoney(rs.getBigDecimal("revenue"));
-			boolean complete = rs.getInt("missing_cost") == 0;
-			BigDecimal cost = complete ? scaleMoney(rs.getBigDecimal("reference_cost")) : null;
-			return new FinanceDtos.InvoiceGrossMarginDto(
-					rs.getLong("id"), rs.getString("document_code"),
-					rs.getDate("sale_day").toLocalDate(), rs.getString("customer_name"),
-					revenue, cost, cost == null ? null : revenue.subtract(cost), complete);
-		}, start, end);
+		return jdbc.query(sql, (rs, index) -> invoiceMargin(
+				rs.getLong("id"), rs.getString("document_code"),
+				rs.getDate("sale_day").toLocalDate(), rs.getString("customer_name"),
+				rs.getBigDecimal("revenue"), rs.getBigDecimal("reference_cost"),
+				rs.getInt("missing_cost")), start, end);
+	}
+
+	static FinanceDtos.InvoiceGrossMarginDto invoiceMargin(long id, String code, LocalDate day,
+			String customer, BigDecimal revenueValue, BigDecimal referenceCost, int missingCost) {
+		BigDecimal revenue = scaleMoney(revenueValue);
+		boolean complete = missingCost == 0 && referenceCost != null;
+		BigDecimal cost = complete ? scaleMoney(referenceCost) : null;
+		return new FinanceDtos.InvoiceGrossMarginDto(id, code, day, customer, revenue,
+				cost, cost == null ? null : revenue.subtract(cost), complete);
 	}
 
 	@Transactional(readOnly = true)

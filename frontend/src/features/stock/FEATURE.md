@@ -55,7 +55,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 **Chức năng**
 - Bảng tồn theo **SP + loại nhôm** + giá trị tồn
 - Phân phối hiển thị tấn. Xưởng dùng trang Quyết toán xưởng và kiểm kê cuối năm
-- Phân phối có **Kiểm kê / Hao hụt**: chỉ nhập kg còn trong kho theo từng SP + loại. Popup tính hao hụt = kg nhập − kg giao (gồm nội bộ) − kg còn, lấy phiếu đã xác nhận và chưa đảo. Khi lưu, chỉ các dòng đã nhập được điều chỉnh để tồn sổ khớp số cân.
+- Phân phối có **Kiểm kê / Hao hụt**: nhập kg nguyên liệu còn trong kho và kg vụn theo từng SP + loại. Popup liệt kê cả cặp hiện tồn 0 để có thể ghi nhận lần cân cho mọi cặp từng phát sinh kho. Khi lưu, chỉ các dòng đã nhập được điều chỉnh để tồn sổ khớp số cân; hao hụt thuần là phần thiếu trừ vụn.
 - Click dòng → biến động tồn
 
 ### Luồng phiếu kho (nháp / hủy / đảo → thùng rác)
