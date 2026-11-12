@@ -12,9 +12,9 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 **Chức năng**
 - Chọn tên năm để xem đúng kỳ của năm đó; ngày bắt đầu/kết thúc hiện cạnh bộ lọc.
-- KPI: doanh thu, tiền thực thu, lãi gộp, chi phí…
+- KPI chính: tổng tiền hàng nhập, tiền bán dự kiến, tiền thực thu, nợ khách, tổng khối lượng đã giao (kg quy đổi thành tấn). Các chỉ số quyết toán chi tiết xem ở báo cáo hoặc quyết toán.
 - Biểu đồ cột theo ngày (lọc ngày có phát sinh / tất cả)
-- Biểu đồ tròn cấu trúc (giá vốn / lãi / chi phí / chưa thu)
+- Dashboard chỉ giữ biểu đồ cột so sánh doanh thu dự kiến và tiền đã thu; bỏ các KPI chi phí/lãi khỏi trang này.
 - Cảnh báo nếu lần sao lưu gần nhất thất bại
 
 ## Bổ sung theo code hiện tại
