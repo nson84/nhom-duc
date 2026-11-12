@@ -73,6 +73,8 @@ import { useCanWrite } from "../auth/auth-store";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { KG_PER_TA, KG_PER_TON, formatTonFromKg } from "./product-stock-unit";
 
+const FACTORY_SYNC_PRICE_REVIEW_KEY = "aluminum:factory-sync-price-review";
+
 type ProductFormValues = ProductInput;
 
 export function ProductsPage() {
@@ -103,7 +105,7 @@ export function ProductsPage() {
         <>
           Đẩy <strong>sản phẩm</strong> và <strong>loại nhôm</strong> từ Phân phối sang{" "}
           <strong>{SHOP_LABELS.MANUFACTURING}</strong>. Khớp theo mã SP / tên loại. Loại mới copy giá;
-          loại đã có giữ giá bên Xưởng. <strong>Tồn kho không đồng bộ</strong>. Chỉ Phân phối đồng bộ
+          loại đã có giữ giá bán bên Xưởng; loại mới cần đặt giá bán thành phẩm riêng. Giá nhập tham khảo được đồng bộ. <strong>Tồn kho không đồng bộ</strong>. Chỉ Phân phối đồng bộ
           sang Xưởng (Xưởng không đồng bộ ngược).
         </>
       ),
@@ -113,6 +115,8 @@ export function ProductsPage() {
         setSyncing(true);
         try {
           const result = await syncCatalogToOtherShop();
+          localStorage.setItem(FACTORY_SYNC_PRICE_REVIEW_KEY, "1");
+          message.warning("Đã đồng bộ. Hãy chuyển sang sổ Xưởng để kiểm tra và xác nhận giá bán thành phẩm.", 8);
           message.success(
             `Đã đồng bộ sang ${result.targetShopName}: loại +${result.categoriesCreated}/cập nhật ${result.categoriesUpdated}, SP +${result.productsCreated}/cập nhật ${result.productsUpdated}`,
           );
@@ -599,6 +603,12 @@ function CategoriesModal({
   const [editing, setEditing] = useState<Category | null>(null);
   const [pricesFor, setPricesFor] = useState<Category | null>(null);
   const [saving, setSaving] = useState(false);
+  const shop = useShop();
+  const [reviewPrices, setReviewPrices] = useState(() => localStorage.getItem(FACTORY_SYNC_PRICE_REVIEW_KEY) === "1");
+  const acknowledgePrices = () => {
+    localStorage.removeItem(FACTORY_SYNC_PRICE_REVIEW_KEY);
+    setReviewPrices(false);
+  };
   /** Giá đúng gần nhất của từng ô — blur ô gõ dở (không bội 500) thì trả về số này. */
   const lastValid = useRef<Partial<Record<CategoryPriceField, number>>>({});
 
@@ -652,7 +662,7 @@ function CategoriesModal({
   const priceInput = (field: CategoryPriceField, placeholder: string) => (
     <InputNumber<number>
       {...vndInputNumberProps}
-      style={{ width: 180 }}
+      style={{ width: 180, ...(shop === "MANUFACTURING" && reviewPrices && field !== "purchasePriceTon" ? { border: "2px solid #faad14", borderRadius: 7, boxShadow: "0 0 0 3px rgba(250,173,20,.18)" } : {}) }}
       placeholder={placeholder}
       onBlur={() => commitPrice(field)}
     />
@@ -660,6 +670,9 @@ function CategoriesModal({
 
   return (
     <Modal open title="Loại nhôm" footer={null} onCancel={onClose} width={1040}>
+      {shop === "MANUFACTURING" && reviewPrices && <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+        message="Danh mục vừa đồng bộ từ Phân phối — cần kiểm tra giá bán thành phẩm"
+        description={<Space direction="vertical"><span>Giá bán Xưởng được giữ độc lập. Loại mới chưa có giá bán; hãy chọn Sửa từng loại và điền giá trước khi bán. Các ô giá bán được viền vàng để nhắc kiểm tra.</span><AppActionButton tone="secondary" onClick={acknowledgePrices}>Đã kiểm tra / Giữ nguyên các giá đang có</AppActionButton></Space>} />}
       <Table<Category>
         rowKey="id"
         size="small"
