@@ -15,3 +15,5 @@ Bản chụp lưu ngày bắt đầu/kết thúc kỳ do cửa hàng chọn. N�
 ## Màn hình liên quan
 
 [dashboard](../../../../../../../../frontend/src/features/dashboard/FEATURE.md)
+
+Phân phối chỉ được chốt kỳ khi đã cân đủ từng SP/loại có biến động kho và lần cân mới nhất còn khớp tồn. Kiểm tra `distribution_inventory_count_evidence`: số cân, ngày cân, các biến động sau kiểm kê và các biến động sau ngày chốt. Không dùng tồn hiện tại để giả làm tồn quá khứ khi đã có giao dịch sau ngày chốt. Cần đối chiếu riêng dữ liệu lịch sử trước khi chốt.
