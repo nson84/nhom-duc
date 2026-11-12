@@ -1,4 +1,4 @@
-import { Alert, Card, Col, InputNumber, Modal, Row, Space, Statistic, Tag, message } from "antd";
+import { Alert, Card, Col, DatePicker, InputNumber, Modal, Row, Space, Statistic, Tag, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import dayjs from "dayjs";
@@ -22,6 +22,7 @@ export function StockPage() {
   const asTon = shop === "DISTRIBUTION";
   const [rows, setRows] = useState<StockBalance[]>([]);
   const [allBalances, setAllBalances] = useState<StockBalance[]>([]);
+  const [factoryYear, setFactoryYear] = useState(dayjs().year());
   const [factoryReport, setFactoryReport] = useState<YearReport | null>(null);
   const [factoryCount, setFactoryCount] = useState<YearCount | null>(null);
   const [query, setQuery] = useState("");
@@ -48,9 +49,9 @@ export function StockPage() {
 
   useEffect(() => {
     if (asTon) { setFactoryReport(null); setFactoryCount(null); return; }
-    getYearReport(dayjs().year()).then(setFactoryReport).catch(() => setFactoryReport(null));
-    getYearCount(dayjs().year()).then(setFactoryCount).catch(() => setFactoryCount(null));
-  }, [asTon]);
+    getYearReport(factoryYear).then(setFactoryReport).catch(() => setFactoryReport(null));
+    getYearCount(factoryYear).then(setFactoryCount).catch(() => setFactoryCount(null));
+  }, [asTon, factoryYear]);
 
   useEffect(() => {
     if (!selected) return;
@@ -115,6 +116,7 @@ export function StockPage() {
         }).catch((error) => message.error(toApiError(error).message));
       }}>Kiểm kê / Hao hụt</AppActionButton>}
     </Space>}>
+      {!asTon && <Space style={{ marginBottom: 12 }} wrap><span>Kỳ kiểm kê Xưởng:</span><DatePicker picker="year" allowClear={false} value={dayjs(`${factoryYear}-01-01`)} onChange={(value) => value && setFactoryYear(value.year())} /></Space>}
       {asTon ? <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Giá trị tồn sổ hiện tại" value={formatMoney(total.value)} /></Card></Col>
         <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã nhập (kg)" value={qtyFormat.format(total.purchased)} /></Card></Col>
