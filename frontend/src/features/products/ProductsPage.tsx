@@ -104,7 +104,7 @@ export function ProductsPage() {
       content: (
         <>
           Đẩy <strong>sản phẩm</strong> và <strong>loại nhôm</strong> từ Phân phối sang{" "}
-          <strong>{SHOP_LABELS.MANUFACTURING}</strong>. Khớp theo mã SP / tên loại. Loại mới copy giá;
+          <strong>{SHOP_LABELS.MANUFACTURING}</strong>. Khớp theo mã SP / tên loại. Loại mới chỉ copy giá nhập;
           loại đã có giữ giá bán bên Xưởng; loại mới cần đặt giá bán thành phẩm riêng. Giá nhập tham khảo được đồng bộ. <strong>Tồn kho không đồng bộ</strong>. Chỉ Phân phối đồng bộ
           sang Xưởng (Xưởng không đồng bộ ngược).
         </>
