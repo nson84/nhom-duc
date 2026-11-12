@@ -11,7 +11,7 @@ import { useShop } from "../shop/shop-store";
 import { listBalances, listMovements, saveInventoryCount, type Movement, type StockBalance } from "./stock-api";
 import { AppActionButton } from "../../components/AppButtons";
 import { useCanWrite } from "../auth/auth-store";
-import { getYearReport, type YearReport } from "../factory/factory-api";
+import { getYearCount, getYearReport, type YearCount, type YearReport } from "../factory/factory-api";
 import { Link } from "react-router-dom";
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
@@ -23,6 +23,7 @@ export function StockPage() {
   const [rows, setRows] = useState<StockBalance[]>([]);
   const [allBalances, setAllBalances] = useState<StockBalance[]>([]);
   const [factoryReport, setFactoryReport] = useState<YearReport | null>(null);
+  const [factoryCount, setFactoryCount] = useState<YearCount | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<StockBalance | null>(null);
@@ -46,8 +47,9 @@ export function StockPage() {
   }, [shop]);
 
   useEffect(() => {
-    if (asTon) { setFactoryReport(null); return; }
+    if (asTon) { setFactoryReport(null); setFactoryCount(null); return; }
     getYearReport(dayjs().year()).then(setFactoryReport).catch(() => setFactoryReport(null));
+    getYearCount(dayjs().year()).then(setFactoryCount).catch(() => setFactoryCount(null));
   }, [asTon]);
 
   useEffect(() => {
@@ -127,6 +129,7 @@ export function StockPage() {
           <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Khối lượng nhập (kg)" value={qtyFormat.format(factoryReport?.purchasedKg ?? 0)} /></Card></Col>
           <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Đã giao khách (kg)" value={qtyFormat.format(factoryReport?.finishedSoldKg ?? 0)} /></Card></Col>
           <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Vụn nhôm đã bán (kg)" value={qtyFormat.format(factoryReport?.scrapSoldKg ?? 0)} /></Card></Col>
+          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Vụn chưa bán kiểm kê (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(factoryCount.scrapKg)} /></Card></Col>
           <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Hao hụt ước tính (kg)" value={factoryReport?.estimatedLossKg == null ? "Chưa kiểm kê" : qtyFormat.format(factoryReport.estimatedLossKg)} /></Card></Col>
           <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Giá trị nguyên liệu cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} /></Card></Col>
         </Row>
