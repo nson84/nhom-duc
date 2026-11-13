@@ -58,8 +58,8 @@ public class CatalogService {
 	/**
 	 * Chỉ Phân phối → Xưởng: loại khớp theo tên, SP khớp theo mã.
 	 * Loại mới: copy giá nhập tham khảo, KHÔNG copy giá bán thành phẩm.
-	 * Loại đã có: đồng bộ giá nhập tham khảo và giữ nguyên giá bán của Xưởng.
-	 * SP mới: tạo kèm đơn vị; SP đã có: cập nhật tên/ảnh/mô tả/trạng thái. Tồn kho không đụng.
+	 * Loại đã có: đồng bộ giá nhập tham khảo, giữ giá bán/mô tả/trạng thái của Xưởng.
+	 * SP mới: tạo kèm đơn vị; SP đã có: chỉ cập nhật tên/ảnh. Tồn kho không đụng.
 	 */
 	@Transactional
 	public CatalogSyncResult syncCatalogToOtherShop() {
@@ -115,9 +115,9 @@ public class CatalogService {
 			} else {
 				jdbc.update("""
 						UPDATE product_categories
-						SET description = ?, is_active = ?, reference_purchase_price = ?
+						SET reference_purchase_price = ?
 						WHERE id = ?
-						""", blankToNull(src.description()), src.active(), referencePrice, targetId);
+						""", referencePrice, targetId);
 				// Đồng bộ mốc giá nhập tham khảo, không đụng các trường giá bán của Xưởng.
 				var currentPrice = purchasePrices.resolve(targetId, LocalDate.now(clock));
 				if (referencePrice.signum() > 0 && (currentPrice == null || currentPrice.pricePerBase().compareTo(referencePrice) != 0)) {
@@ -170,10 +170,9 @@ public class CatalogService {
 			} else {
 				jdbc.update("""
 						UPDATE products
-						SET name = ?, image_path = ?, description = ?, is_active = ?
+						SET name = ?, image_path = ?
 						WHERE id = ?
-						""", src.name().trim(), image, blankToNull(src.description()),
-						src.active(), targetId);
+						""", src.name().trim(), image, targetId);
 				ensureRetailTaUnit(targetId, UNIT_KG);
 				ensureTonUnit(targetId, UNIT_KG);
 				productsUpdated++;

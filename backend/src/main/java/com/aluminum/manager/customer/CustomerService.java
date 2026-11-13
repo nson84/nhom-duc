@@ -114,7 +114,7 @@ public class CustomerService {
 				row.shopCode(), row.shopName(),
 				debt.totalSales(), debt.outstanding(),
 				saleCount == null ? 0 : saleCount,
-				debt.openCount());
+				debt.openCount(), debt.receivedAmount(), debt.deliveredKg());
 	}
 
 	@Transactional

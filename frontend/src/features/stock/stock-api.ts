@@ -131,6 +131,7 @@ export type StockBalance = {
   averageCostPerBase: number;
   stockValue: number;
   purchasedKg: number;
+  purchasedValue: number;
   deliveredKg: number;
   latestCountScrapKg: number;
   latestCountLossKg: number;

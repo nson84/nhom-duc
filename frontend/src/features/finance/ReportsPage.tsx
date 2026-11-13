@@ -9,7 +9,7 @@ import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
 import { useSession } from "../auth/auth-store";
 import { getYearReport, type YearReport } from "../factory/factory-api";
-import { getYearPeriod, type YearPeriod } from "../dashboard/dashboard-api";
+import { getYearEndBalance, getYearPeriod, type YearEndBalance, type YearPeriod } from "../dashboard/dashboard-api";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { listCategories, listProducts, type Category, type Product } from "../products/products-api";
 import {
@@ -30,6 +30,25 @@ import {
 } from "./finance-api";
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
+
+function DistributionProfitSummary({ year }: { year: number }) {
+  const [balance, setBalance] = useState<YearEndBalance | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void getYearEndBalance(year).then((value) => { if (active) setBalance(value); })
+      .catch(() => { if (active) setBalance(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [year]);
+  return <Card size="small" loading={loading} style={{ marginBottom: 16 }}>
+    {balance ? <>
+      <Statistic title={`Lãi năm ${year} đã chốt`} value={formatMoney(balance.profit)} />
+      <span>Kỳ {dayjs(balance.periodFrom).format("DD/MM/YYYY")} – {dayjs(balance.periodTo).format("DD/MM/YYYY")}; đã trừ giá vốn hàng bán, hao hụt kiểm kê và chi phí hoạt động.</span>
+    </> : <Alert type="info" showIcon message={`Năm ${year} chưa chốt — chưa có lãi năm chính xác`} description="Kiểm kê tồn thực tế và chốt kỳ ở Tổng quan. Lãi hóa đơn/tháng ở tab bên cạnh chỉ là giá tham khảo." />}
+  </Card>;
+}
 
 function FactoryProfitSummary({ year }: { year: number }) {
   const [report, setReport] = useState<YearReport | null>(null);
@@ -305,6 +324,7 @@ export function ReportsPage() {
                   <FactoryProfitSummary year={year} />
                 ) : (
                 <>
+                <DistributionProfitSummary year={year} />
                 <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                   <Col xs={24} md={6}>
                     <Card size="small">

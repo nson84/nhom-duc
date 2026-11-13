@@ -151,7 +151,9 @@ export function CustomerDetailPage() {
             </Descriptions.Item>
           ) : null}
           <Descriptions.Item label="SĐT">{summary.phone || "—"}</Descriptions.Item>
-          <Descriptions.Item label="Doanh thu">{formatMoney(summary.totalSales)}</Descriptions.Item>
+          <Descriptions.Item label="Khối lượng đã giao">{formatQtyInput(summary.deliveredKg)} kg</Descriptions.Item>
+          <Descriptions.Item label="Tiền hàng phải thu">{formatMoney(summary.totalSales)}</Descriptions.Item>
+          <Descriptions.Item label="Đã thu thực tế">{formatMoney(summary.receivedAmount)}</Descriptions.Item>
           <Descriptions.Item label="Còn nợ">
             {summary.outstandingDebt > 0 ? (
               <Tag color="red">{formatMoney(summary.outstandingDebt)}</Tag>

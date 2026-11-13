@@ -54,6 +54,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 **Chức năng**
 - Bảng tồn theo **SP + loại nhôm** + giá trị tồn
+- Thẻ Phân phối hiện tổng tiền hàng đã nhập từ phiếu còn hiệu lực, kg nhập/giao, tồn sổ và kết quả vụn/hao hụt kiểm kê gần nhất. Thẻ Xưởng hiện tiền và kg nhập trong kỳ chọn, kg giao, tổng vụn đã bán cộng vụn còn theo kiểm kê, hao hụt và giá trị cuối kỳ. Tiền hàng đã nhập không được gọi là giá trị tồn.
 - Phân phối hiển thị tấn. Xưởng dùng trang Quyết toán xưởng và kiểm kê cuối năm
 - Phân phối có **Kiểm kê / Hao hụt**: nhập kg nguyên liệu còn trong kho và kg vụn theo từng SP + loại. Popup liệt kê cả cặp hiện tồn 0 để có thể ghi nhận lần cân cho mọi cặp từng phát sinh kho. Khi lưu, chỉ các dòng đã nhập được điều chỉnh để tồn sổ khớp số cân; hao hụt thuần là phần thiếu trừ vụn.
 - Click dòng → biến động tồn

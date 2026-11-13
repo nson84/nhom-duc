@@ -29,6 +29,8 @@ export type CustomerSummary = {
   outstandingDebt: number;
   saleCount: number;
   openInvoiceCount: number;
+  receivedAmount: number;
+  deliveredKg: number;
 };
 
 export type CustomerDocument = {

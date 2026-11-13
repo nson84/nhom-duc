@@ -164,6 +164,7 @@ public final class StockDtos {
 			BigDecimal averageCostPerBase,
 			BigDecimal stockValue,
 			BigDecimal purchasedKg,
+			BigDecimal purchasedValue,
 			BigDecimal deliveredKg,
 			BigDecimal latestCountScrapKg,
 			BigDecimal latestCountLossKg

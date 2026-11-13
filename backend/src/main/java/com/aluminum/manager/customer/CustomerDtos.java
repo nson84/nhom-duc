@@ -48,7 +48,9 @@ public final class CustomerDtos {
 			BigDecimal totalSales,
 			BigDecimal outstandingDebt,
 			int saleCount,
-			int openInvoiceCount
+			int openInvoiceCount,
+			BigDecimal receivedAmount,
+			BigDecimal deliveredKg
 	) {
 	}
 

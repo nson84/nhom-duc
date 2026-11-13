@@ -49,3 +49,9 @@ Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên 
 
 - Nếu một dòng thiếu giá tham khảo hoặc giá tham khảo bằng 0, lãi của hóa đơn và tổng tháng phải để trống thay vì coi giá vốn bằng 0.
 - Cặp sản phẩm/loại từng có biến động kho nhưng hiện tồn 0 vẫn phải xuất hiện trong popup kiểm kê Phân phối để ghi nhận bằng chứng đã cân.
+
+## Kiểm tra màn hình tổng hợp theo yêu cầu
+
+- Khách mua: bốn tổng số kg giao, tiền hàng phải thu, tiền đã thu thực tế, nợ; lọc danh sách khách và mở từng hóa đơn xem dòng hàng, thanh toán.
+- Tồn kho Phân phối: tổng tiền hàng nhập lấy dòng phiếu nhập còn hiệu lực, không lấy giá trị tồn sổ bằng 0; tồn kg giảm khi xác nhận bán. Xưởng: tổng vụn bằng vụn đã bán cộng vụn chưa bán trong bản kiểm kê, phiếu bán không trừ tồn.
+- Đồng bộ danh mục lần hai giữ giá bán, mô tả và trạng thái riêng của Xưởng; chỉ tên/ảnh SP và giá nhập tham khảo được cập nhật. Giá bán mới vẫn cần xem hoặc xác nhận giữ nguyên.

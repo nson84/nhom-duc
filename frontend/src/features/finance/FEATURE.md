@@ -44,6 +44,8 @@ Phân phối ghi nước, bánh cho đội giao nhôm, bảo trì trong chi phí
 
 Báo cáo Phân phối hiển thị doanh thu, thực thu và công nợ.
 
+Tab Doanh thu & Công nợ còn hiển thị lãi năm Phân phối từ bản chốt theo khoảng ngày đã chọn. Trước khi kiểm kê và chốt, báo chưa có lãi năm chính xác; lãi vật tư hóa đơn/tháng ở tab riêng chỉ là ước tính tham khảo.
+
 Phiếu chi Phân phối có nhóm bảo trì và người chi. Ghi chú phiếu chi là tùy chọn ở cả hai bên. Phân phối ẩn tab bán theo sản phẩm.
 
 ### Lãi gộp vật tư tham khảo theo hóa đơn / tháng

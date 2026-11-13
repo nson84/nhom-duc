@@ -112,9 +112,10 @@ export function CustomersPage() {
       </Space>
 
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="Tổng tiền hàng đã thu" value={formatMoney(rows.reduce((sum, row) => sum + (row.receivedAmount ?? 0), 0))} /></Card></Col>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="Tổng nợ còn lại" value={formatMoney(rows.reduce((sum, row) => sum + row.outstandingDebt, 0))} /></Card></Col>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="Tổng khối lượng đã giao" value={rows.reduce((sum, row) => sum + (row.deliveredKg ?? 0), 0)} precision={3} suffix="kg" /></Card></Col>
+        <Col xs={24} md={6}><Card size="small"><Statistic title="Khối lượng đã giao" value={rows.reduce((sum, row) => sum + (row.deliveredKg ?? 0), 0)} precision={3} suffix="kg" /></Card></Col>
+        <Col xs={24} md={6}><Card size="small"><Statistic title="Tiền hàng phải thu" value={formatMoney(rows.reduce((sum, row) => sum + row.totalSales, 0))} /></Card></Col>
+        <Col xs={24} md={6}><Card size="small"><Statistic title="Tiền đã thu thực tế" value={formatMoney(rows.reduce((sum, row) => sum + (row.receivedAmount ?? 0), 0))} /></Card></Col>
+        <Col xs={24} md={6}><Card size="small"><Statistic title="Khách còn nợ" value={formatMoney(rows.reduce((sum, row) => sum + row.outstandingDebt, 0))} /></Card></Col>
       </Row>
       <PagedTable<Customer>
         rowKey="id"
@@ -138,11 +139,13 @@ export function CustomersPage() {
           { title: "Tên khách", dataIndex: "name", align: "center" },
           { title: "SĐT", dataIndex: "phone", align: "center", render: (v: string | null) => v || "—" },
           {
-            title: "Doanh thu",
+            title: "Tiền hàng phải thu",
             dataIndex: "totalSales",
             align: "center",
             render: (v: number) => formatMoney(v),
           },
+          { title: "Đã thu thực tế", dataIndex: "receivedAmount", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Đã giao (kg)", dataIndex: "deliveredKg", align: "center", render: (v: number) => new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(v) },
           {
             title: "Còn nợ",
             dataIndex: "outstandingDebt",

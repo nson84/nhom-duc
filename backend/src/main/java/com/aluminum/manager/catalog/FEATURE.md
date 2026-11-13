@@ -6,6 +6,8 @@
 
 `CatalogService` quản lý sản phẩm, đơn vị, loại theo shop; `PurchasePriceService` quản lý lịch sử giá tham khảo theo loại và ngày. Đồng bộ danh mục Phân phối sang Xưởng không đồng bộ tồn.
 
+Khi đồng bộ lại, sản phẩm Xưởng đã có chỉ nhận tên/ảnh; loại Xưởng đã có chỉ nhận giá nhập tham khảo. Mô tả, trạng thái và giá bán Xưởng được giữ riêng.
+
 Đổi sang giá khác tạo mốc lịch sử mới, kể cả cùng ngày, để còn tra được giá cũ và ngày bắt đầu áp dụng. Nếu nhiều mốc cùng ngày, mốc có ID mới nhất là giá dùng để tính theo ngày; phiếu đã xác nhận giữ snapshot giá chuẩn đã lưu.
 
 ## Màn hình liên quan

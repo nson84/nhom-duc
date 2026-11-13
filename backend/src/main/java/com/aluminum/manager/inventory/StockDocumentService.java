@@ -705,6 +705,7 @@ public class StockDocumentService {
 				       c.name AS category_name, p.base_unit_name,
 				       b.quantity_base, b.average_cost_per_base,
 				       COALESCE(flow.purchased_kg, 0) AS purchased_kg,
+				       COALESCE(flow.purchased_value, 0) AS purchased_value,
 				       COALESCE(flow.delivered_kg, 0) AS delivered_kg,
 				       COALESCE(e.scrap_quantity_kg, 0) AS count_scrap_kg,
 				       COALESCE(e.loss_quantity_kg, 0) AS count_loss_kg
@@ -714,6 +715,9 @@ public class StockDocumentService {
 				LEFT JOIN (
 				    SELECT i.product_id, i.category_id,
 				           SUM(CASE WHEN d.document_type = 'PURCHASE' THEN i.quantity_base ELSE 0 END) AS purchased_kg,
+				           SUM(CASE WHEN d.document_type = 'PURCHASE'
+				             THEN COALESCE(i.line_total * d.total_amount / NULLIF(d.subtotal, 0), 0)
+				             ELSE 0 END) AS purchased_value,
 				           SUM(CASE WHEN d.document_type = 'SALE' THEN i.quantity_base ELSE 0 END) AS delivered_kg
 				    FROM stock_document_items i
 				    JOIN stock_documents d ON d.id = i.document_id
@@ -746,7 +750,7 @@ public class StockDocumentService {
 					rs.getString("product_code"), rs.getString("name"),
 					rs.getString("category_name"), rs.getString("base_unit_name"), quantity, cost,
 					quantity.multiply(cost).setScale(InventoryMath.MONEY_SCALE, InventoryMath.ROUNDING),
-					rs.getBigDecimal("purchased_kg"), rs.getBigDecimal("delivered_kg"),
+					rs.getBigDecimal("purchased_kg"), rs.getBigDecimal("purchased_value"), rs.getBigDecimal("delivered_kg"),
 					rs.getBigDecimal("count_scrap_kg"), rs.getBigDecimal("count_loss_kg"));
 		}, args.toArray());
 	}
