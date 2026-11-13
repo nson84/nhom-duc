@@ -4,7 +4,7 @@
 
 ## Chức năng hiện có
 
-`AdminBootstrap` đồng bộ ba tài khoản mặc định, đặt lại mật khẩu `123456` và tắt yêu cầu đổi mật khẩu mỗi lần khởi động. `ClockConfig` cấu hình thời gian; không có màn hình riêng. Hành vi đặt lại mật khẩu là giới hạn hiện tại cần xử lý trước khi vận hành thực tế.
+`AdminBootstrap` tạo ba tài khoản mặc định nếu thiếu, với mật khẩu ban đầu `1234567` và yêu cầu đổi mật khẩu. Tài khoản đã có giữ mật khẩu, trạng thái và quyền hiện tại khi khởi động lại. `ClockConfig` cấu hình thời gian; không có màn hình riêng.
 
 ## Màn hình liên quan
 

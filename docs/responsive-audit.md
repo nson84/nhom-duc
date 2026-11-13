@@ -1,6 +1,6 @@
 # Kiểm tra responsive (13/11/2026)
 
-Phạm vi tĩnh: toàn bộ route trong `frontend/src/app/router.tsx`, AppShell, form, modal, bảng, toolbar, biểu đồ, pagination và bản xem trước Sổ cuối năm. Kiểm tra trình duyệt trên giao diện Xưởng với dữ liệu hiện có; không tạo, sửa hoặc xóa dữ liệu MySQL.
+Phạm vi tĩnh: toàn bộ route trong `frontend/src/app/router.tsx`, AppShell, form, modal, bảng, toolbar, biểu đồ, pagination và bản xem trước Sổ cuối năm. Kiểm tra trình duyệt trên ba vai trò với dữ liệu hiện có; không tạo, sửa hoặc xóa dữ liệu nghiệp vụ MySQL.
 
 | Thành phần / file | Lỗi và nguyên nhân | Kích thước thấy lỗi | Cách sửa |
 | --- | --- | --- | --- |
@@ -14,13 +14,13 @@ Phạm vi tĩnh: toàn bộ route trong `frontend/src/app/router.tsx`, AppShell,
 
 Đã mở các route Xưởng: Tổng quan, Khách mua, Sản phẩm, Nhập kho, Bán hàng, Tồn kho, Quyết toán xưởng, Nhân viên, Chấm công, Tiền công, Thu chi, Báo cáo, Sổ cuối năm. Đo chiều rộng trang và vùng nội dung ở từng viewport; không phát hiện cuộn ngang toàn trang sau sửa. Ở 900×600, bảng Tiền công cuộn trong chính bảng (nội dung 1037 px trong vùng 826 px). Form Bán hàng ở 900×600 có thân cuộn 692 px trong vùng 457 px, nút lưu ở vị trí 567 px, nằm trong màn cao 600 px. Đã nhìn trực quan Tổng quan, danh sách Bán hàng, modal Bán hàng, modal Loại nhôm và Báo cáo ở giao diện sáng; modal Bán hàng cũng được kiểm tra ở giao diện tối. Ở 1024×768, menu chuyển sang Drawer và vùng nội dung còn 992 px.
 
-| Viewport | Các route Xưởng mở được | Cuộn ngang ngoài ý muốn |
-| --- | ---: | --- |
-| 1920×1080 | 13/13 | 0 |
-| 1600×900 | 13/13 | 0 |
-| 1366×768 | 13/13 | 0 |
-| 1280×720 | 13/13 | 0 |
-| 1024×768 | 13/13 | 0 |
-| 900×600 | 13/13 | 0 |
+| Viewport | Xưởng | Phân phối | Admin | Cuộn ngang ngoài ý muốn |
+| --- | ---: | ---: | ---: | --- |
+| 1920×1080 | 13/13 | — | — | 0 |
+| 1600×900 | 13/13 | — | — | 0 |
+| 1366×768 | 13/13 | — | — | 0 |
+| 1280×720 | 13/13 | 9/9 | 6/6 | 0 |
+| 1024×768 | 13/13 | 9/9 | 6/6 | 0 |
+| 900×600 | 13/13 | 9/9 | 6/6 | 0 |
 
-Viewport hiệu dụng 1280 và 1024 đại diện cho màn 1600 ở tỉ lệ 125% và khoảng 150%. Nội dung PDF khổ A4 nằm trong iframe riêng; chưa đối chiếu bản in dài có dữ liệu thật. Cần tiếp tục kiểm tra bằng phiên Admin/Phân phối và dữ liệu dài nhiều cột trước khi xác nhận hoàn toàn các trạng thái đó.
+Viewport hiệu dụng 1280 và 1024 đại diện cho màn 1600 ở tỉ lệ 125% và khoảng 150%. Nội dung PDF khổ A4 nằm trong iframe riêng; chưa đối chiếu bản in dài có dữ liệu thật. Các bảng với số liệu dài vẫn cần kiểm tra thêm khi có dữ liệu thực ở ba vai trò.

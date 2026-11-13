@@ -59,3 +59,5 @@ Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên 
 ## Kiểm thử responsive
 
 Xem [biên bản rà soát responsive](responsive-audit.md). Quét các route chính ở 1920×1080, 1600×900, 1366×768, 1280×720, 1024×768 và 900×600; kiểm tra chiều rộng trang và vùng nội dung, thanh cuộn riêng của bảng nhiều cột, menu Drawer dưới 1200 px, modal nhập/bán thấp 600 px và footer luôn dùng được. Kiểm tra sáng/tối cho modal, trạng thái dữ liệu dài, dropdown, thông báo, bản xem trước PDF và các vai trò Admin/Phân phối/Xưởng khi có phiên tương ứng.
+
+Mật khẩu khởi tạo `1234567`: tài khoản mới được mã hóa với giá trị này và buộc đổi mật khẩu; khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có. Form chọn tài khoản dùng cùng giá trị khởi tạo, người dùng vẫn có thể nhập mật khẩu riêng.

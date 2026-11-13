@@ -9,6 +9,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AdminBootstrapTest {
     @Test
+    void newAccountsUseCurrentDefaultPassword() {
+        var users = mock(AdminUserRepository.class);
+        var encoder = mock(PasswordEncoder.class);
+        when(users.findByUsername(anyString())).thenReturn(Optional.empty());
+        when(encoder.encode("1234567")).thenReturn("new-hash");
+
+        new AdminBootstrap(users, encoder).run(null);
+
+        verify(encoder, times(3)).encode("1234567");
+        verify(users, times(3)).save(argThat(user -> "new-hash".equals(user.getPasswordHash())));
+    }
+
+    @Test
     void restartPreservesPasswordsAndDisabledAccounts() {
         var users = mock(AdminUserRepository.class);
         var encoder = mock(PasswordEncoder.class);

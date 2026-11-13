@@ -28,4 +28,4 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 Đổi mật khẩu dùng `PUT /api/v1/auth/password`; đăng nhập dùng `POST /api/v1/auth/login`.
 
-Hiện backend đặt lại mật khẩu mặc định của ba tài khoản mỗi khi khởi động; xem [tài liệu auth backend](../../../../backend/src/main/java/com/aluminum/manager/auth/FEATURE.md) trước khi sửa luồng này.
+Form tự điền `1234567` khi chọn một trong ba tài khoản mặc định. Đây là mật khẩu khởi tạo cho tài khoản mới; tài khoản đã đổi mật khẩu phải nhập mật khẩu hiện tại. Backend không đặt lại mật khẩu khi khởi động; xem [tài liệu auth backend](../../../../backend/src/main/java/com/aluminum/manager/auth/FEATURE.md).
