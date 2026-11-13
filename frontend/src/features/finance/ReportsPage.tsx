@@ -1,5 +1,5 @@
-import { Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tabs, Tag, message } from "antd";
-import { PagedTable } from "../../components/PagedTable";
+import { Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Tabs, Tag, message } from "antd";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";

@@ -13,7 +13,6 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Upload,
   message,
@@ -34,7 +33,7 @@ import dayjs from "dayjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppActionButton, appButtonStyle } from "../../components/AppButtons";
-import { PagedTable } from "../../components/PagedTable";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";

@@ -88,7 +88,7 @@ export function AppShell() {
   const role = session?.role ?? "ADMIN";
   const [shopName, setShopName] = useState("Quản lý hàng hóa nhôm");
   const dark = themeMode === "dark";
-  const isDrawerNav = useMaxWidth(991);
+  const isDrawerNav = useMaxWidth(1199);
   const [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const notificationShop = role === "ADMIN" ? null : role;

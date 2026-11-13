@@ -1,11 +1,11 @@
 import { CheckOutlined, CloseOutlined, DollarOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
 import { useSession } from "../auth/auth-store";
-import { Alert, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Table, Tag, Typography, message } from "antd";
+import { Alert, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Tag, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppActionButton } from "../../components/AppButtons";
-import { PagedTable } from "../../components/PagedTable";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { qtyInputNumberProps, vndInputNumberProps } from "../../utils/vnd-input";

@@ -11,12 +11,12 @@ import {
   StopOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
-import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
+import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
 import { AppActionButton, appButtonStyle } from "../../components/AppButtons";
-import { PagedTable } from "../../components/PagedTable";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";

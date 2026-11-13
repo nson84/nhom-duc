@@ -4,7 +4,7 @@
 
 ## Chức năng hiện có
 
-`AuthController` cung cấp login, logout, me và PUT password; phiên trả JWT, role và shop. Hiện `AdminBootstrap` đặt lại mật khẩu mặc định `123456`, role, shop và trạng thái hoạt động của ba tài khoản `admin`, `phanphoi`, `xuong` mỗi lần backend khởi động; không bắt buộc đổi mật khẩu. Các biến admin trong `application.yml` không được lớp bootstrap hiện tại sử dụng. Đây là hạn chế cần xử lý trước khi vận hành thực tế.
+`AuthController` cung cấp login, logout, me và PUT password; phiên trả JWT, role và shop. `AdminBootstrap` chỉ tạo tài khoản còn thiếu trong ba tài khoản `admin`, `phanphoi`, `xuong` với mật khẩu ban đầu `1234567` và yêu cầu đổi mật khẩu. Tài khoản đã có giữ nguyên mật khẩu, role, shop và trạng thái; các biến admin trong `application.yml` không được lớp bootstrap hiện tại sử dụng.
 
 ## Màn hình liên quan
 

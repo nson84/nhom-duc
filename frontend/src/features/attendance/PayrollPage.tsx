@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Space, Statistic, Table, message } from "antd";
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Space, Statistic, message } from "antd";
+import { ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toApiError } from "../../services/error-handler";

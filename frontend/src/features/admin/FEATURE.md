@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Bảng tổng hợp Admin cuộn ngang trong bảng khi cửa sổ hẹp; khung trang không kéo ngang.
+
 
 
 ## Bổ sung theo code hiện tại

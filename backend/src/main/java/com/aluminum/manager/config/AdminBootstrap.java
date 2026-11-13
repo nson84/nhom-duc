@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 public class AdminBootstrap implements ApplicationRunner {
 
 	private static final Logger log = LoggerFactory.getLogger(AdminBootstrap.class);
-	private static final String DEFAULT_PASSWORD = "123456";
+	private static final String DEFAULT_PASSWORD = "1234567";
 
 	private final AdminUserRepository adminUsers;
 	private final PasswordEncoder passwordEncoder;

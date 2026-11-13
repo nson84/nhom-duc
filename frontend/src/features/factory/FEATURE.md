@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Các bảng kiểm kê, phân bổ, công nợ và phế liệu cuộn ngang trong bảng khi cửa sổ nhỏ; modal dài giữ footer thao tác trong viewport.
+
 ### `/quyet-toan-xuong` — Quyết toán nhôm cuối năm
 
 Màn hình mặc định mở năm vừa kết thúc để xem lại lãi và kiểm kê; có thể chọn năm khác.

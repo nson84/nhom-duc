@@ -1,7 +1,7 @@
 import { DollarOutlined, EditOutlined, SaveOutlined } from "@ant-design/icons";
-import { Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, message } from "antd";
+import { Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Switch, Tag, message } from "antd";
 import { AppActionButton } from "../../components/AppButtons";
-import { PagedTable } from "../../components/PagedTable";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
