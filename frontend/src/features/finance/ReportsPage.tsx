@@ -241,6 +241,7 @@ export function ReportsPage() {
 
   return (
     <Card
+      className="report-page-card"
       title={canViewPayroll ? "Báo cáo doanh thu, lợi nhuận, tồn kho & tiền công"
         : "Báo cáo doanh thu, lợi nhuận & tồn kho"}
       extra={
