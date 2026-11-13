@@ -23,4 +23,4 @@ Phạm vi tĩnh: toàn bộ route trong `frontend/src/app/router.tsx`, AppShell,
 | 1024×768 | 13/13 | 9/9 | 6/6 | 0 |
 | 900×600 | 13/13 | 9/9 | 6/6 | 0 |
 
-Viewport hiệu dụng 1280 và 1024 đại diện cho màn 1600 ở tỉ lệ 125% và khoảng 150%. Nội dung PDF khổ A4 nằm trong iframe riêng; chưa đối chiếu bản in dài có dữ liệu thật. Các bảng với số liệu dài vẫn cần kiểm tra thêm khi có dữ liệu thực ở ba vai trò.
+Viewport hiệu dụng 1280 và 1024 đại diện cho màn 1600 ở tỉ lệ 125% và khoảng 150%. Bản in được tạo riêng bằng Edge headless từ HTML của `buildAnnualBookHtml` với dữ liệu giả 30 khách, 90 hóa đơn, sáu dòng hàng mỗi hóa đơn, tên dài và hai trạng thái thanh toán. PDF có 70 trang A4; đã xem trực quan trang 4–6 và trang cuối: bảng nằm trong trang, thẻ đã trả màu xanh và còn nợ màu đỏ. Kiểm thử này không ghi vào MySQL. Vẫn cần đối chiếu số liệu nghiệp vụ của bản in với dữ liệu thật khi có giao dịch dài.
