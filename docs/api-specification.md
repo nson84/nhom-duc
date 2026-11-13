@@ -55,9 +55,9 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 | GET | `/categories` | Loại nhôm + giá nhập/bán (kg, tạ, tấn); trường giá m² cũ chỉ giữ để đọc dữ liệu lịch sử |
 | POST / PUT | `/categories` / `/categories/{id}` | Tạo/sửa loại kèm giá; lịch sử giá nhập theo loại |
 | GET/POST | `/categories/{id}/purchase-prices` | Lịch sử giá nhập loại (`pricePerBase` = đ/kg); đổi giá trong cùng ngày giữ mốc cũ, mốc ID mới nhất áp dụng cho ngày đó |
-| POST | `/catalog/sync-to-other-shop` | Đẩy SP + loại sang shop kia (khớp mã/tên; giá copy lần đầu; không đụng tồn) |
+| POST | `/catalog/sync-to-other-shop` | Phân phối đẩy tên/ảnh SP và loại/giá nhập tham khảo sang Xưởng; giữ giá bán, mô tả, trạng thái SP/loại đã có và không đụng tồn |
 | GET/POST | `/customers` | Sổ khách theo shop; Admin `?scope=all` xem gộp |
-| GET/PUT | `/customers/{id}` | Chi tiết / sửa khách |
+| GET/PUT | `/customers/{id}` | Chi tiết / sửa khách; GET trả `totalSales`, `receivedAmount`, `outstandingDebt`, `deliveredKg` |
 | GET | `/customers/{id}/documents` | Hóa đơn bán của khách (`paymentStatus`, `OPEN` = còn nợ) |
 | GET/POST | `/customers/{id}/reminders` | Lịch nhắc nợ |
 | GET | `/customers/due-reminders` | Nhắc đến hạn chưa xong |

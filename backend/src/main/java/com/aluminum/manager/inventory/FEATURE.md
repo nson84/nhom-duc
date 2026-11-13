@@ -16,4 +16,6 @@ Khi tạo hoặc sửa phiếu bán Xưởng, backend tự ghi giá tham chiếu
 
 API tồn kho trả thêm tổng kg nhập và giao từ phiếu đã xác nhận, chưa đảo, để popup kiểm kê tính hao hụt. Ghi điều chỉnh vẫn dùng chênh lệch giữa số cân và tồn sổ.
 
+API tồn kho còn trả tổng tiền phiếu nhập đã xác nhận, chưa đảo phân bổ theo tỷ trọng dòng hàng sau giảm giá, để trang Phân phối hiện tổng tiền đã nhập. Số này là chi phí mua tích lũy, không phải giá trị tồn kho hiện tại hay giá vốn hàng đã bán.
+
 [stock](../../../../../../../../frontend/src/features/stock/FEATURE.md)

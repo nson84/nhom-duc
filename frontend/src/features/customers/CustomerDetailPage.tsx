@@ -11,7 +11,6 @@ import {
   Modal,
   Select,
   Space,
-  Table,
   Tag,
   message,
 } from "antd";
@@ -19,7 +18,7 @@ import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppActionButton, appButtonStyle } from "../../components/AppButtons";
-import { PagedTable } from "../../components/PagedTable";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { requiredNameRules } from "../../utils/name-rules";
@@ -151,7 +150,9 @@ export function CustomerDetailPage() {
             </Descriptions.Item>
           ) : null}
           <Descriptions.Item label="SĐT">{summary.phone || "—"}</Descriptions.Item>
-          <Descriptions.Item label="Doanh thu">{formatMoney(summary.totalSales)}</Descriptions.Item>
+          <Descriptions.Item label="Khối lượng đã giao">{formatQtyInput(summary.deliveredKg)} kg</Descriptions.Item>
+          <Descriptions.Item label="Tiền hàng phải thu">{formatMoney(summary.totalSales)}</Descriptions.Item>
+          <Descriptions.Item label="Đã thu thực tế">{formatMoney(summary.receivedAmount)}</Descriptions.Item>
           <Descriptions.Item label="Còn nợ">
             {summary.outstandingDebt > 0 ? (
               <Tag color="red">{formatMoney(summary.outstandingDebt)}</Tag>

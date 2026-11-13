@@ -134,3 +134,8 @@ export function PagedTable<T extends object>(props: TableProps<T>) {
     </>
   );
 }
+
+/** Bảng nghiệp vụ cuộn ngang trong chính bảng khi cửa sổ bị thu hẹp. */
+export function ResponsiveTable<T extends object>(props: TableProps<T>) {
+  return <Table<T> {...props} scroll={{ x: "max-content", ...props.scroll }} />;
+}

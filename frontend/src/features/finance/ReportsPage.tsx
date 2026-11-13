@@ -1,5 +1,5 @@
-import { Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tabs, Tag, message } from "antd";
-import { PagedTable } from "../../components/PagedTable";
+import { Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Tabs, Tag, message } from "antd";
+import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,18 +9,20 @@ import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
 import { useSession } from "../auth/auth-store";
 import { getYearReport, type YearReport } from "../factory/factory-api";
-import { getYearPeriod, type YearPeriod } from "../dashboard/dashboard-api";
+import { getYearEndBalance, getYearPeriod, type YearEndBalance, type YearPeriod } from "../dashboard/dashboard-api";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { listCategories, listProducts, type Category, type Product } from "../products/products-api";
 import {
   downloadReportCsv,
   getInventoryReport,
+  getInvoiceMargins,
   getPayrollReport,
   getPriceVarianceReport,
   getProfitReport,
   getSalesByProductReport,
   type DailyRevenueRow,
   type InventoryReportRow,
+  type InvoiceGrossMargin,
   type PayrollReportRow,
   type ProductSalesRow,
   type ProfitReport,
@@ -28,6 +30,25 @@ import {
 } from "./finance-api";
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
+
+function DistributionProfitSummary({ year }: { year: number }) {
+  const [balance, setBalance] = useState<YearEndBalance | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void getYearEndBalance(year).then((value) => { if (active) setBalance(value); })
+      .catch(() => { if (active) setBalance(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [year]);
+  return <Card size="small" loading={loading} style={{ marginBottom: 16 }}>
+    {balance ? <>
+      <Statistic title={`Lãi năm ${year} đã chốt`} value={formatMoney(balance.profit)} />
+      <span>Kỳ {dayjs(balance.periodFrom).format("DD/MM/YYYY")} – {dayjs(balance.periodTo).format("DD/MM/YYYY")}; đã trừ giá vốn hàng bán, hao hụt kiểm kê và chi phí hoạt động.</span>
+    </> : <Alert type="info" showIcon message={`Năm ${year} chưa chốt — chưa có lãi năm chính xác`} description="Kiểm kê tồn thực tế và chốt kỳ ở Tổng quan. Lãi hóa đơn/tháng ở tab bên cạnh chỉ là giá tham khảo." />}
+  </Card>;
+}
 
 function FactoryProfitSummary({ year }: { year: number }) {
   const [report, setReport] = useState<YearReport | null>(null);
@@ -91,7 +112,7 @@ export function ReportsPage() {
   const showQty = (kg: number) => qtyFormat.format(asTon ? kgToTon(kg) : kg);
   const showCost = (perKg: number) => formatMoney(asTon ? costPerKgToTon(perKg) : perKg);
   const scope = book === "all" ? "all" as const : undefined;
-  const [activeTab, setActiveTab] = useState<"profit" | "price-variance" | "sales-by-product" | "inventory" | "shrinkage" | "payroll">(
+  const [activeTab, setActiveTab] = useState<"profit" | "invoice-margins" | "price-variance" | "sales-by-product" | "inventory" | "shrinkage" | "payroll">(
     "profit",
   );
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
@@ -115,6 +136,7 @@ export function ReportsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [profit, setProfit] = useState<ProfitReport | null>(null);
+  const [invoiceMargins, setInvoiceMargins] = useState<InvoiceGrossMargin[]>([]);
   const [productSales, setProductSales] = useState<ProductSalesRow[]>([]);
   const [inventoryRows, setInventoryRows] = useState<InventoryReportRow[]>([]);
   const [payrollRows, setPayrollRows] = useState<PayrollReportRow[]>([]);
@@ -176,14 +198,16 @@ export function ReportsPage() {
     try {
       const from = range[0].format("YYYY-MM-DD");
       const to = range[1].format("YYYY-MM-DD");
-      const [pr, sp, inv, pv, pay] = await Promise.all([
+      const [pr, sp, inv, pv, pay, invoices] = await Promise.all([
         getProfitReport(from, to, scope),
         getSalesByProductReport({ from, to, productId, categoryId, scope }),
         getInventoryReport({ from, to, categoryId, scope }),
         getPriceVarianceReport({ from, to, categoryId, scope }),
         canViewPayroll ? getPayrollReport(year, scope) : Promise.resolve([] as PayrollReportRow[]),
+        book === "shop" ? getInvoiceMargins(from, to) : Promise.resolve([] as InvoiceGrossMargin[]),
       ]);
       setProfit(pr);
+      setInvoiceMargins(invoices);
       setProductSales(sp);
       setInventoryRows(inv);
       setVarianceRows(pv);
@@ -193,17 +217,31 @@ export function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [range, productId, categoryId, year, scope, canViewPayroll]);
+  }, [range, productId, categoryId, year, scope, book, canViewPayroll]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const invoiceMonths = Object.values(invoiceMargins.reduce<Record<string, { month: string; revenue: number; cost: number; profit: number; missing: boolean; count: number }>>((all, invoice) => {
+    const month = invoice.documentDate.slice(0, 7);
+    const item = all[month] ?? (all[month] = { month, revenue: 0, cost: 0, profit: 0, missing: false, count: 0 });
+    item.count += 1;
+    item.revenue += Number(invoice.revenue);
+    if (!invoice.costComplete || invoice.estimatedMaterialCost == null || invoice.estimatedGrossProfit == null) item.missing = true;
+    else {
+      item.cost += Number(invoice.estimatedMaterialCost);
+      item.profit += Number(invoice.estimatedGrossProfit);
+    }
+    return all;
+  }, {})).sort((a, b) => a.month.localeCompare(b.month));
 
   const fromStr = range[0].format("YYYY-MM-DD");
   const toStr = range[1].format("YYYY-MM-DD");
 
   return (
     <Card
+      className="report-page-card"
       title={canViewPayroll ? "Báo cáo doanh thu, lợi nhuận, tồn kho & tiền công"
         : "Báo cáo doanh thu, lợi nhuận & tồn kho"}
       extra={
@@ -225,9 +263,9 @@ export function ReportsPage() {
           {period && <span>Kỳ {year}: {dayjs(period.periodFrom).format("DD/MM/YYYY")} – {dayjs(period.periodTo).format("DD/MM/YYYY")}</span>}
           <Button
             type="primary"
-            disabled={activeTab === "shrinkage" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
+            disabled={activeTab === "shrinkage" || activeTab === "invoice-margins" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
             onClick={() => {
-              if (activeTab === "shrinkage") return;
+              if (activeTab === "shrinkage" || activeTab === "invoice-margins") return;
               void downloadReportCsv({
                 type: activeTab,
                 scope,
@@ -249,6 +287,34 @@ export function ReportsPage() {
         onChange={(k) => setActiveTab(k as typeof activeTab)}
         items={[
           {
+            key: "invoice-margins",
+            label: "Lãi gộp hóa đơn / tháng",
+            children: <>
+              <Alert type="info" showIcon style={{ marginBottom: 16 }}
+                message="Lãi gộp vật tư tham khảo — chưa phải lãi quyết toán"
+                description="Lãi = tiền phiếu sau giảm giá − khối lượng × giá nhập tham khảo tại ngày giao. Không bao gồm tiền công, phụ kiện, phế liệu và hao hụt kiểm kê. Nếu thiếu dữ liệu giá tham khảo, hệ thống để trống lãi, không tự tính bằng 0. Lãi cuối kỳ vẫn lấy từ bản chốt."
+              />
+              <h3>Lãi gộp theo tháng (chưa trừ chi phí hoạt động)</h3>
+              <PagedTable rowKey="month" size="small" loading={loading} dataSource={invoiceMonths} columns={[
+                { title: "Tháng", dataIndex: "month", align: "center" },
+                { title: "Số hóa đơn", dataIndex: "count", align: "center" },
+                { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
+                { title: "Giá vật tư tham khảo", dataIndex: "cost", align: "center", render: (v: number, row) => row.missing ? "Thiếu giá tham khảo" : formatMoney(v) },
+                { title: "Lãi gộp tham khảo", dataIndex: "profit", align: "center", render: (v: number, row) => row.missing ? "Chưa đủ dữ liệu" : formatMoney(v) },
+              ]} />
+              <h3 style={{ marginTop: 20 }}>Chi tiết từng hóa đơn</h3>
+              <PagedTable<InvoiceGrossMargin> rowKey="documentId" size="small" loading={loading}
+                dataSource={invoiceMargins} columns={[
+                  { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
+                  { title: "Số phiếu", dataIndex: "documentCode", align: "center" },
+                  { title: "Khách", dataIndex: "customerName" },
+                  { title: "Tiền bán", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
+                  { title: "Giá vật tư", dataIndex: "estimatedMaterialCost", align: "center", render: (v: number | null) => v == null ? "Thiếu giá" : formatMoney(v) },
+                  { title: "Lãi gộp tham khảo", dataIndex: "estimatedGrossProfit", align: "center", render: (v: number | null) => v == null ? "Chưa đủ dữ liệu" : formatMoney(v) },
+                ]} />
+            </>,
+          },
+          {
             key: "profit",
             label: shop === "DISTRIBUTION" ? "Doanh thu & Công nợ" : "Doanh thu & Lợi nhuận",
             children: (
@@ -259,6 +325,7 @@ export function ReportsPage() {
                   <FactoryProfitSummary year={year} />
                 ) : (
                 <>
+                <DistributionProfitSummary year={year} />
                 <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                   <Col xs={24} md={6}>
                     <Card size="small">
@@ -602,7 +669,7 @@ export function ReportsPage() {
                 },
               ]
             : []),
-        ].filter((item) => !((shop === "MANUFACTURING" || book === "all") &&
+        ].filter((item) => !(book === "all" && item.key === "invoice-margins") && !((shop === "MANUFACTURING" || book === "all") &&
           (item.key === "sales-by-product" || item.key === "inventory")) &&
           !(shop === "DISTRIBUTION" && item.key === "sales-by-product"))}
       />

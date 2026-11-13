@@ -18,9 +18,9 @@ const ACCOUNT_OPTIONS = [
 
 /** Mật khẩu mặc định bootstrap (AdminBootstrap) — autofill khi chọn tài khoản. */
 const DEFAULT_PASSWORDS: Record<(typeof ACCOUNT_OPTIONS)[number]["value"], string> = {
-  admin: "123456",
-  phanphoi: "123456",
-  xuong: "123456",
+  admin: "1234567",
+  phanphoi: "1234567",
+  xuong: "1234567",
 };
 
 const schema = z.object({

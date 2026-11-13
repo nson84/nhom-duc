@@ -45,3 +45,19 @@ Kiểm tra bộ lọc tên năm trên Tổng quan, Báo cáo, Thu chi: khi chọ
 Kiểm tra form phiếu chi ở cả hai sổ có đúng năm lựa chọn mới; lưu từng mục và xác nhận danh sách, chi tiết, Sổ cuối năm hiển thị tên khoản chi. Xác nhận bốn khoản đầu tính vào chi phí hoạt động, khoản sửa chữa vào bảo trì, và chi trả phiếu nhập vẫn chỉ ghi trên phiếu nhập.
 
 Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên tiếp khi kỳ tháng chưa có: các yêu cầu tạo/lấy kỳ đồng thời phải cùng trả về một kỳ, không hiện lỗi ràng buộc trùng `(period_year, period_month)`.
+# Kiểm thử bổ sung cho báo cáo lãi gộp hóa đơn
+
+- Nếu một dòng thiếu giá tham khảo hoặc giá tham khảo bằng 0, lãi của hóa đơn và tổng tháng phải để trống thay vì coi giá vốn bằng 0.
+- Cặp sản phẩm/loại từng có biến động kho nhưng hiện tồn 0 vẫn phải xuất hiện trong popup kiểm kê Phân phối để ghi nhận bằng chứng đã cân.
+
+## Kiểm tra màn hình tổng hợp theo yêu cầu
+
+- Khách mua: bốn tổng số kg giao, tiền hàng phải thu, tiền đã thu thực tế, nợ; lọc danh sách khách và mở từng hóa đơn xem dòng hàng, thanh toán.
+- Tồn kho Phân phối: tổng tiền hàng nhập lấy dòng phiếu nhập còn hiệu lực, không lấy giá trị tồn sổ bằng 0; tồn kg giảm khi xác nhận bán. Xưởng: tổng vụn bằng vụn đã bán cộng vụn chưa bán trong bản kiểm kê, phiếu bán không trừ tồn.
+- Đồng bộ danh mục lần hai giữ giá bán, mô tả và trạng thái riêng của Xưởng; chỉ tên/ảnh SP và giá nhập tham khảo được cập nhật. Giá bán mới vẫn cần xem hoặc xác nhận giữ nguyên.
+
+## Kiểm thử responsive
+
+Xem [biên bản rà soát responsive](responsive-audit.md). Quét các route chính ở 1920×1080, 1600×900, 1366×768, 1280×720, 1024×768 và 900×600; kiểm tra chiều rộng trang và vùng nội dung, thanh cuộn riêng của bảng nhiều cột, menu Drawer dưới 1200 px, modal nhập/bán thấp 600 px và footer luôn dùng được. Kiểm tra sáng/tối cho modal, trạng thái dữ liệu dài, dropdown, thông báo, bản xem trước PDF và các vai trò Admin/Phân phối/Xưởng khi có phiên tương ứng.
+
+Mật khẩu khởi tạo `1234567`: tài khoản mới được mã hóa với giá trị này và buộc đổi mật khẩu; khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có. Form chọn tài khoản dùng cùng giá trị khởi tạo, người dùng vẫn có thể nhập mật khẩu riêng.

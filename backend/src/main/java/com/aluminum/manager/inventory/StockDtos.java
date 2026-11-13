@@ -164,14 +164,18 @@ public final class StockDtos {
 			BigDecimal averageCostPerBase,
 			BigDecimal stockValue,
 			BigDecimal purchasedKg,
-			BigDecimal deliveredKg
+			BigDecimal purchasedValue,
+			BigDecimal deliveredKg,
+			BigDecimal latestCountScrapKg,
+			BigDecimal latestCountLossKg
 	) {
 	}
 
 	public record InventoryCountItemRequest(
 			@NotNull Long productId,
 			@NotNull Long categoryId,
-			@NotNull @DecimalMin(value = "0", message = "Số cân thực tế không được âm") BigDecimal countedQuantityKg
+			@NotNull @DecimalMin(value = "0", message = "Số cân thực tế không được âm") BigDecimal countedQuantityKg,
+			@DecimalMin(value = "0", message = "Vụn nhôm không được âm") BigDecimal scrapKg
 	) {
 	}
 

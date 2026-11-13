@@ -8,7 +8,7 @@ Mỗi thư mục chức năng có `FEATURE.md` mô tả hành vi hiện tại. T
 | Phân phối | Vận hành sổ phân phối; không truy cập nhân viên, chấm công hay tiền công. |
 | Xưởng | Vận hành sổ xưởng, quyết toán và nhân sự xưởng. |
 
-Router nằm tại `frontend/src/app/router.tsx`, menu và bộ chọn sổ tại `frontend/src/components/layout/AppShell.tsx`, kiểm tra quyền backend tại `backend/src/main/java/com/aluminum/manager/security/RoleAccessFilter.java`. Trên màn hình hẹp, AppShell dùng menu dạng ngăn kéo; có tùy chọn giao diện sáng/tối và đăng xuất.
+Router nằm tại `frontend/src/app/router.tsx`, menu và bộ chọn sổ tại `frontend/src/components/layout/AppShell.tsx`, kiểm tra quyền backend tại `backend/src/main/java/com/aluminum/manager/security/RoleAccessFilter.java`. Dưới 1200 px, AppShell dùng menu dạng ngăn kéo; có tùy chọn giao diện sáng/tối và đăng xuất. Kết quả rà soát viewport nằm ở [responsive-audit.md](responsive-audit.md).
 
 | Màn hình | Tài liệu chức năng |
 | --- | --- |

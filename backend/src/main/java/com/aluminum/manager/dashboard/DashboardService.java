@@ -44,6 +44,17 @@ public class DashboardService {
 				  AND status = 'CONFIRMED'
 				  AND document_date >= ? AND document_date < ?
 				""", range);
+		BigDecimal purchaseAmount = money("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM stock_documents
+				WHERE document_type = 'PURCHASE' AND status = 'CONFIRMED'
+				  AND document_date >= ? AND document_date < ?
+				""", range);
+		BigDecimal deliveredKg = money("""
+				SELECT COALESCE(SUM(i.quantity_base), 0)
+				FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				  AND d.document_date >= ? AND d.document_date < ?
+				""", range);
 		BigDecimal cogs = money("""
 				SELECT COALESCE(SUM(i.cost_total_snapshot), 0)
 				FROM stock_document_items i
@@ -90,10 +101,12 @@ public class DashboardService {
 				expenses,
 				inventory,
 				payroll,
-				shops.isDistribution() ? debts(range, true) : null,
+				debts(range, true),
 				shops.isDistribution() ? debts(range, false) : null,
 				shops.isDistribution() ? cashExpenses(range) : null,
-				shops.isDistribution() ? closing(range) : null);
+				shops.isDistribution() ? closing(range) : null,
+				purchaseAmount,
+				deliveredKg);
 	}
 
 	private BigDecimal cashExpenses(DateRange range) {
@@ -140,6 +153,37 @@ public class DashboardService {
 				""", Integer.class, shops.currentId(), Timestamp.valueOf(range.to().plusDays(1).atStartOfDay()));
 		if (missing != null && missing > 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 				"Có phiếu cũ thiếu biến động kho. Cần đối chiếu tồn trước khi chốt", null);
+		// Không chốt nếu chưa cân đủ từng cặp SP/loại đã có giao dịch kho.
+		// Số kiểm kê phải là dữ liệu mới nhất và tồn thực tế phải còn khớp.
+		// Không dùng kiểm kê ngày hôm nay để giả định số tồn của một ngày quá khứ
+		// nếu đã phát sinh giao dịch kho sau ngày kết thúc kỳ.
+		Timestamp cutoff = Timestamp.valueOf(range.to().plusDays(1).atStartOfDay());
+		Integer uncounted = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM stock_balances b
+				JOIN products p ON p.id = b.product_id
+				LEFT JOIN distribution_inventory_count_evidence c
+				  ON c.shop_id = p.shop_id AND c.product_id = b.product_id AND c.category_id = b.category_id
+				WHERE p.shop_id = ?
+				  AND EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = b.product_id
+				              AND m.category_id = b.category_id AND m.movement_at < ?)
+				  AND (c.counted_at IS NULL OR c.counted_at < ?
+				    OR c.counted_quantity_kg <> b.quantity_base
+				    OR EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = b.product_id
+				       AND m.category_id = b.category_id
+				       AND (m.created_at > c.counted_at OR m.movement_at > c.counted_at)))
+				""", Integer.class, shops.currentId(), cutoff, Timestamp.valueOf(range.to().atStartOfDay()));
+		if (uncounted != null && uncounted > 0) throw new BusinessException(
+				ErrorCode.VALIDATION_ERROR,
+				"Chưa kiểm kê đầy đủ hoặc đã phát sinh biến động kho sau kiểm kê: "
+				+ uncounted + " cặp sản phẩm/loại. Vào Tồn kho → Kiểm kê để cân lại trước khi chốt", null);
+		Integer laterMovements = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM stock_movements m JOIN products p ON p.id = m.product_id
+				WHERE p.shop_id = ? AND m.movement_at >= ?
+				""", Integer.class, shops.currentId(), cutoff);
+		if (laterMovements != null && laterMovements > 0) throw new BusinessException(
+				ErrorCode.VALIDATION_ERROR,
+				"Đã có biến động kho sau ngày chốt; không thể lấy số cân hiện tại làm tồn cuối kỳ quá khứ. "
+				+ "Cần đối chiếu kiểm kê theo đúng ngày kết thúc kỳ", null);
 		Valuation opening = valuation(range.from());
 		Valuation ending = valuation(range.to().plusDays(1));
 		BigDecimal purchases = money("""

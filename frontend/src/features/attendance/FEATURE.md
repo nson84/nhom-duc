@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Bảng nhân viên, chấm công, tiền công và bảng trong modal cuộn ngang riêng ở cửa sổ nhỏ; modal dài cuộn phần nội dung và giữ nút xác nhận trong viewport.
+
 ### `/nhan-vien` — Nhân viên
 
 | | |

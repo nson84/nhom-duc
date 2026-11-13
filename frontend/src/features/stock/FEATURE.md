@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi cần; modal nhập/bán ở cửa sổ thấp cuộn phần thân, giữ nút lưu/đóng ở footer trong màn hình.
+
 ### `/nhap-kho` — Nhập kho
 
 | | |
@@ -33,7 +35,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 - Danh sách: nhãn **Nội bộ** / **Khách hàng** trên số phiếu; lọc mặc định **Chưa thanh toán**; Thùng rác cho phiếu **đã hủy / đã đảo**
 - Khách hàng: **dropdown tìm kiếm** sổ khách; gõ tên mới được; sau lưu phiếu nếu chưa gắn khách → hỏi **Lưu khách hàng?**
 - Mỗi dòng: chọn **SP → loại nhôm** → đơn giá autofill từ loại
-- **Cách bán**: chỉ theo cân. Xưởng nhập kg/tạ/tấn thành phẩm đã giao (quy đổi kg nhôm, không gồm phụ kiện); Phân phối bán tấn. Phiếu bán xưởng mới không trừ tồn; Phân phối cũng không trừ tồn khi xác nhận phiếu bán mới. Đơn giá lấy từ loại nhôm và có thể sửa trên phiếu
+- **Cách bán**: chỉ theo cân. Xưởng nhập kg/tạ/tấn thành phẩm đã giao (quy đổi kg nhôm, không gồm phụ kiện); Phân phối bán tấn. Phiếu bán xưởng mới không trừ tồn; Phân phối trừ tồn ngay khi xác nhận phiếu bán (thiếu tồn sẽ báo lỗi). Đơn giá lấy từ loại nhôm và có thể sửa trên phiếu
 - Xưởng phải gắn khách mua trước khi xác nhận để cộng sản lượng và công nợ theo người. Phiếu xác nhận là hàng đã giao, không tạo đơn đặt hàng hoặc số còn phải giao
 - Khi tạo hoặc sửa phiếu bán Xưởng, ô chọn đơn vị nằm ngang hàng với ô khối lượng trên màn hình rộng. Giá nhập tham chiếu được lưu nội bộ và ẩn trên biểu mẫu lẫn chi tiết phiếu bán.
 - Phiếu m² đã xác nhận vẫn xem/in/đảo theo dữ liệu cũ. Phiếu nháp m² phải chuyển sang cân và nhập lại đơn giá trước khi xác nhận
@@ -54,8 +56,9 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 **Chức năng**
 - Bảng tồn theo **SP + loại nhôm** + giá trị tồn
+- Thẻ Phân phối hiện tổng tiền hàng đã nhập từ phiếu còn hiệu lực, kg nhập/giao, tồn sổ và kết quả vụn/hao hụt kiểm kê gần nhất. Thẻ Xưởng hiện tiền và kg nhập trong kỳ chọn, kg giao, tổng vụn đã bán cộng vụn còn theo kiểm kê, hao hụt và giá trị cuối kỳ. Tiền hàng đã nhập không được gọi là giá trị tồn.
 - Phân phối hiển thị tấn. Xưởng dùng trang Quyết toán xưởng và kiểm kê cuối năm
-- Phân phối có **Kiểm kê / Hao hụt**: chỉ nhập kg còn trong kho theo từng SP + loại. Popup tính hao hụt = kg nhập − kg giao (gồm nội bộ) − kg còn, lấy phiếu đã xác nhận và chưa đảo. Khi lưu, chỉ các dòng đã nhập được điều chỉnh để tồn sổ khớp số cân.
+- Phân phối có **Kiểm kê / Hao hụt**: nhập kg nguyên liệu còn trong kho và kg vụn theo từng SP + loại. Popup liệt kê cả cặp hiện tồn 0 để có thể ghi nhận lần cân cho mọi cặp từng phát sinh kho. Khi lưu, chỉ các dòng đã nhập được điều chỉnh để tồn sổ khớp số cân; hao hụt thuần là phần thiếu trừ vụn.
 - Click dòng → biến động tồn
 
 ### Luồng phiếu kho (nháp / hủy / đảo → thùng rác)
@@ -93,3 +96,11 @@ Phiếu bán xưởng tự lấy dòng nhập gần nhất làm giá nhôm tham 
 Tồn Phân phối theo số lượng. Phiếu bán gợi ý giá theo loại nhôm và cho sửa giá trên phiếu.
 
 Tạo phiếu bán Phân phối xác nhận và trừ tồn trong một giao dịch. Thiếu tồn thì không tạo phiếu.
+
+### Bổ sung giao diện Tổng tồn kho
+
+Phân phối hiển thị tổng giá trị tồn sổ, số kg đã nhập, đã giao và tồn sổ, có thể kiểm kê thực tế từng cặp sản phẩm/loại; số tổng không bị thay đổi khi tìm kiếm trong bảng. Xưởng hiển thị tóm tắt nhập, giao, phế liệu đã bán và hao hụt ước tính theo báo cáo quyết toán của năm hiện tại (không trừ tồn từng lần giao); có liên kết sang Quyết toán Xưởng. Chỉ tiêu phế liệu hiện là **đã bán**, không đại diện cho toàn bộ phế liệu chưa bán.
+
+Khi kiểm kê Phân phối, người vận hành có thể khai số kg vụn nằm trong phần thiếu so với tồn sổ. Hao hụt thuần bằng phần thiếu trừ vụn. Cả lần cân không lệch tồn cũng lưu dấu vết; các số vụn/hao hụt ở trang Tồn kho là **bản chụp lần kiểm kê gần nhất theo từng SP/loại**, không phải tổng phát sinh trong năm. Chốt kỳ từ chối nếu còn sản phẩm/loại chưa kiểm kê, tồn đã phát sinh giao dịch sau cân hoặc có biến động sau ngày kết thúc kỳ (không thể dùng số cân hiện tại làm tồn quá khứ).
+
+Xưởng: trang Tồn kho có thể chọn năm, hiển thị thêm vụn đã bán và vụn chưa bán theo kiểm kê năm; tồn cuối kỳ và hao hụt theo báo cáo Xưởng, không trừ hàng mỗi lần bán.

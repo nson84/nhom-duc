@@ -438,6 +438,11 @@ body {
   background: transparent;
 }
 
+.dashboard-page {
+  padding-inline: 8px;
+  min-width: 0;
+}
+
 /* Card / bảng: bo 12px, nổi khỏi nền bằng shadow (sáng) hoặc border (tối) */
 .app-content .ant-card {
   background: var(--color-surface);
@@ -465,6 +470,16 @@ body {
   display: flex;
   flex-direction: column;
   padding-bottom: 24px;
+}
+
+/* Báo cáo có nhiều bảng trong Tabs: để nội dung tự quyết định chiều cao khung. */
+.app-content > .ant-card.report-page-card:only-child {
+  flex: 0 0 auto;
+}
+
+.app-content > .ant-card.report-page-card:only-child > .ant-card-body {
+  display: block;
+  flex: 0 0 auto;
 }
 .app-content .ant-card.app-fill-card > .ant-card-body > .ant-table-wrapper,
 .app-content > .ant-card:only-child:not(.startup-card) > .ant-card-body > .ant-table-wrapper {
@@ -963,12 +978,31 @@ body,
 }
 
 /* Modal nổi rõ trên nền sáng/tối */
-.ant-modal .ant-modal-content {
+.ant-modal {
+  top: 12px;
+  max-width: calc(100vw - 24px);
+  padding-bottom: 12px;
+}
+
+.ant-modal .ant-modal-container {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 24px);
   background: var(--color-surface-elevated) !important;
   border: var(--card-border);
   border-radius: var(--radius-card) !important;
   box-shadow: var(--color-shadow-overlay) !important;
   color: var(--color-text);
+}
+
+.ant-modal .ant-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ant-modal .ant-modal-header,
+.ant-modal .ant-modal-footer {
+  flex: 0 0 auto;
 }
 
 .ant-modal .ant-modal-header {

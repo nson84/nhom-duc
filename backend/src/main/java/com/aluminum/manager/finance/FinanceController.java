@@ -4,6 +4,7 @@ import com.aluminum.manager.common.ApiResponse;
 import com.aluminum.manager.finance.FinanceDtos.CreateTransactionRequest;
 import com.aluminum.manager.finance.FinanceDtos.FinanceSummaryDto;
 import com.aluminum.manager.finance.FinanceDtos.InventoryReportRowDto;
+import com.aluminum.manager.finance.FinanceDtos.InvoiceGrossMarginDto;
 import com.aluminum.manager.finance.FinanceDtos.PayrollReportRowDto;
 import com.aluminum.manager.finance.FinanceDtos.ProductSalesRowDto;
 import com.aluminum.manager.finance.FinanceDtos.ProfitReportDto;
@@ -70,6 +71,13 @@ public class FinanceController {
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 		return ApiResponse.ok(service.profitReport(from, to), null);
+	}
+
+	@GetMapping("/reports/invoice-margins")
+	public ApiResponse<List<InvoiceGrossMarginDto>> invoiceMargins(
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+		return ApiResponse.ok(service.invoiceGrossMargins(from, to), null);
 	}
 
 	@GetMapping("/reports/sales-by-product")

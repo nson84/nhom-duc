@@ -21,13 +21,15 @@ const categoryNames: Record<string, string> = {
 function saleBlock(book: AnnualBook, sale: AnnualBook["sales"][number]) {
   const items = book.saleItems.filter((item) => item.documentId === sale.id);
   const payments = book.payments.filter((payment) => payment.documentId === sale.id);
-  return `<div class="invoice">
-    <h4>${esc(sale.code)} · ${esc(date(sale.date))}</h4>
+  const remaining = Math.max(0, sale.total - sale.paidAsOf);
+  const paid = remaining <= 0;
+  return `<div class="invoice ${paid ? "invoice-paid" : "invoice-unpaid"}">
+    <div class="invoice-heading"><h4>${esc(sale.code)} · ${esc(date(sale.date))}</h4><span class="payment-status ${paid ? "status-paid" : "status-unpaid"}">${paid ? "✓ Đã thanh toán" : sale.paidAsOf > 0 ? "⚠ Thanh toán một phần" : "⚠ Chưa thanh toán"}</span></div>
     <p>Khách: ${esc(sale.customerName || "Chưa gắn khách")} · Người bán: ${esc(sale.seller || "—")} · Người nhận: ${esc(sale.receiver || "—")}</p>
     ${table(["Sản phẩm", "Loại nhôm", "Số lượng", "Đơn giá", "Thành tiền"], items.map((item) => [
       esc(item.product), esc(item.category), `${qty(item.quantity)} ${esc(item.unit)}`, money(item.unitPrice), money(item.amount),
     ]))}
-    <p class="total">Tiền phiếu: ${money(sale.total)} · Đã thu đến ${day(book.periodTo)}: ${money(sale.paidAsOf)} · Còn nợ: ${money(Math.max(0, sale.total - sale.paidAsOf))}</p>
+    ${table(["Tiền hóa đơn", `Đã thu đến ${day(book.periodTo)}`, "Còn phải thu"], [[money(sale.total), money(sale.paidAsOf), money(remaining)]])}
     ${sale.notes ? `<p>Ghi chú: ${esc(sale.notes)}</p>` : ""}
     ${table(["Lần thu", "Số tiền", "Hình thức", "Người thu", "Ghi chú"], payments.map((payment) => [
       esc(date(payment.date)), money(payment.amount), esc(payment.method), esc(payment.collector || "—"), esc(payment.note || ""),
@@ -138,7 +140,14 @@ export function buildAnnualBookHtml(books: AnnualBook[]) {
     .shop-cover { break-before: page; min-height: 230mm; padding-top: 25mm; }
     .shop-cover:first-child { break-before: auto; } .chapter { break-before: page; }
     .customer { break-before: page; } .customer:first-of-type { break-before: auto; }
-    .invoice { border-top: 1px solid #c8d2dc; padding-top: 2mm; margin-top: 5mm; }
+    .invoice { border: 1pt solid #c8d2dc; border-radius: 2mm; padding: 3mm; margin: 5mm 0; }
+    .invoice-heading { display: flex; justify-content: space-between; align-items: center; gap: 4mm; }
+    .invoice-heading h4 { margin: 0 0 2mm; }
+    .invoice-paid { border-left: 3pt solid #198754; }
+    .invoice-unpaid { border: 1.2pt solid #c83c3c; border-left: 3pt solid #c83c3c; background: #fff4f2; }
+    .payment-status { font-weight: bold; padding: 1.5mm 2mm; border-radius: 1mm; white-space: nowrap; }
+    .status-paid { color: #166534; background: #dcfce7; }
+    .status-unpaid { color: #991b1b; background: #fee2e2; }
     .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 15mm 0; }
     .summary div { border: 1px solid #9fb0c2; padding: 5mm; } .summary b { display: block; margin-top: 2mm; }
     .total, .grand { text-align: right; font-weight: bold; } .grand { border-top: 1px solid #8c9dae; padding-top: 3mm; }

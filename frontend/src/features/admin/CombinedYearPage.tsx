@@ -1,4 +1,5 @@
-import { Alert, Card, InputNumber, Space, Statistic, Table, Typography } from "antd";
+import { Alert, Card, InputNumber, Space, Statistic, Typography } from "antd";
+import { ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { formatMoney } from "../../utils/money";

@@ -1,5 +1,6 @@
 import { SaveOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Radio, Select, Space, Statistic, Switch, Table, Tag, message } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Radio, Select, Space, Statistic, Switch, Tag, message } from "antd";
+import { ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { toApiError } from "../../services/error-handler";

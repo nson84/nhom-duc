@@ -40,7 +40,7 @@ Mở `http://127.0.0.1:5173`.
 
 Ảnh sản phẩm lưu trong thư mục `image` ở gốc dự án khi chạy bằng `dev-backend.ps1`. Sao lưu thư mục này cùng database để giữ ảnh khi chuyển máy. Có thể đặt `ALUMINUM_IMAGE_DIR` để dùng thư mục khác.
 
-Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. Hiện `AdminBootstrap` tạo hoặc cập nhật ba tài khoản `admin`, `phanphoi`, `xuong` và đặt lại mật khẩu mặc định `123456` mỗi lần backend khởi động; không bắt buộc đổi mật khẩu. Đây là hành vi hiện tại cần sửa trước khi sử dụng thực tế. Các biến cấu hình khác được khai báo trong `application.yml`:
+Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. `AdminBootstrap` tạo ba tài khoản `admin`, `phanphoi`, `xuong` nếu chưa tồn tại, với mật khẩu ban đầu `1234567` và yêu cầu đổi mật khẩu. Tài khoản đã có giữ nguyên mật khẩu và trạng thái khi backend khởi động lại. Form đăng nhập tự điền `1234567` khi chọn tài khoản; nếu tài khoản đã đổi mật khẩu, hãy nhập mật khẩu hiện tại. Các biến cấu hình khác được khai báo trong `application.yml`:
 
 - `ALUMINUM_JWT_SECRET` (ít nhất 32 byte)
 - `ALUMINUM_DB_USERNAME`

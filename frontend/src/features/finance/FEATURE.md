@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Khung Báo cáo giãn theo nội dung; bảng nhiều cột, gồm bảng tiền công, cuộn ngang trong bảng ở cửa sổ hẹp. Modal Thu chi dài cuộn thân và giữ footer nhìn thấy.
+
 ### `/thu-chi` — Sổ thu chi
 
 | | |
@@ -44,4 +46,10 @@ Phân phối ghi nước, bánh cho đội giao nhôm, bảo trì trong chi phí
 
 Báo cáo Phân phối hiển thị doanh thu, thực thu và công nợ.
 
+Tab Doanh thu & Công nợ còn hiển thị lãi năm Phân phối từ bản chốt theo khoảng ngày đã chọn. Trước khi kiểm kê và chốt, báo chưa có lãi năm chính xác; lãi vật tư hóa đơn/tháng ở tab riêng chỉ là ước tính tham khảo.
+
 Phiếu chi Phân phối có nhóm bảo trì và người chi. Ghi chú phiếu chi là tùy chọn ở cả hai bên. Phân phối ẩn tab bán theo sản phẩm.
+
+### Lãi gộp vật tư tham khảo theo hóa đơn / tháng
+
+Tab **Lãi gộp hóa đơn / tháng** có doanh thu, giá vật tư tham khảo theo ngày giao và lãi vật tư ước tính cho từng hóa đơn, kèm tổng theo tháng. Không trừ tiền công, phụ kiện, hao hụt và chi phí hoạt động; **không** dùng làm lãi đã quyết toán. Nếu thiếu giá vốn tham khảo, số lãi để trống thay vì giả định giá vốn bằng 0. Dữ liệu lấy từ `GET /api/v1/reports/invoice-margins`, chỉ hiện một sổ (không gộp cả hai).

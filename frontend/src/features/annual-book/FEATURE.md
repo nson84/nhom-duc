@@ -14,3 +14,5 @@ Giá trị tồn và lãi lấy từ bản chốt năm nếu có; báo cáo đá
 Ngày đầu/kết thúc sổ lấy từ bản chốt của từng cửa hàng, nên hai sổ cùng tên năm có thể có ngày chốt khác nhau. Các số nợ và thanh toán dùng mốc cuối ngày chốt, không mặc định 31/12. Tiền công tháng được ghi vào kỳ chứa ngày cuối tháng.
 
 Code: `AnnualBookPage.tsx`, `annual-book-api.ts`, `annual-book-print.ts`; backend `finance/AnnualBookController.java`, `finance/AnnualBookService.java`.
+
+Phiếu bán trong mục chi tiết từng khách có bảng hàng, bảng tiền phiếu/đã thu/còn nợ; hóa đơn đã thanh toán đánh dấu tích xanh, chưa thanh toán hoặc thanh toán một phần được viền đỏ nổi bật khi in.

@@ -131,7 +131,10 @@ export type StockBalance = {
   averageCostPerBase: number;
   stockValue: number;
   purchasedKg: number;
+  purchasedValue: number;
   deliveredKg: number;
+  latestCountScrapKg: number;
+  latestCountLossKg: number;
 };
 
 export type InventoryCountResult = {
@@ -207,7 +210,7 @@ export async function listBalances(params: { q?: string; onlyInStock?: boolean }
   return (await api.get<Envelope<StockBalance[]>>("/api/v1/stock-balances", { params })).data.data;
 }
 
-export async function saveInventoryCount(items: { productId: number; categoryId: number; countedQuantityKg: number }[]) {
+export async function saveInventoryCount(items: { productId: number; categoryId: number; countedQuantityKg: number; scrapKg?: number }[]) {
   return (await api.post<Envelope<InventoryCountResult>>("/api/v1/stock-balances/count", { items })).data.data;
 }
 

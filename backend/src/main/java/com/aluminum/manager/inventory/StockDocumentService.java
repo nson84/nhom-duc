@@ -705,13 +705,19 @@ public class StockDocumentService {
 				       c.name AS category_name, p.base_unit_name,
 				       b.quantity_base, b.average_cost_per_base,
 				       COALESCE(flow.purchased_kg, 0) AS purchased_kg,
-				       COALESCE(flow.delivered_kg, 0) AS delivered_kg
+				       COALESCE(flow.purchased_value, 0) AS purchased_value,
+				       COALESCE(flow.delivered_kg, 0) AS delivered_kg,
+				       COALESCE(e.scrap_quantity_kg, 0) AS count_scrap_kg,
+				       COALESCE(e.loss_quantity_kg, 0) AS count_loss_kg
 				FROM stock_balances b
 				JOIN products p ON p.id = b.product_id
 				JOIN product_categories c ON c.id = b.category_id
 				LEFT JOIN (
 				    SELECT i.product_id, i.category_id,
 				           SUM(CASE WHEN d.document_type = 'PURCHASE' THEN i.quantity_base ELSE 0 END) AS purchased_kg,
+				           SUM(CASE WHEN d.document_type = 'PURCHASE'
+				             THEN COALESCE(i.line_total * d.total_amount / NULLIF(d.subtotal, 0), 0)
+				             ELSE 0 END) AS purchased_value,
 				           SUM(CASE WHEN d.document_type = 'SALE' THEN i.quantity_base ELSE 0 END) AS delivered_kg
 				    FROM stock_document_items i
 				    JOIN stock_documents d ON d.id = i.document_id
@@ -720,6 +726,8 @@ public class StockDocumentService {
 				      AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id)
 				    GROUP BY i.product_id, i.category_id
 				) flow ON flow.product_id = b.product_id AND flow.category_id = b.category_id
+				LEFT JOIN distribution_inventory_count_evidence e ON e.shop_id = p.shop_id
+				  AND e.product_id = b.product_id AND e.category_id = b.category_id
 				WHERE 1 = 1
 				""" + shops.shopOnly("p"));
 		List<Object> args = new ArrayList<>();
@@ -742,7 +750,8 @@ public class StockDocumentService {
 					rs.getString("product_code"), rs.getString("name"),
 					rs.getString("category_name"), rs.getString("base_unit_name"), quantity, cost,
 					quantity.multiply(cost).setScale(InventoryMath.MONEY_SCALE, InventoryMath.ROUNDING),
-					rs.getBigDecimal("purchased_kg"), rs.getBigDecimal("delivered_kg"));
+					rs.getBigDecimal("purchased_kg"), rs.getBigDecimal("purchased_value"), rs.getBigDecimal("delivered_kg"),
+					rs.getBigDecimal("count_scrap_kg"), rs.getBigDecimal("count_loss_kg"));
 		}, args.toArray());
 	}
 
@@ -767,7 +776,21 @@ public class StockDocumentService {
 			Balance balance = lockBalance(item.productId(), item.categoryId());
 			BigDecimal counted = item.countedQuantityKg().setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
 			BigDecimal delta = counted.subtract(balance.quantity()).setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
-			if (delta.signum() == 0) continue;
+			BigDecimal scrap = item.scrapKg() == null ? BigDecimal.ZERO : item.scrapKg().setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
+			BigDecimal shortageOfItem = delta.signum() < 0 ? delta.abs() : BigDecimal.ZERO;
+			if (scrap.compareTo(shortageOfItem) > 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Vụn nhôm không thể lớn hơn khối lượng thiếu so với tồn sổ", null);
+			BigDecimal pureLoss = shortageOfItem.subtract(scrap);
+			if (delta.signum() == 0) {
+				jdbc.update("""
+						INSERT INTO distribution_inventory_count_evidence
+						(shop_id, product_id, category_id, counted_quantity_kg, counted_at, scrap_quantity_kg, loss_quantity_kg)
+						VALUES (?, ?, ?, ?, NOW(3), ?, ?)
+						ON DUPLICATE KEY UPDATE counted_quantity_kg = VALUES(counted_quantity_kg), counted_at = VALUES(counted_at),
+						  scrap_quantity_kg = VALUES(scrap_quantity_kg), loss_quantity_kg = VALUES(loss_quantity_kg)
+						""", shops.currentId(), item.productId(), item.categoryId(), counted, scrap, pureLoss);
+				continue;
+			}
 			Long unitIdValue = jdbc.queryForObject("""
 					SELECT id FROM product_units WHERE product_id = ? AND unit_name = 'tấn' AND is_active = 1
 					""", Long.class, item.productId());
@@ -781,6 +804,13 @@ public class StockDocumentService {
 			DocumentDto draft = createDraft(request);
 			DocumentDto confirmed = confirm(draft.id());
 			codes.add(confirmed.documentCode());
+			jdbc.update("""
+					INSERT INTO distribution_inventory_count_evidence
+					(shop_id, product_id, category_id, counted_quantity_kg, counted_at, scrap_quantity_kg, loss_quantity_kg)
+					VALUES (?, ?, ?, ?, NOW(3), ?, ?)
+					ON DUPLICATE KEY UPDATE counted_quantity_kg = VALUES(counted_quantity_kg), counted_at = VALUES(counted_at),
+					  scrap_quantity_kg = VALUES(scrap_quantity_kg), loss_quantity_kg = VALUES(loss_quantity_kg)
+					""", shops.currentId(), item.productId(), item.categoryId(), counted, scrap, pureLoss);
 			if (delta.signum() < 0) shortage = shortage.add(delta.abs()); else surplus = surplus.add(delta);
 		}
 		if (!codes.isEmpty()) audit.record(CurrentAdmin.get().id(), "DISTRIBUTION_INVENTORY_COUNT", "stock_balances",
