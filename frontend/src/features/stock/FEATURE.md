@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi cần; modal nhập/bán ở cửa sổ thấp cuộn phần thân, giữ nút lưu/đóng ở footer trong màn hình.
+
 ### `/nhap-kho` — Nhập kho
 
 | | |

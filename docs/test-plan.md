@@ -55,3 +55,7 @@ Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên 
 - Khách mua: bốn tổng số kg giao, tiền hàng phải thu, tiền đã thu thực tế, nợ; lọc danh sách khách và mở từng hóa đơn xem dòng hàng, thanh toán.
 - Tồn kho Phân phối: tổng tiền hàng nhập lấy dòng phiếu nhập còn hiệu lực, không lấy giá trị tồn sổ bằng 0; tồn kg giảm khi xác nhận bán. Xưởng: tổng vụn bằng vụn đã bán cộng vụn chưa bán trong bản kiểm kê, phiếu bán không trừ tồn.
 - Đồng bộ danh mục lần hai giữ giá bán, mô tả và trạng thái riêng của Xưởng; chỉ tên/ảnh SP và giá nhập tham khảo được cập nhật. Giá bán mới vẫn cần xem hoặc xác nhận giữ nguyên.
+
+## Kiểm thử responsive
+
+Xem [biên bản rà soát responsive](responsive-audit.md). Quét các route chính ở 1920×1080, 1600×900, 1366×768, 1280×720, 1024×768 và 900×600; kiểm tra chiều rộng trang và vùng nội dung, thanh cuộn riêng của bảng nhiều cột, menu Drawer dưới 1200 px, modal nhập/bán thấp 600 px và footer luôn dùng được. Kiểm tra sáng/tối cho modal, trạng thái dữ liệu dài, dropdown, thông báo, bản xem trước PDF và các vai trò Admin/Phân phối/Xưởng khi có phiên tương ứng.

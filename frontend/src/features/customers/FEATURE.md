@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Bảng khách, hóa đơn và nhắc nợ cuộn ngang bên trong bảng khi cửa sổ hẹp; các modal chi tiết cuộn nội dung theo chiều cao viewport.
+
 ### `/khach-mua` — Khách mua (công nợ nhẹ)
 
 | | |

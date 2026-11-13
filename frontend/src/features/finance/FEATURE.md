@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Khung Báo cáo giãn theo nội dung; bảng nhiều cột, gồm bảng tiền công, cuộn ngang trong bảng ở cửa sổ hẹp. Modal Thu chi dài cuộn thân và giữ footer nhìn thấy.
+
 ### `/thu-chi` — Sổ thu chi
 
 | | |

@@ -2,6 +2,8 @@
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Bảng loại nhôm và lịch sử giá cuộn ngang bên trong modal khi cửa sổ hẹp; form và nút lưu vẫn nằm trong vùng modal có thể cuộn.
+
 ### `/san-pham` — Sản phẩm
 
 | | |
