@@ -29,6 +29,10 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		String path = request.getRequestURI();
 		String method = request.getMethod();
 		UserRole role = admin.role();
+		if (isBackupPath(path) && role != UserRole.ADMIN) {
+			forbidden(response, "Chỉ Admin được quản lý sao lưu và khôi phục");
+			return;
+		}
 
 		if (role == UserRole.DISTRIBUTION && (isPayrollPath(path)
 				|| path.equals("/api/v1/reports/payroll")
@@ -72,10 +76,14 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 				|| path.startsWith("/api/v1/bank-accounts")) {
 			return true;
 		}
-		if (path.startsWith("/api/v1/backups")) {
+		if (isBackupPath(path)) {
 			return true;
 		}
 		return false;
+	}
+
+	private static boolean isBackupPath(String path) {
+		return path.equals("/api/v1/backups") || path.startsWith("/api/v1/backups/");
 	}
 
 	private static void forbidden(HttpServletResponse response, String message) throws IOException {

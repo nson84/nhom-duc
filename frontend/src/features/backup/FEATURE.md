@@ -12,7 +12,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 **Chức năng**
 - Trạng thái lịch (giờ, retention, thư mục), cảnh báo lỗi lần gần nhất
-- Sao lưu ngay; danh sách bản sao lưu; phục hồi (xác nhận)
+- Sao lưu ngay; danh sách bản sao lưu. Nút khôi phục tạm khóa vì backend chưa có quy trình xác minh trên database riêng; API trả 503, không ghi đè dữ liệu làm việc.
 - Cấu hình lịch / thư mục / số ngày giữ
 
 ## Bổ sung theo code hiện tại

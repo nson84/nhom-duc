@@ -28,4 +28,4 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 Đổi mật khẩu dùng `PUT /api/v1/auth/password`; đăng nhập dùng `POST /api/v1/auth/login`.
 
-Form tự điền `1234567` khi chọn một trong ba tài khoản mặc định. Đây là mật khẩu khởi tạo cho tài khoản mới; tài khoản đã đổi mật khẩu phải nhập mật khẩu hiện tại. Backend không đặt lại mật khẩu khi khởi động; xem [tài liệu auth backend](../../../../backend/src/main/java/com/aluminum/manager/auth/FEATURE.md).
+Form chỉ tự điền `1234567` khi Vite chạy ở chế độ dev. Bản production để trống mật khẩu; người cài mới đọc tệp mật khẩu lần đầu trong `%APPDATA%\AluminumManager`, đăng nhập và đổi mật khẩu. Backend không đặt lại mật khẩu khi khởi động; xem [tài liệu auth backend](../../../../backend/src/main/java/com/aluminum/manager/auth/FEATURE.md).

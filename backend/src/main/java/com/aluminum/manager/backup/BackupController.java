@@ -5,6 +5,8 @@ import com.aluminum.manager.backup.BackupDtos.BackupSettingsDto;
 import com.aluminum.manager.backup.BackupDtos.BackupStatusDto;
 import com.aluminum.manager.backup.BackupDtos.RestoreRequest;
 import com.aluminum.manager.common.ApiResponse;
+import com.aluminum.manager.common.BusinessException;
+import com.aluminum.manager.common.ErrorCode;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,7 +45,8 @@ public class BackupController {
 	@PostMapping("/{id}/restore")
 	public ApiResponse<BackupLogDto> restore(
 			@PathVariable long id, @Valid @RequestBody RestoreRequest request) {
-		return ApiResponse.ok(service.restoreBackup(id, request), "Đã phục hồi dữ liệu thành công");
+		throw new BusinessException(ErrorCode.RESTORE_UNAVAILABLE,
+				"Tạm khóa khôi phục trực tiếp: cần xác minh bản sao trên database riêng trước khi thay dữ liệu đang dùng", null);
 	}
 
 	@GetMapping("/settings")

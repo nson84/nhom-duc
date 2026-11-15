@@ -9,5 +9,8 @@ if (-not $env:ALUMINUM_DB_PASSWORD) {
 if (-not $env:ALUMINUM_IMAGE_DIR) {
     $env:ALUMINUM_IMAGE_DIR = Join-Path (Split-Path -Parent $PSScriptRoot) "image"
 }
+if (-not $env:ALUMINUM_DEV_BOOTSTRAP_PASSWORD) {
+    $env:ALUMINUM_DEV_BOOTSTRAP_PASSWORD = "1234567"
+}
 Set-Location (Join-Path $PSScriptRoot "..\backend")
 & .\mvnw.cmd spring-boot:run

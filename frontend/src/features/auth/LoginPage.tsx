@@ -16,12 +16,8 @@ const ACCOUNT_OPTIONS = [
   { value: "xuong", label: "xuong — xưởng" },
 ] as const;
 
-/** Mật khẩu mặc định bootstrap (AdminBootstrap) — autofill khi chọn tài khoản. */
-const DEFAULT_PASSWORDS: Record<(typeof ACCOUNT_OPTIONS)[number]["value"], string> = {
-  admin: "1234567",
-  phanphoi: "1234567",
-  xuong: "1234567",
-};
+/** Chỉ tiện cho môi trường phát triển; bản đóng gói không chứa mật khẩu cố định. */
+const DEV_PASSWORD = import.meta.env.DEV ? "1234567" : "";
 
 const schema = z.object({
   username: z.enum(["admin", "phanphoi", "xuong"], { message: "Chọn tài khoản" }),
@@ -35,7 +31,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const { control, handleSubmit, formState, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { username: "admin", password: DEFAULT_PASSWORDS.admin },
+    defaultValues: { username: "admin", password: DEV_PASSWORD },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -88,7 +84,7 @@ export function LoginPage() {
                         aria-label="Tài khoản"
                         onChange={(value: FormValues["username"]) => {
                           field.onChange(value);
-                          setValue("password", DEFAULT_PASSWORDS[value], {
+                          setValue("password", DEV_PASSWORD, {
                             shouldDirty: true,
                             shouldValidate: true,
                           });

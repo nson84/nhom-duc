@@ -99,9 +99,9 @@ export function BackupsPage() {
         </Descriptions>
       ) : null}
 
-      <p style={{ color: "var(--color-text-secondary)", marginTop: 0 }}>
-        Mỗi bản sao lưu đều được kiểm tra kích thước và mã băm toàn vẹn SHA-256. Trước khi phục hồi, hệ thống tự động tạo một bản sao lưu trạng thái hiện tại để phòng ngừa rủi ro.
-      </p>
+      <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+        message="Tạm khóa khôi phục tự động"
+        description="Bản sao phải được thử trên database riêng trước khi thay dữ liệu đang dùng. Các bản backup hiện có vẫn được giữ nguyên." />
 
       <PagedTable<BackupLog>
         rowKey="id"
@@ -148,9 +148,7 @@ export function BackupsPage() {
             title: "Thao tác",
             width: 120,
             render: (_, log) =>
-              log.status === "SUCCESS" ? (
-                <a onClick={() => setRestoring(log)}>Phục hồi</a>
-              ) : null,
+              log.status === "SUCCESS" ? <span title="Đang xây quy trình kiểm thử trên database riêng">Tạm khóa</span> : null,
           },
         ]}
       />
