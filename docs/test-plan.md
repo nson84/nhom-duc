@@ -97,3 +97,7 @@ Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và b
 ## Bổ sung 19/11/2026
 
 Chạy frontend npm run build và backend mvnw.cmd test. MySQL riêng: sao chép scripts/test-mysql-env.local.example.ps1 thành scripts/test-mysql-env.local.ps1, điền cục bộ rồi chạy scripts/test-mysql.ps1. Chưa coi các ca tích hợp đã đạt khi chưa cấu hình và chạy. Xem audit-progress-20261119.md.
+
+## Audit bổ sung 19/11 — đã thực thi trên MySQL riêng
+
+StockLifecycleMysqlIT có 12 ca: sửa và rollback, thanh toán lặp/đồng thời, Xưởng giữ tồn, đảo đơn/cặp nội bộ, lãi chuyển nội bộ, giá tham khảo0, nợ kỳ sau và snapshot tháng. StagedRestoreMysqlIT có 2 ca SQL/ảnh và từ chối FK mồ côi. 74 unit test và 14 integration test đạt. Chưa chạy UI/PDF/NSIS. Xem audit-followup-20261119.md để không nhầm coverage hiện tại là toàn bộ checklist.

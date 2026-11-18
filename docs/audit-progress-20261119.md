@@ -22,3 +22,5 @@ Chưa xác nhận hoàn tất: sửa/đảo phiếu và cạnh tranh giao dịch
 
 Không reset, xóa hoặc chạy dữ liệu mẫu vào database đang làm việc. Chưa commit/push các thay đổi này.
 
+
+Bổ sung sau PR #3: các dòng chờ MySQL ở trên là trạng thái lịch sử trước lượt audit tiếp theo. Hiện đã chạy MySQL thử cổng13307: 14 ca đạt; unit74 và npmci/build đạt. Xem audit-followup-20261119.md để biết lỗi mới đã sửa và phần còn chưa nghiệm thu.

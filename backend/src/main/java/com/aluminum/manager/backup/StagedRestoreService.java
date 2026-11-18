@@ -90,10 +90,41 @@ public class StagedRestoreService {
 						throw new IOException("Số dòng khôi phục không khớp: " + expected.getKey());
 				}
 			}
+			verifyForeignKeys(connection);
 		} catch (Exception e) {
 			throw new IOException("Khôi phục thử trên database riêng thất bại: " + database, e);
 		}
 		return new Prepared(database, statements, images, imageDirectory.toString());
+	}
+
+	// Re-enabling FOREIGN_KEY_CHECKS does not validate rows imported while it was disabled.
+	private static void verifyForeignKeys(java.sql.Connection connection) throws java.sql.SQLException, IOException {
+		var constraints = new java.util.LinkedHashMap<String, java.util.List<String[]>>();
+		try (var query = connection.prepareStatement("""
+				SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME
+				FROM information_schema.KEY_COLUMN_USAGE
+				WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL
+				ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION
+				"""); var rows = query.executeQuery()) {
+			while (rows.next()) {
+				String[] column = {rows.getString(1), rows.getString(2), rows.getString(3), rows.getString(4)};
+				constraints.computeIfAbsent(column[0] + "." + rows.getString(5), ignored -> new java.util.ArrayList<>()).add(column);
+			}
+		}
+		for (var constraint : constraints.entrySet()) {
+			var columns = constraint.getValue();
+			String nonNull = columns.stream().map(c -> "c." + identifier(c[1]) + " IS NOT NULL").collect(java.util.stream.Collectors.joining(" AND "));
+			String matches = columns.stream().map(c -> "p." + identifier(c[3]) + " = c." + identifier(c[1])).collect(java.util.stream.Collectors.joining(" AND "));
+			String sql = "SELECT 1 FROM " + identifier(columns.get(0)[0]) + " c WHERE " + nonNull
+					+ " AND NOT EXISTS (SELECT 1 FROM " + identifier(columns.get(0)[2]) + " p WHERE " + matches + ") LIMIT 1";
+			try (var query = connection.createStatement(); var rows = query.executeQuery(sql)) {
+				if (rows.next()) throw new IOException("Quan hệ dữ liệu khôi phục không hợp lệ: " + constraint.getKey());
+			}
+		}
+	}
+
+	private static String identifier(String value) {
+		return "`" + value.replace("`", "``") + "`";
 	}
 
 	static String stagingUrl(String activeUrl, String database) {

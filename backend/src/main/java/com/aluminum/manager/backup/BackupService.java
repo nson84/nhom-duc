@@ -295,7 +295,7 @@ public class BackupService {
 	}
 
 	private String buildDatabaseDump(LocalDateTime started) throws Exception {
-		StringBuilder sb = new StringBuilder(65536);
+		BoundedSqlDump sb = new BoundedSqlDump(BoundedSqlDump.MAX_CHARACTERS);
 		sb.append(BACKUP_HEADER).append("\n");
 		sb.append("-- Generated at: ").append(started).append("\n");
 		sb.append("SET FOREIGN_KEY_CHECKS = 0;\n");
@@ -340,6 +340,9 @@ public class BackupService {
 								sb.append(", ");
 							}
 							Object val = rs.getObject(c);
+							if ((val instanceof byte[] binary && (long) binary.length * 2 + 3 > sb.remaining())
+									|| (val instanceof String text && text.length() > sb.remaining()))
+								throw new IOException("Một trường dữ liệu vượt giới hạn sao lưu an toàn");
 							if (val instanceof String value && value.startsWith("product-image:")) images.add(value.substring(14));
 							sb.append(toSqlLiteral(val));
 						}
@@ -349,6 +352,8 @@ public class BackupService {
 			}
 			for (String image : images) {
 				Path imagePath = safeImagePath(image);
+				if (Files.size(imagePath) > (long) sb.remaining() / 4 * 3)
+					throw new IOException("Ảnh vượt dung lượng còn lại của bản sao lưu");
 				sb.append("-- IMAGE ").append(image).append(' ')
 					.append(Base64.getEncoder().encodeToString(Files.readAllBytes(imagePath))).append('\n');
 			}

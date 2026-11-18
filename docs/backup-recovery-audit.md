@@ -47,3 +47,7 @@ Maven test: 62 test, 0 thất bại. Frontend build đạt. Staging restore tạ
 Ngày 15/11: full suite tăng lên 63 test, 0 lỗi; frontend build đạt. Backend khởi động trên MySQL thật, Flyway schema 39 không có migration chờ. Backup thủ công #5 tạo `.ndbak` 6.547 byte và API verify trả `VERIFIED`. Integration test dựng database mới bằng tài khoản ứng dụng thất bại đúng dự kiến vì `aluminum_app` không có quyền CREATE DATABASE; UI/API đã bổ sung chỗ nhập tạm tài khoản MySQL có quyền đó. Chưa thử lại bằng tài khoản có quyền. Chưa có cấu hình R2 mới trong ứng dụng nên chưa thử upload/download R2 thật. Không xóa/sửa dữ liệu nghiệp vụ.
 
 Sau khi Admin nhập token R2 mới: API kết nối trả `CONNECTED`; đồng bộ được 2 archive `.ndbak` (bản scheduled và bản thủ công #5). Tải lại #5 từ R2 và giải mã trả `VERIFIED`, kể cả khi cung cấp recovery key trong yêu cầu như máy mới. Đồng bộ lần hai upload 0, hàng chờ 0, không có lỗi đồng bộ. Chưa dựng database thử bằng tài khoản có quyền CREATE DATABASE và chưa kiểm thử chuyển database hoạt động/rollback trên PC B.
+
+## Cập nhật 19/11/2026
+
+MySQL thử riêng cổng 13307 đã chạy 14 bài tích hợp (12 nghiệp vụ và 2 staging), 0 lỗi; 74 unit test, frontend npm ci/build đạt. Đã bổ sung kiểm tra FK sau import, ảnh staging, quyền thư mục0700 và giới hạn bộ đệm SQL. Kết quả này chưa chứng minh chuyển database hoạt động/rollback hoặc archive đầy đủ trên máy khác. Xem audit-followup-20261119.md.

@@ -123,7 +123,8 @@ public class R2CloudService {
 	static void setOwnerOnly(Path path) throws IOException {
 		var posix = Files.getFileAttributeView(path, java.nio.file.attribute.PosixFileAttributeView.class);
 		if (posix != null) {
-			posix.setPermissions(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+			posix.setPermissions(java.nio.file.attribute.PosixFilePermissions.fromString(
+					Files.isDirectory(path) ? "rwx------" : "rw-------"));
 			return;
 		}
 		var view = Files.getFileAttributeView(path, java.nio.file.attribute.AclFileAttributeView.class);

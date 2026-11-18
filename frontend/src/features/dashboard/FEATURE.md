@@ -33,7 +33,7 @@ Phân phối chọn năm và khoảng ngày riêng để chốt, rồi bấm **C
 
 Hộp thoại chốt năm Phân phối hỏi đã kiểm kê tồn kho chưa và hiển thị khoảng ngày của kỳ. Chọn **Đã kiểm kê, chốt năm** để tiếp tục hoặc **Quay lại** để kiểm tra.
 
-Chốt sổ tháng tùy chọn tại /chot-so-thang, độc lập với Khóa tháng. Kiểm kê nguyên liệu và vụn theo loại, ô trống tính là 0 sau xác nhận. Bản lưu bất biến gồm doanh thu ngoài, giá trị nhập và chi hoạt động/lương theo ngày chi. Đây chưa phải tính lãi quyết toán tháng. Popup ngày cuối tháng theo ngày máy, rộng 60vw, nhắc sau 3 giờ hoặc bỏ qua tháng hiện tại. Trạng thái nhắc lưu trên trình duyệt theo cửa hàng/tháng.
+Chốt sổ tháng tùy chọn tại /chot-so-thang độc lập với Khóa tháng. Bản chụp gồm kiểm kê nguyên liệu/vụn, tồn đầu/cuối, doanh thu ngoài, nhập, chuyển nội bộ ra, chi hoạt động và tiền công theo tháng để tính lãi quản trị tháng. Ô trống kiểm kê tính là 0 sau xác nhận. Snapshot đã lưu không đổi theo giao dịch mới; muốn ngăn ghi thêm phải Khóa tháng. Chưa có thao tác ghi đè/mở lại snapshot. Popup ngày cuối tháng theo ngày máy, rộng 60vw; trạng thái nhắc lưu theo cửa hàng/tháng.
 
 ## Cập nhật rà soát 19/11/2026
 

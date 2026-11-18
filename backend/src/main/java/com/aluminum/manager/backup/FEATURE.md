@@ -29,3 +29,5 @@ Lịch backup mặc định 4 giờ; chọn 1/2/4/8/24 giờ ở trang Admin. Kh
 Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
 
 Tệp khóa/cấu hình dùng ACL chỉ chủ sở hữu trên Windows và quyền POSIX 0600 trên Linux; filesystem không hỗ trợ cả hai bị từ chối. Có test kiểm tra quyền thực tế trên từng nền tảng.
+
+Rà soát 19/11: quyền POSIX tệp0600/thư mục0700; staging kiểm tra khóa ngoại thực tế sau import, vì SET FOREIGN_KEY_CHECKS=1 không kiểm tra lại dòng cũ. SQL dump giới hạn 32 Mi ký tự và kiểm tra dung lượng ảnh trước đọc; vẫn dùng RAM, chưa streaming đầy đủ. Test giới hạn bộ đệm và staging SQL/ảnh/FK. Restore production vẫn khóa.
