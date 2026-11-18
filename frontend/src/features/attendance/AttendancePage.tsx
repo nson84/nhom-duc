@@ -7,6 +7,9 @@ import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { requiredNameRules } from "../../utils/name-rules";
 import { vndAmountRules, vndInputNumberProps, vndUnitPriceRules } from "../../utils/vnd-input";
+import { useShop } from "../shop/shop-store";
+import { useWorkingYear } from "../dashboard/working-year";
+import { getMonthStatus, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
 import {
   getMonthlyBoard,
   listEmployees,
@@ -55,7 +58,11 @@ const headerButtonStyle = {
 } as const;
 
 export function AttendancePage() {
-  const [period, setPeriod] = useState<Dayjs>(() => dayjs());
+  const workingYear = useWorkingYear(useShop());
+  const [period, setPeriod] = useState<Dayjs>(() => dayjs(`${workingYear.year}-01-01`));
+  const [resolvedWorkingYear, setResolvedWorkingYear] = useState<number | null>(null);
+  const [workingPeriod, setWorkingPeriod] = useState<YearPeriod | null>(null);
+  const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
   const [board, setBoard] = useState<MonthlyAttendanceBoard | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ emp: EmployeeMonthlyRow; day: AttendanceDay } | null>(null);
@@ -64,7 +71,25 @@ export function AttendancePage() {
   const [showPolicy, setShowPolicy] = useState(false);
   const [showHolidays, setShowHolidays] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    setResolvedWorkingYear(null);
+    getYearPeriod(workingYear.year)
+      .then((value) => { if (active) { setWorkingPeriod(value); setPeriod(dayjs(workingYear.month ? `${workingYear.month}-01` : value.periodFrom)); setResolvedWorkingYear(workingYear.year); } })
+      .catch(() => { if (active) { setPeriod(dayjs(`${workingYear.year}-01-01`)); setResolvedWorkingYear(workingYear.year); } });
+    return () => { active = false; };
+  }, [workingYear.year, workingYear.month]);
+
+  useEffect(() => {
+    const month = workingYear.month ?? period.format("YYYY-MM");
+    let active = true;
+    getMonthStatus(month).then((value) => { if (active) setMonthStatus(value); })
+      .catch(() => { if (active) setMonthStatus("NOT_OPEN"); });
+    return () => { active = false; };
+  }, [workingYear.month, period]);
+
   const load = useCallback(async () => {
+    if (resolvedWorkingYear !== workingYear.year) return;
     setLoading(true);
     try {
       setBoard(await getMonthlyBoard(period.year(), period.month() + 1));
@@ -73,16 +98,21 @@ export function AttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [period, resolvedWorkingYear, workingYear.year]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const dayNumbers = board ? Array.from({ length: board.daysInMonth }, (_, i) => i + 1) : [];
+  const dayNumbers = board ? Array.from({ length: board.daysInMonth }, (_, i) => i + 1).filter((day) => {
+    if (!workingPeriod?.started) return true;
+    const date = period.date(day);
+    return !date.isBefore(dayjs(workingPeriod.periodFrom), "day") && !date.isAfter(dayjs(workingPeriod.periodTo), "day");
+  }) : [];
 
   const openRoll = (day: number) => {
     if (!board) return;
+    if (monthStatus !== "OPEN") { message.warning("Hãy mở tháng ở Tổng quan trước khi chấm công"); return; }
     const date = period.date(day);
     const iso = date.format("YYYY-MM-DD");
     if (board.periodClosed) {
@@ -123,6 +153,8 @@ export function AttendancePage() {
           <DatePicker
             picker="month"
             allowClear={false}
+            disabled={!!workingYear.month}
+            disabledDate={(date) => !!workingPeriod?.started && (date.endOf("month").isBefore(dayjs(workingPeriod.periodFrom), "day") || date.startOf("month").isAfter(dayjs(workingPeriod.periodTo), "day"))}
             format="MM/YYYY"
             value={period}
             onChange={(val) => val && setPeriod(val)}
@@ -145,6 +177,8 @@ export function AttendancePage() {
         </Space>
       }
     >
+      {monthStatus !== "OPEN" && <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message={monthStatus === "CLOSED" ? "Tháng đã khóa; chỉ xem chấm công" : "Hãy mở tháng ở Tổng quan trước khi chấm công"} />}
       {board?.periodClosed ? (
         <Alert
           type="warning"

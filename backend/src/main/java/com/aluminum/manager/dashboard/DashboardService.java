@@ -42,6 +42,7 @@ public class DashboardService {
 				FROM stock_documents
 				WHERE document_type = 'SALE'
 				  AND status = 'CONFIRMED'
+				  AND is_internal = 0
 				  AND document_date >= ? AND document_date < ?
 				""", range);
 		BigDecimal purchaseAmount = money("""
@@ -61,13 +62,15 @@ public class DashboardService {
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE'
 				  AND d.status = 'CONFIRMED'
+				  AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				""", range);
 		BigDecimal cash = money("""
 				SELECT COALESCE(SUM(p.amount), 0)
 				FROM sales_payments p
 				JOIN stock_documents d ON d.id = p.document_id
-				WHERE p.payment_date >= ? AND p.payment_date < ?
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
+				  AND d.document_date >= ? AND d.document_date < ?
 				""", range);
 		BigDecimal expenses = money("""
 				SELECT COALESCE(SUM(amount), 0)
@@ -89,8 +92,9 @@ public class DashboardService {
 				SELECT COALESCE(SUM(pd.total_pay), 0)
 				FROM payroll_details pd
 				JOIN payroll_periods pp ON pp.id = pd.payroll_period_id
-				WHERE pp.period_year = ? AND pp.period_month = ?
-				""", BigDecimal.class, range.to().getYear(), range.to().getMonthValue()));
+				WHERE LAST_DAY(MAKEDATE(pp.period_year, 1) + INTERVAL (pp.period_month - 1) MONTH) >= ?
+				  AND LAST_DAY(MAKEDATE(pp.period_year, 1) + INTERVAL (pp.period_month - 1) MONTH) <= ?
+				""", BigDecimal.class, range.from(), range.to()));
 		return new DashboardSummary(
 				range.from(),
 				range.to(),
@@ -101,8 +105,8 @@ public class DashboardService {
 				expenses,
 				inventory,
 				payroll,
-				debts(range, true),
-				shops.isDistribution() ? debts(range, false) : null,
+				revenue.subtract(cash).max(BigDecimal.ZERO).setScale(MONEY_SCALE, ROUNDING),
+				supplierDebt(range),
 				shops.isDistribution() ? cashExpenses(range) : null,
 				shops.isDistribution() ? closing(range) : null,
 				purchaseAmount,
@@ -117,19 +121,18 @@ public class DashboardService {
 				""", range);
 	}
 
-	private BigDecimal debts(DateRange range, boolean customer) {
+	private BigDecimal supplierDebt(DateRange range) {
 		Timestamp end = Timestamp.valueOf(range.to().plusDays(1).atStartOfDay());
-		String paid = customer
-				? "SELECT SUM(p.amount) FROM sales_payments p WHERE p.document_id = d.id AND p.payment_date < ?"
-				: "SELECT SUM(f.amount) FROM financial_transactions f WHERE f.reference_type = 'STOCK_DOCUMENT'"
-				  + " AND f.reference_id = d.id AND f.category = 'PURCHASE_PAYMENT' AND f.status = 'CONFIRMED' AND f.transaction_date < ?";
 		return jdbc.queryForObject("""
 				SELECT COALESCE(SUM(GREATEST(d.total_amount - COALESCE((
-				""" + paid + """
+				    SELECT SUM(f.amount) FROM financial_transactions f
+				    WHERE f.reference_type = 'STOCK_DOCUMENT' AND f.reference_id = d.id
+				      AND f.category = 'PURCHASE_PAYMENT' AND f.status = 'CONFIRMED'
 				), 0), 0)), 0) FROM stock_documents d
-				WHERE d.shop_id = ? AND d.document_type = ? AND d.status = 'CONFIRMED'
-				  AND d.is_internal = 0 AND d.document_date < ?
-				""", BigDecimal.class, end, shops.currentId(), customer ? "SALE" : "PURCHASE", end);
+				WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
+				  AND d.is_internal = 0 AND d.document_date >= ? AND d.document_date < ?
+				""", BigDecimal.class, shops.currentId(),
+				Timestamp.valueOf(range.from().atStartOfDay()), end);
 	}
 
 	private DashboardSummary.Closing closing(DateRange range) {
@@ -265,6 +268,7 @@ public class DashboardService {
 				FROM stock_documents
 				WHERE document_type = 'SALE'
 				  AND status = 'CONFIRMED'
+				  AND is_internal = 0
 				  AND document_date >= ? AND document_date < ?
 				GROUP BY DATE(document_date)
 				"""), rs -> {
@@ -281,6 +285,7 @@ public class DashboardService {
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE'
 				  AND d.status = 'CONFIRMED'
+				  AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				GROUP BY DATE(d.document_date)
 				"""), rs -> {
@@ -291,11 +296,12 @@ public class DashboardService {
 			}
 		}, start, end);
 		jdbc.query(shops.apply("""
-				SELECT DATE(p.payment_date) AS day, COALESCE(SUM(p.amount), 0) AS cash_collected
+				SELECT DATE(d.document_date) AS day, COALESCE(SUM(p.amount), 0) AS cash_collected
 				FROM sales_payments p
 				JOIN stock_documents d ON d.id = p.document_id
-				WHERE p.payment_date >= ? AND p.payment_date < ?
-				GROUP BY DATE(p.payment_date)
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
+				  AND d.document_date >= ? AND d.document_date < ?
+				GROUP BY DATE(d.document_date)
 				"""), rs -> {
 			LocalDate day = rs.getDate("day").toLocalDate();
 			MutablePoint point = points.get(day);

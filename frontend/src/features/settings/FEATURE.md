@@ -13,8 +13,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 **Chức năng**
 - Tên cửa hàng, địa chỉ, SĐT (feed landing công khai)
 - Giờ sao lưu, số ngày giữ, thư mục sao lưu
-- Link **Tài khoản QR nhận tiền** → `/tai-khoan-qr`
-- Link sang sửa nội dung trang giới thiệu
+- Admin chỉ dùng màn Cài đặt và Sao lưu. Tài khoản QR nhận tiền được quản lý bởi Xưởng hoặc Phân phối.
 
 ### `/tai-khoan-qr` — Tài khoản QR nhận tiền
 

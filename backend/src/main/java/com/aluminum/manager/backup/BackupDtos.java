@@ -30,6 +30,8 @@ public final class BackupDtos {
 			boolean lastBackupFailed,
 			String warningMessage,
 			String backupTime,
+			int frequencyHours,
+			LocalDateTime nextBackupAt,
 			int retentionDays,
 			String effectiveDirectory
 	) {
@@ -39,6 +41,7 @@ public final class BackupDtos {
 			@NotBlank(message = "Nhập giờ sao lưu")
 			@Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$", message = "Giờ sao lưu theo dạng HH:mm")
 			String backupTime,
+			@Min(1) @Max(24) int frequencyHours,
 			@Min(value = 1, message = "Số ngày giữ tối thiểu là 1")
 			@Max(value = 3650, message = "Số ngày giữ tối đa là 3650")
 			int backupRetentionDays,

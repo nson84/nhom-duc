@@ -15,6 +15,7 @@ export type Customer = {
   openInvoiceCount: number;
   receivedAmount: number;
   deliveredKg: number;
+  internalTransfer: boolean;
 };
 
 export type CustomerSummary = {
@@ -31,6 +32,7 @@ export type CustomerSummary = {
   openInvoiceCount: number;
   receivedAmount: number;
   deliveredKg: number;
+  internalTransfer: boolean;
 };
 
 export type CustomerDocument = {
@@ -42,6 +44,7 @@ export type CustomerDocument = {
   paidAmount: number;
   remainingAmount: number;
   paymentStatus: "UNPAID" | "PARTIAL" | "PAID" | string;
+  internalTransfer: boolean;
 };
 
 export type CustomerReminder = {
@@ -74,8 +77,8 @@ export async function listCustomers(params?: {
   return (await api.get<Envelope<Customer[]>>("/api/v1/customers", { params })).data.data;
 }
 
-export async function getCustomer(id: number, scope?: "all"): Promise<CustomerSummary> {
-  return (await api.get<Envelope<CustomerSummary>>(`/api/v1/customers/${id}`, { params: { scope } })).data.data;
+export async function getCustomer(id: number, scope?: "all", from?: string, to?: string): Promise<CustomerSummary> {
+  return (await api.get<Envelope<CustomerSummary>>(`/api/v1/customers/${id}`, { params: { scope, from, to } })).data.data;
 }
 
 export async function saveCustomer(id: number | undefined, input: CustomerInput): Promise<Customer> {
@@ -89,10 +92,12 @@ export async function listCustomerDocuments(
   id: number,
   paymentStatus?: string,
   scope?: "all",
+  from?: string,
+  to?: string,
 ): Promise<CustomerDocument[]> {
   return (
     await api.get<Envelope<CustomerDocument[]>>(`/api/v1/customers/${id}/documents`, {
-      params: { paymentStatus, scope },
+      params: { paymentStatus, scope, from, to },
     })
   ).data.data;
 }

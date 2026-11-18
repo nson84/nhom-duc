@@ -33,7 +33,8 @@ public final class CustomerDtos {
 			BigDecimal outstandingDebt,
 			int openInvoiceCount,
 			BigDecimal receivedAmount,
-			BigDecimal deliveredKg
+			BigDecimal deliveredKg,
+			boolean internalTransfer
 	) {
 	}
 
@@ -50,7 +51,8 @@ public final class CustomerDtos {
 			int saleCount,
 			int openInvoiceCount,
 			BigDecimal receivedAmount,
-			BigDecimal deliveredKg
+			BigDecimal deliveredKg,
+			boolean internalTransfer
 	) {
 	}
 
@@ -62,7 +64,8 @@ public final class CustomerDtos {
 			BigDecimal totalAmount,
 			BigDecimal paidAmount,
 			BigDecimal remainingAmount,
-			String paymentStatus
+			String paymentStatus,
+			boolean internalTransfer
 	) {
 	}
 

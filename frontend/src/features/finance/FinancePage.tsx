@@ -1,5 +1,7 @@
 import { StopOutlined } from "@ant-design/icons";
 import {
+  Alert,
+  AutoComplete,
   Button,
   Card,
   Col,
@@ -16,13 +18,16 @@ import {
   Tag,
   message,
 } from "antd";
+import { Link } from "react-router-dom";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionButton } from "../../components/AppButtons";
 import { PagedTable } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import { useCanWrite, useSession } from "../auth/auth-store";
-import { getYearPeriod, type YearPeriod } from "../dashboard/dashboard-api";
+import { getMonthStatus, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
+import { useWorkingYear, workingYearStore } from "../dashboard/working-year";
+import { visiblePeriod } from "../dashboard/working-period";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
@@ -51,10 +56,19 @@ export function FinancePage() {
   const canWrite = useCanWrite();
   const session = useSession();
   const shop = useShop();
+  const workingYear = useWorkingYear(shop);
   const [scope, setScope] = useState<"shop" | "all">("shop");
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
-  const [year, setYear] = useState(dayjs().year());
+  const year = workingYear.year;
   const [period, setPeriod] = useState<YearPeriod | null>(null);
+  const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
+  useEffect(() => {
+    if (!workingYear.month) { setMonthStatus("NOT_OPEN"); return; }
+    let active = true;
+    getMonthStatus(workingYear.month).then((value) => { if (active) setMonthStatus(value); })
+      .catch(() => { if (active) setMonthStatus("NOT_OPEN"); });
+    return () => { active = false; };
+  }, [shop, workingYear.month]);
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const [query, setQuery] = useState("");
@@ -73,15 +87,22 @@ export function FinancePage() {
     let active = true;
     setPeriod(null);
     setSummary(null);
+    setTransactions([]);
     getYearPeriod(year).then((value) => {
       if (!active) return;
-      setPeriod(value);
-      setRange([dayjs(value.periodFrom), dayjs(value.periodTo)]);
+      const shown = visiblePeriod(value, workingYear.month);
+      setPeriod(shown);
+      if (shown) setRange([dayjs(shown.periodFrom), dayjs(shown.periodTo)]);
     }).catch((error) => { if (active) message.error(toApiError(error).message); });
     return () => { active = false; };
-  }, [year, shop]);
+  }, [year, shop, workingYear.month]);
 
   const load = useCallback(async () => {
+    if (!period?.started) {
+      setSummary(null);
+      setTransactions([]);
+      return;
+    }
     setLoading(true);
     try {
       const from = range[0].format("YYYY-MM-DD");
@@ -104,7 +125,7 @@ export function FinancePage() {
     } finally {
       setLoading(false);
     }
-  }, [range, typeFilter, categoryFilter, query, scope]);
+  }, [range, typeFilter, categoryFilter, query, scope, period?.started]);
 
   useEffect(() => {
     void load();
@@ -115,17 +136,19 @@ export function FinancePage() {
       title="Sổ thu chi"
       extra={
         canWrite ? (
-          <Button type="primary" onClick={() => setCreating(true)}>Lập phiếu chi</Button>
+          <Button type="primary" disabled={!period?.started || period.closed || monthStatus !== "OPEN"} onClick={() => setCreating(true)}>Lập phiếu chi</Button>
         ) : null
       }
     >
+      {period && !period.started && <Alert type="info" showIcon style={{ marginBottom: 16 }}
+        message="Kỳ này chưa có ngày bắt đầu" description={<Link to="/">Vào Tổng quan để lưu ngày bắt đầu trước khi xem Thu chi theo năm</Link>} />}
       <p style={{ marginTop: 0, color: "var(--color-text-secondary)" }}>
-        Khoản thu bán hàng và khoản chi phiếu nhập được tự động liên kết từ phiếu kho để chống ghi trùng. Chi trả nhập hàng được theo dõi riêng, không tính vào chi phí hoạt động trong kỳ.
+        Sổ thu chi chỉ hiển thị khoản tiền theo ngày thực nhận hoặc thực chi trong tháng đang chọn. Phiếu bán và phiếu nhập gốc có thể thuộc tháng khác; tiền nhập hàng không tính vào chi phí hoạt động.
       </p>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={6}>
           <Card size="small">
-            <Statistic title="Tổng thực thu" value={formatMoney(summary?.totalIncome ?? 0)} />
+            <Statistic title="Tổng tiền thực thu trong kỳ" value={formatMoney(summary?.totalIncome ?? 0)} />
           </Card>
         </Col>
         <Col xs={24} md={6}>
@@ -140,13 +163,13 @@ export function FinancePage() {
         </Col>
         <Col xs={24} md={6}>
           <Card size="small">
-            <Statistic title="Tiền chi nhập hàng" value={formatMoney(summary?.purchasePaymentOutflow ?? 0)} />
+            <Statistic title="Tiền trả nhà cung cấp trong kỳ" value={formatMoney(summary?.purchasePaymentOutflow ?? 0)} />
           </Card>
         </Col>
         <Col xs={24} md={6}>
           <Card size="small">
             <Statistic
-              title="Chênh lệch dòng tiền"
+              title="Thu trừ chi trong kỳ (không phải lãi)"
               value={formatMoney(summary?.netCashflow ?? 0)}
               valueStyle={{ color: (summary?.netCashflow ?? 0) >= 0 ? "var(--color-success)" : "var(--color-danger)" }}
             />
@@ -176,9 +199,9 @@ export function FinancePage() {
             ]}
           />
         ) : null}
-        <DatePicker picker="year" aria-label="Năm xem thu chi" allowClear={false}
-          value={dayjs(`${year}-01-01`)} onChange={(value) => value && setYear(value.year())} />
-        {period && <span>Kỳ {year}: {dayjs(period.periodFrom).format("DD/MM/YYYY")} – {dayjs(period.periodTo).format("DD/MM/YYYY")}</span>}
+        <DatePicker picker="year" aria-label="Năm xem thu chi" allowClear={false} disabled={workingYear.locked}
+          value={dayjs(`${year}-01-01`)} onChange={(value) => value && workingYearStore.set(shop, { year: value.year(), locked: false })} />
+        {period && <span>{period.periodName}: {period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${period.closed ? dayjs(period.periodTo).format("DD/MM/YYYY") : "đang làm việc"}` : "chưa bắt đầu"}</span>}
         <Select
           allowClear
           placeholder="Loại phiếu"
@@ -236,7 +259,7 @@ export function FinancePage() {
             ),
           },
           {
-            title: "Thời gian",
+            title: "Ngày ghi thu/chi",
             dataIndex: "transactionDate",
             width: 150,
             align: "center",
@@ -271,6 +294,7 @@ export function FinancePage() {
       {creating ? (
         <CreateTxModal
           shop={shop}
+          workingPeriod={period}
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
@@ -372,10 +396,12 @@ function FinanceDetailModal({
 
 function CreateTxModal({
   shop,
+  workingPeriod,
   onClose,
   onSaved,
 }: {
   shop: "DISTRIBUTION" | "MANUFACTURING";
+  workingPeriod: YearPeriod | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -388,6 +414,8 @@ function CreateTxModal({
   }>();
   const [saving, setSaving] = useState(false);
   const key = useMemo(() => crypto.randomUUID(), []);
+  const periodStart = workingPeriod?.started ? dayjs(workingPeriod.periodFrom) : null;
+  const periodEnd = workingPeriod?.started ? dayjs(workingPeriod.periodTo) : null;
 
   return (
     <Modal
@@ -402,8 +430,13 @@ function CreateTxModal({
       <Form
         form={form}
         layout="vertical"
+        onFinishFailed={({ errorFields }) => {
+          const dateError = errorFields.find((field) => field.name[0] === "transactionDate");
+          if (dateError) message.warning(dateError.errors[0]);
+        }}
         initialValues={{
-          transactionDate: dayjs(),
+          transactionDate: periodStart && (dayjs().isBefore(periodStart) || periodEnd && dayjs().isAfter(periodEnd))
+            ? periodStart : dayjs(),
           expenseKind: expenseKinds[0].value,
         }}
         onFinish={async (values) => {
@@ -429,8 +462,16 @@ function CreateTxModal({
           }
         }}
       >
-        <Form.Item name="transactionDate" label="Thời gian" rules={[{ required: true }]}>
-          <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: "100%" }} />
+        <Form.Item name="transactionDate" label="Thời gian" rules={[{ required: true }, {
+          validator: (_, value: Dayjs | null) => {
+            if (!value || !periodStart) return Promise.resolve();
+            if (value.isBefore(periodStart, "day") || periodEnd && value.isAfter(periodEnd, "day"))
+              return Promise.reject(new Error("Ngày phiếu chi phải nằm trong năm đang khóa"));
+            return Promise.resolve();
+          },
+        }]}>
+          <DatePicker showTime needConfirm={false} format="DD/MM/YYYY HH:mm" style={{ width: "100%" }}
+            minDate={periodStart ?? undefined} maxDate={periodEnd ?? undefined} />
         </Form.Item>
         <Form.Item name="expenseKind" label="Khoản chi" rules={[{ required: true }]}>
           <Select options={expenseKinds.map(({ value, label }) => ({ value, label }))} />
@@ -438,7 +479,11 @@ function CreateTxModal({
         <Form.Item name="amount" label="Số tiền" rules={vndAmountRules}>
           <InputNumber {...vndInputNumberProps} style={{ width: "100%" }} />
         </Form.Item>
-        {shop === "DISTRIBUTION" && <Form.Item name="spentBy" label="Người chi" rules={[{ required: true, whitespace: true, message: "Nhập người chi" }]}><Input maxLength={150} /></Form.Item>}
+        {shop === "DISTRIBUTION" && <Form.Item name="spentBy" label="Người chi" rules={[{ required: true, whitespace: true, message: "Nhập người chi" }]}>
+          <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
+            <Input maxLength={150} />
+          </AutoComplete>
+        </Form.Item>}
         <Form.Item name="description" label="Ghi chú">
           <Input.TextArea rows={3} maxLength={400} placeholder="Chi tiết khoản chi, người nhận hoặc lý do (nếu có)" />
         </Form.Item>

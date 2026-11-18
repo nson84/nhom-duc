@@ -97,24 +97,32 @@ public class CustomerService {
 					rs.getString("shop_name"),
 					debt.totalSales(),
 					debt.outstanding(),
-					debt.openCount(), debt.receivedAmount(), debt.deliveredKg());
+					debt.openCount(), debt.receivedAmount(), debt.deliveredKg(), debt.internalCount() > 0);
 		}, args.toArray());
 	}
 
 	@Transactional(readOnly = true)
 	public CustomerSummary get(long id) {
+		return get(id, null, null);
+	}
+
+	@Transactional(readOnly = true)
+	public CustomerSummary get(long id, LocalDate from, LocalDate to) {
 		CustomerRow row = requireCustomer(id, true);
-		DebtTotals debt = debtTotals(id);
+		DebtTotals debt = debtTotals(id, from, to);
 		Integer saleCount = jdbc.queryForObject("""
 				SELECT COUNT(*) FROM stock_documents
 				WHERE customer_id = ? AND document_type = 'SALE' AND status = 'CONFIRMED'
-				""", Integer.class, id);
+				  AND (? IS NULL OR document_date >= ?)
+				  AND (? IS NULL OR document_date < ?)
+				""", Integer.class, id, from, from == null ? null : from.atStartOfDay(),
+				to, to == null ? null : to.plusDays(1).atStartOfDay());
 		return new CustomerSummary(
 				row.id(), row.name(), row.phone(), row.note(), row.active(),
 				row.shopCode(), row.shopName(),
 				debt.totalSales(), debt.outstanding(),
 				saleCount == null ? 0 : saleCount,
-				debt.openCount(), debt.receivedAmount(), debt.deliveredKg());
+				debt.openCount(), debt.receivedAmount(), debt.deliveredKg(), debt.internalCount() > 0);
 	}
 
 	@Transactional
@@ -160,15 +168,22 @@ public class CustomerService {
 
 	@Transactional(readOnly = true)
 	public List<CustomerDocumentRow> documents(long customerId, String paymentStatus) {
+		return documents(customerId, paymentStatus, null, null);
+	}
+
+	@Transactional(readOnly = true)
+	public List<CustomerDocumentRow> documents(long customerId, String paymentStatus, LocalDate from, LocalDate to) {
 		requireCustomer(customerId, true);
 		StringBuilder sql = new StringBuilder("""
-				SELECT d.id, d.document_code, d.document_date, d.status, d.total_amount, d.payment_status,
+				SELECT d.id, d.document_code, d.document_date, d.status, d.total_amount, d.payment_status, d.is_internal,
 				       COALESCE((SELECT SUM(p.amount) FROM sales_payments p WHERE p.document_id = d.id), 0) AS paid_amount
 				FROM stock_documents d
 				WHERE d.customer_id = ? AND d.document_type = 'SALE'
 				""");
 		List<Object> args = new ArrayList<>();
 		args.add(customerId);
+		if (from != null) { sql.append(" AND d.document_date >= ?"); args.add(from.atStartOfDay()); }
+		if (to != null) { sql.append(" AND d.document_date < ?"); args.add(to.plusDays(1).atStartOfDay()); }
 		if (paymentStatus != null && !paymentStatus.isBlank()) {
 			if ("OPEN".equalsIgnoreCase(paymentStatus)) {
 				sql.append(" AND d.payment_status IN ('UNPAID', 'PARTIAL') AND d.status = 'CONFIRMED'");
@@ -179,8 +194,9 @@ public class CustomerService {
 		}
 		sql.append(" ORDER BY d.document_date DESC, d.id DESC");
 		return jdbc.query(sql.toString(), (rs, i) -> {
-			BigDecimal total = scale(rs.getBigDecimal("total_amount"));
-			BigDecimal paid = scale(rs.getBigDecimal("paid_amount"));
+			boolean internal = rs.getBoolean("is_internal");
+			BigDecimal total = internal ? scale(BigDecimal.ZERO) : scale(rs.getBigDecimal("total_amount"));
+			BigDecimal paid = internal ? scale(BigDecimal.ZERO) : scale(rs.getBigDecimal("paid_amount"));
 			BigDecimal remaining = total.subtract(paid).max(BigDecimal.ZERO);
 			return new CustomerDocumentRow(
 					rs.getLong("id"),
@@ -190,7 +206,7 @@ public class CustomerService {
 					total,
 					paid,
 					remaining,
-					rs.getString("payment_status"));
+					rs.getString("payment_status"), internal);
 		}, args.toArray());
 	}
 
@@ -321,7 +337,7 @@ public class CustomerService {
 		return new CustomerDto(
 				row.id(), row.name(), row.phone(), row.note(), row.active(),
 				row.shopCode(), row.shopName(),
-				debt.totalSales(), debt.outstanding(), debt.openCount(), debt.receivedAmount(), debt.deliveredKg());
+				debt.totalSales(), debt.outstanding(), debt.openCount(), debt.receivedAmount(), debt.deliveredKg(), debt.internalCount() > 0);
 	}
 
 	/**
@@ -373,18 +389,21 @@ public class CustomerService {
 		var end = to == null ? null : java.sql.Timestamp.valueOf(to.plusDays(1).atStartOfDay());
 		return jdbc.query("""
 				SELECT
-				  COALESCE(SUM((SELECT SUM(p.amount) FROM sales_payments p WHERE p.document_id = d.id)), 0) AS received_amount,
+				  COALESCE(SUM(CASE WHEN d.is_internal = 0 THEN
+				      COALESCE((SELECT SUM(p.amount) FROM sales_payments p WHERE p.document_id = d.id), 0)
+				      ELSE 0 END), 0) AS received_amount,
 				  COALESCE(SUM((SELECT SUM(i.quantity_base) FROM stock_document_items i WHERE i.document_id = d.id)), 0) AS delivered_kg,
-				  COALESCE(SUM(CASE WHEN d.status = 'CONFIRMED' THEN d.total_amount ELSE 0 END), 0) AS total_sales,
+				  COALESCE(SUM(CASE WHEN d.is_internal = 0 THEN d.total_amount ELSE 0 END), 0) AS total_sales,
 				  COALESCE(SUM(CASE
-				      WHEN d.status = 'CONFIRMED' AND d.payment_status IN ('UNPAID', 'PARTIAL')
+				      WHEN d.is_internal = 0 AND d.payment_status IN ('UNPAID', 'PARTIAL')
 				      THEN d.total_amount - COALESCE((
 				          SELECT SUM(p.amount) FROM sales_payments p WHERE p.document_id = d.id
 				      ), 0)
 				      ELSE 0 END), 0) AS outstanding,
 				  COALESCE(SUM(CASE
-				      WHEN d.status = 'CONFIRMED' AND d.payment_status IN ('UNPAID', 'PARTIAL') THEN 1
-				      ELSE 0 END), 0) AS open_count
+				      WHEN d.is_internal = 0 AND d.payment_status IN ('UNPAID', 'PARTIAL') THEN 1
+				      ELSE 0 END), 0) AS open_count,
+				  COALESCE(SUM(CASE WHEN d.is_internal = 1 THEN 1 ELSE 0 END), 0) AS internal_count
 				FROM stock_documents d
 				WHERE d.customer_id = ? AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
 				  AND d.trashed_at IS NULL AND d.reversal_of_document_id IS NULL
@@ -395,7 +414,7 @@ public class CustomerService {
 				scale(rs.getBigDecimal("total_sales")),
 				scale(rs.getBigDecimal("outstanding")).max(BigDecimal.ZERO),
 				rs.getInt("open_count"), scale(rs.getBigDecimal("received_amount")),
-				rs.getBigDecimal("delivered_kg")), customerId, start, start, end, end).get(0);
+				rs.getBigDecimal("delivered_kg"), rs.getInt("internal_count")), customerId, start, start, end, end).get(0);
 	}
 
 	private ReminderDto mapReminder(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -439,7 +458,7 @@ public class CustomerService {
 	}
 
 	private record DebtTotals(BigDecimal totalSales, BigDecimal outstanding, int openCount,
-			BigDecimal receivedAmount, BigDecimal deliveredKg) {
+			BigDecimal receivedAmount, BigDecimal deliveredKg, int internalCount) {
 	}
 
 	private record DocLink(long id, long shopId, String type, String counterpartyName) {

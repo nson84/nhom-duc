@@ -52,8 +52,9 @@ public class CustomerController {
 	}
 
 	@GetMapping("/customers/{id}")
-	public ApiResponse<CustomerSummary> get(@PathVariable long id) {
-		return ApiResponse.ok(customers.get(id), null);
+	public ApiResponse<CustomerSummary> get(@PathVariable long id,
+			@RequestParam(required = false) LocalDate from, @RequestParam(required = false) LocalDate to) {
+		return ApiResponse.ok(customers.get(id, from, to), null);
 	}
 
 	@PostMapping("/customers")
@@ -69,8 +70,9 @@ public class CustomerController {
 	@GetMapping("/customers/{id}/documents")
 	public ApiResponse<List<CustomerDocumentRow>> documents(
 			@PathVariable long id,
-			@RequestParam(required = false) String paymentStatus) {
-		return ApiResponse.ok(customers.documents(id, paymentStatus), null);
+			@RequestParam(required = false) String paymentStatus,
+			@RequestParam(required = false) LocalDate from, @RequestParam(required = false) LocalDate to) {
+		return ApiResponse.ok(customers.documents(id, paymentStatus, from, to), null);
 	}
 
 	@GetMapping("/customers/{id}/reminders")

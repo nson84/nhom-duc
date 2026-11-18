@@ -12,7 +12,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 | Ai dùng | Tất cả |
 | API | `POST /api/v1/auth/login` |
 
-**Chức năng:** chọn tài khoản (`admin` / `phanphoi` / `xuong`) + mật khẩu → JWT; sync `shopCode` vào store; nếu `mustChangePassword` → `/doi-mat-khau`.
+**Chức năng:** chọn tài khoản (`admin` / `phanphoi` / `xuong`) + mật khẩu → JWT; sync `shopCode` vào store; nếu `mustChangePassword` → `/doi-mat-khau`. Admin được đưa tới Sao lưu, chỉ có Sao lưu và Cài đặt.
 
 ### `/doi-mat-khau` — Đổi mật khẩu bắt buộc
 

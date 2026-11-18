@@ -106,8 +106,10 @@ public class FinanceController {
 	}
 
 	@GetMapping("/reports/payroll")
-	public ApiResponse<List<PayrollReportRowDto>> payroll(@RequestParam(required = false) Integer year) {
-		return ApiResponse.ok(service.payrollReport(year), null);
+	public ApiResponse<List<PayrollReportRowDto>> payroll(@RequestParam(required = false) Integer year,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+		return ApiResponse.ok(service.payrollReport(year, from, to), null);
 	}
 
 	@GetMapping("/reports/export")

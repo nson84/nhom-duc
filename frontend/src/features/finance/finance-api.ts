@@ -85,6 +85,7 @@ export type InvoiceGrossMargin = {
   estimatedMaterialCost: number | null;
   estimatedGrossProfit: number | null;
   costComplete: boolean;
+  internal: boolean;
 };
 
 export type ProductSalesRow = {
@@ -206,8 +207,8 @@ export async function getInventoryReport(params: {
   return (await api.get<Envelope<InventoryReportRow[]>>("/api/v1/reports/inventory", { params })).data.data;
 }
 
-export async function getPayrollReport(year?: number, scope?: "all"): Promise<PayrollReportRow[]> {
-  return (await api.get<Envelope<PayrollReportRow[]>>("/api/v1/reports/payroll", { params: { year, scope } })).data.data;
+export async function getPayrollReport(year?: number, scope?: "all", from?: string, to?: string): Promise<PayrollReportRow[]> {
+  return (await api.get<Envelope<PayrollReportRow[]>>("/api/v1/reports/payroll", { params: { year, scope, from, to } })).data.data;
 }
 
 export async function getPriceVarianceReport(params: {

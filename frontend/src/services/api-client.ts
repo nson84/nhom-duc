@@ -1,6 +1,7 @@
 import axios from "axios";
 import { authStore } from "../features/auth/auth-store";
 import { shopStore } from "../features/shop/shop-store";
+import { workingYearStore } from "../features/dashboard/working-year";
 import { toApiError } from "./error-handler";
 
 export const api = axios.create({
@@ -14,6 +15,10 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${session.token}`;
   }
   config.headers["X-Shop-Code"] = shopStore.get();
+  const workingYear = workingYearStore.get(shopStore.get());
+  if (config.url?.startsWith("/api/v1/stock-documents") || config.url?.startsWith("/api/v1/finance/transactions") || config.url?.startsWith("/api/v1/attendance/") || config.url?.startsWith("/api/v1/payroll/") || config.url?.startsWith("/api/v1/factory/")) {
+    config.params = { ...config.params, workingYear: workingYear.year, workingMonth: workingYear.month };
+  }
   return config;
 });
 

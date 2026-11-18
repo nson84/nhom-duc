@@ -13,7 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Admin chỉ xem báo cáo/phiếu và được ghi sao lưu + cài đặt.
+ * Admin chỉ dùng sao lưu và cài đặt.
  * Phân phối không dùng API nhân sự/chấm công/lương.
  */
 public class RoleAccessFilter extends OncePerRequestFilter {
@@ -29,6 +29,13 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		String path = request.getRequestURI();
 		String method = request.getMethod();
 		UserRole role = admin.role();
+		if (role == UserRole.ADMIN && path.startsWith("/api/v1/")
+				&& !path.startsWith("/api/v1/auth/")
+				&& !path.startsWith("/api/v1/settings")
+				&& !isBackupPath(path)) {
+			forbidden(response, "Tài khoản admin chỉ dùng sao lưu và cài đặt");
+			return;
+		}
 		if (isBackupPath(path) && role != UserRole.ADMIN) {
 			forbidden(response, "Chỉ Admin được quản lý sao lưu và khôi phục");
 			return;
@@ -41,12 +48,8 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 			forbidden(response, "Tài khoản phân phối không dùng được mục nhân sự / chấm công");
 			return;
 		}
-		if (role == UserRole.ADMIN && isPayrollPath(path)) {
-			forbidden(response, "Tài khoản admin xem lương qua Báo cáo, không vào mục nhân sự");
-			return;
-		}
 		if (!role.canWriteOperations() && isWrite(method) && !isAdminAllowedWrite(path, method)) {
-			forbidden(response, "Tài khoản admin chỉ xem báo cáo, không sửa nghiệp vụ");
+			forbidden(response, "Tài khoản admin chỉ dùng sao lưu và cài đặt");
 			return;
 		}
 		filterChain.doFilter(request, response);
@@ -71,9 +74,7 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		if (path.startsWith("/api/v1/auth/")) {
 			return true;
 		}
-		if (path.startsWith("/api/v1/settings")
-				|| path.startsWith("/api/v1/landing-content")
-				|| path.startsWith("/api/v1/bank-accounts")) {
+		if (path.startsWith("/api/v1/settings")) {
 			return true;
 		}
 		if (isBackupPath(path)) {

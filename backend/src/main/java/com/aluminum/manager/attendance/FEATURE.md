@@ -20,4 +20,6 @@ Mỗi nhân viên đã nhận có một phiếu chi gắn với ngày lễ. Bỏ
 
 Kỳ tiền công trừ tiền ứng vào thực lĩnh và lưu số giờ tăng ca đã duyệt cùng thưởng lễ đã nhận để xem bảng kê sau khi chốt. Các khoản khấu trừ cũ được lưu riêng.
 
+Các lệnh sửa chấm công dùng kiểm tra ngày thuộc kỳ năm và tháng đã mở, chưa khóa. Kỳ công chỉ tạo/tính/sửa/chốt trong tháng đang mở; phải chốt kỳ công trước khi khóa tháng ở Tổng quan. Khi tháng đã khóa không cho mở lại kỳ công.
+
 [attendance](../../../../../../../../frontend/src/features/attendance/FEATURE.md)

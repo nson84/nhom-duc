@@ -38,9 +38,11 @@ INV-01, INV-02, INV-04, INV-08 và toàn bộ luồng xác nhận phiếu trong 
 
 Kiểm tra thêm với MySQL: chốt Xưởng lưu tồn, lãi, phải thu và phải trả theo ngày chốt do người dùng chọn; thu/trả nợ sau ngày chốt không đổi bản chụp hoặc tính lãi lần hai. Chốt Phân phối với khoảng qua 31/12 tạo bản số dư đúng tên năm; kỳ sau bắt đầu ngay ngày tiếp theo, ngày trùng/khoảng hở bị từ chối. In Sổ cuối năm phải hiện mốc của từng sổ. Phiếu Xưởng thuộc kỳ đã chốt bị khóa, phiếu sau ngày chốt được phép ghi.
 
-Kiểm tra Sổ cuối năm với dữ liệu nhiều năm: phiếu cũ còn nợ và khoản thu/trả nợ cũ xuất hiện đúng kỳ; đối chiếu tổng nợ theo từng phiếu, thu/chi theo ngày, tồn kho cuối năm và tiền công Xưởng. Kiểm tra quyền: Xưởng/Phân phối không lấy được sổ của bên kia, Admin in được cả hai sổ. Kiểm tra bản in A4 nhiều trang, tiếng Việt và bảng dài không cắt dòng.
+Kiểm tra Sổ cuối năm với dữ liệu nhiều năm: phiếu cũ còn nợ và khoản thu/trả nợ cũ xuất hiện đúng kỳ; đối chiếu nợ tại ngày chốt và nợ hiện tại sau khi khách trả muộn; tổng kg, tiền phiếu, đã thu và còn nợ từng khách phải khớp tổng từng hóa đơn. Kiểm tra thu/chi theo ngày, tồn kho, phiếu nhập nội bộ Xưởng không tính nợ, tiền công từng người/tháng và trạng thái thưởng lễ. Phân phối không in Công thợ. Kiểm tra quyền: Xưởng/Phân phối không lấy được sổ của bên kia, Admin không truy cập được sổ. Kiểm tra bản in A4 nhiều trang, tiếng Việt và bảng dài không cắt dòng.
 
-Kiểm tra bộ lọc tên năm trên Tổng quan, Báo cáo, Thu chi: khi chọn kỳ đã chốt theo Tết âm lịch, hai ngày hiển thị phải khớp bản chốt và mọi phiếu, thu chi ngoài khoảng này bị loại. Kỳ chưa chốt tiếp theo phải bắt đầu đúng ngày sau kỳ trước; Sổ cuối năm dùng cùng mốc của từng cửa hàng. Ô chọn khoảng ngày trên Tổng quan chỉ dùng khi đặt kỳ chốt Phân phối.
+Kiểm tra khách tạo hồ sơ năm 2026 nhưng có phiếu bán nhập lùi ngày tháng 02/2025: Sổ cuối năm 2025 của cả Phân phối và Xưởng phải hiện khách, tiền bán và chi tiết phiếu; khách chỉ tạo năm 2026 mà chưa có phiếu trước cuối kỳ 2025 không được tự xuất hiện trong sổ 2025.
+
+Kiểm tra bộ lọc tên năm trên Tổng quan, Báo cáo, Thu chi: khi chọn kỳ đã chốt theo Tết âm lịch, hai ngày hiển thị phải khớp bản chốt và mọi phiếu, thu chi ngoài khoảng này bị loại. Kỳ chưa chốt tiếp theo phải bắt đầu đúng ngày sau kỳ trước; Sổ cuối năm dùng cùng mốc của từng cửa hàng. Chọn khóa năm 2026, đặt tên “Kỳ 02/2026–02/2027”, lưu ngày bắt đầu 02/2026, kiểm tra doanh thu và chi phí tính từ ngày đó. Lưu riêng ngày kết thúc 02/2027; kiểm tra kỳ vẫn chưa chốt cho đến khi xác nhận Chốt năm. Thử lưu ngày kết thúc trước ngày bắt đầu, sửa kỳ đã chốt và tạo khoảng hở với kỳ trước: API phải từ chối. Đối chiếu cả Xưởng và Phân phối; không sửa phiếu thật trong bước kiểm thử này.
 
 Kiểm tra form phiếu chi ở cả hai sổ có đúng năm lựa chọn mới; lưu từng mục và xác nhận danh sách, chi tiết, Sổ cuối năm hiển thị tên khoản chi. Xác nhận bốn khoản đầu tính vào chi phí hoạt động, khoản sửa chữa vào bảo trì, và chi trả phiếu nhập vẫn chỉ ghi trên phiếu nhập.
 
@@ -60,4 +62,34 @@ Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên 
 
 Xem [biên bản rà soát responsive](responsive-audit.md). Quét các route chính ở 1920×1080, 1600×900, 1366×768, 1280×720, 1024×768 và 900×600; kiểm tra chiều rộng trang và vùng nội dung, thanh cuộn riêng của bảng nhiều cột, menu Drawer dưới 1200 px, modal nhập/bán thấp 600 px và footer luôn dùng được. Kiểm tra sáng/tối cho modal, trạng thái dữ liệu dài, dropdown, thông báo, bản xem trước PDF và các vai trò Admin/Phân phối/Xưởng khi có phiên tương ứng.
 
-Mật khẩu khởi tạo `1234567`: tài khoản mới được mã hóa với giá trị này và buộc đổi mật khẩu; khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có. Form chọn tài khoản dùng cùng giá trị khởi tạo, người dùng vẫn có thể nhập mật khẩu riêng.
+Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và buộc đổi; bản production sinh mật khẩu ngẫu nhiên riêng cho tài khoản mới, form không tự điền. Khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có.
+
+# Kiểm thử lọc và chốt tháng
+
+- Chọn kỳ bắt đầu 18/02/2025: Tổng quan mặc định tháng 02/2025, trạng thái Chưa mở; bấm Mở tháng để ghi phiếu. Tổng quan, phiếu kho, Thu chi, Báo cáo và Khách mua chỉ lấy ngày 18–28/02; phiếu ngày 17/02 bị chặn.
+- Không thể mở tháng 03/2025 trước khi khóa 02/2025. Sau khi khóa tháng 02, không thể sửa/đảo phiếu tháng 02; mở tháng 03 rồi mới tạo phiếu tháng 03. Chốt năm cần khóa tháng cuối kỳ.
+- Chọn năm 2025, mở Chấm công và Tiền công: mặc định tháng bắt đầu kỳ, không tự tạo kỳ công 2026. Chọn tháng khác trong cùng kỳ khi bỏ bộ lọc tháng.
+- Xưởng phải chốt kỳ công trước khi chốt tháng; Phân phối không cần kỳ công. Sau chốt, backend từ chối tạo/sửa/xác nhận/hủy/đảo phiếu, sửa chấm công và mở lại kỳ công tháng đó.
+- Thanh toán nợ của phiếu tháng đã chốt được phép ghi vào tháng mới đang mở; ngày thanh toán vẫn là ngày thực tế. Chốt tháng không thay đổi số dư tồn/công nợ hoặc trạng thái chốt năm.
+
+# Rà soát backup/restore 15/11/2026
+
+- Chạy `backend/mvnw.cmd test`: kiểm tra phân quyền GET/POST/PUT/PATCH/DELETE của `/api/v1/backups/**` cho ba vai trò và chặn restore trực tiếp trước khi gọi service.
+- Chạy `frontend/npm run build` và kiểm tra cảnh báo khôi phục tạm khóa chỉ hiện ở màn Admin.
+- Kiểm tra không đăng nhập nhận 401 bằng HTTP trên backend local; không gọi restore với database làm việc.
+- Cần thêm integration test MySQL trên database thử riêng, restore V2 và chuyển database có thể quay lại trước khi mở lại chức năng khôi phục.
+- Bootstrap: ba tài khoản mới trên bản production nhận mật khẩu ngẫu nhiên riêng trong tệp quyền chủ máy; môi trường dev vẫn dùng `1234567`; tài khoản cũ không bị cập nhật.
+# Kiểm thử backup mã hóa và R2
+
+- `EncryptedBackupCodecTest`: round-trip Unicode, GZIP, sai khóa và archive bị sửa.
+- `RecoveryKeyServiceTest`: khóa tồn tại sau khởi động lại, xuất/nhập máy mới, từ chối ghi đè.
+- `R2CloudServiceTest`: khóa không trả lại từ API/cấu hình và endpoint ngoài R2 bị chặn.
+- `CloudBackupServiceTest`: mock S3, upload archive + manifest, xác minh và không upload trùng.
+- `StagedRestoreServiceTest`: URL database thử không trỏ vào database đang dùng.
+- `StagedRestoreMysqlIT` chạy riêng khi đặt `ALUMINUM_TEST_DB_URL` (phải trỏ tên `aluminum_backup_test` trên `127.0.0.1`), `ALUMINUM_TEST_DB_USERNAME`, `ALUMINUM_TEST_DB_PASSWORD`; test tạo một database mới `aluminum_restore_*`, không xóa database nào. Không chạy mặc định nếu thiếu biến môi trường.
+- Đã chạy một lần với tài khoản ứng dụng `aluminum_app`: MySQL từ chối `CREATE DATABASE` (1044). Dùng tài khoản kiểm thử có quyền tạo DB cho bài này; không dùng database đang làm việc.
+- Test cần chạy riêng trước nghiệm thu trên PC B: cấu hình token R2 mới, tạo backup chứa dữ liệu cả hai sổ và ảnh, tải archive về máy khác, nhập recovery key, dựng database thử, đối chiếu phiếu/công nợ/tồn/ảnh. Chưa có test chuyển database hoạt động và rollback; API restore trực tiếp vẫn khóa.
+# Bản in khách hàng và công thợ
+
+- Ở chi tiết khách Phân phối/Xưởng, lọc ngày lập phiếu và trạng thái thanh toán, in PDF: phiếu mới trước; các lần trả ghi đúng ngày; tổng tiền/đã trả/còn nợ cuối bản bằng tổng đúng các phiếu lọc. Phiếu nội bộ cộng kg nhưng không cộng giá chuyển vào công nợ.
+- Ở Tiền công Xưởng, chọn tháng rồi in: đối chiếu từng ngày sáng/chiều, số công, tăng ca đã duyệt, thưởng ngày với bảng chấm công; đối chiếu khoản lương và tổng thực lĩnh với bảng kỳ công. Kỳ chưa chốt ghi tạm tính; tiền ứng cũ không có ngày thì không tự tạo ngày giả.

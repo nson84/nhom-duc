@@ -10,6 +10,9 @@ import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
 import { useSession } from "../auth/auth-store";
 import { getYearReport, type YearReport } from "../factory/factory-api";
 import { getYearEndBalance, getYearPeriod, type YearEndBalance, type YearPeriod } from "../dashboard/dashboard-api";
+import { useWorkingYear, workingYearStore } from "../dashboard/working-year";
+import { visiblePeriod } from "../dashboard/working-period";
+import { CarryoverDebtReport } from "./CarryoverDebtReport";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { listCategories, listProducts, type Category, type Product } from "../products/products-api";
 import {
@@ -105,6 +108,7 @@ function FactoryProfitSummary({ year }: { year: number }) {
 export function ReportsPage() {
   const session = useSession();
   const shop = useShop();
+  const workingYear = useWorkingYear(shop);
   const [book, setBook] = useState<"shop" | "all">("shop");
   const canViewPayroll = session?.role !== "DISTRIBUTION" && (shop === "MANUFACTURING" || book === "all");
   const asTon = shop === "DISTRIBUTION" && book === "shop";
@@ -112,13 +116,13 @@ export function ReportsPage() {
   const showQty = (kg: number) => qtyFormat.format(asTon ? kgToTon(kg) : kg);
   const showCost = (perKg: number) => formatMoney(asTon ? costPerKgToTon(perKg) : perKg);
   const scope = book === "all" ? "all" as const : undefined;
-  const [activeTab, setActiveTab] = useState<"profit" | "invoice-margins" | "price-variance" | "sales-by-product" | "inventory" | "shrinkage" | "payroll">(
+  const [activeTab, setActiveTab] = useState<"profit" | "invoice-margins" | "price-variance" | "sales-by-product" | "inventory" | "shrinkage" | "payroll" | "carryover-debt">(
     "profit",
   );
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
   const [categoryId, setCategoryId] = useState<number | undefined>();
   const [productId, setProductId] = useState<number | undefined>();
-  const [year, setYear] = useState<number>(() => dayjs().year());
+  const year = workingYear.year;
   const [period, setPeriod] = useState<YearPeriod | null>(null);
 
   useEffect(() => {
@@ -127,11 +131,12 @@ export function ReportsPage() {
     setProfit(null);
     getYearPeriod(year).then((value) => {
       if (!active) return;
-      setPeriod(value);
-      setRange([dayjs(value.periodFrom), dayjs(value.periodTo)]);
+      const shown = visiblePeriod(value, workingYear.month);
+      setPeriod(shown);
+      if (shown) setRange([dayjs(shown.periodFrom), dayjs(shown.periodTo)]);
     }).catch((error) => { if (active) message.error(toApiError(error).message); });
     return () => { active = false; };
-  }, [year, shop]);
+  }, [year, shop, workingYear.month]);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -145,7 +150,7 @@ export function ReportsPage() {
   const [shrinkageRows, setShrinkageRows] = useState<{ key: string; date: string; code: string; product: string; category: string; shortageKg: number; surplusKg: number }[]>([]);
 
   useEffect(() => {
-    if (shop !== "DISTRIBUTION" || book !== "shop") return;
+    if (shop !== "DISTRIBUTION" || book !== "shop" || !period?.started) return;
     let cancelled = false;
     const from = range[0].format("YYYY-MM-DD");
     const to = range[1].format("YYYY-MM-DD");
@@ -168,7 +173,7 @@ export function ReportsPage() {
         }))));
     }).catch((error) => { if (!cancelled) message.error(toApiError(error).message); });
     return () => { cancelled = true; };
-  }, [shop, book, range]);
+  }, [shop, book, range, period?.started]);
 
   useEffect(() => {
     if (!canViewPayroll && activeTab === "payroll") {
@@ -194,6 +199,16 @@ export function ReportsPage() {
   }, [scope]);
 
   const load = useCallback(async () => {
+    if (!period?.started) {
+      setProfit(null);
+      setInvoiceMargins([]);
+      setProductSales([]);
+      setInventoryRows([]);
+      setVarianceRows([]);
+      setPayrollRows([]);
+      setShrinkageRows([]);
+      return;
+    }
     setLoading(true);
     try {
       const from = range[0].format("YYYY-MM-DD");
@@ -203,7 +218,7 @@ export function ReportsPage() {
         getSalesByProductReport({ from, to, productId, categoryId, scope }),
         getInventoryReport({ from, to, categoryId, scope }),
         getPriceVarianceReport({ from, to, categoryId, scope }),
-        canViewPayroll ? getPayrollReport(year, scope) : Promise.resolve([] as PayrollReportRow[]),
+        canViewPayroll ? getPayrollReport(year, scope, from, to) : Promise.resolve([] as PayrollReportRow[]),
         book === "shop" ? getInvoiceMargins(from, to) : Promise.resolve([] as InvoiceGrossMargin[]),
       ]);
       setProfit(pr);
@@ -217,7 +232,7 @@ export function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [range, productId, categoryId, year, scope, book, canViewPayroll]);
+  }, [range, productId, categoryId, year, scope, book, canViewPayroll, period?.started]);
 
   useEffect(() => {
     void load();
@@ -227,6 +242,7 @@ export function ReportsPage() {
     const month = invoice.documentDate.slice(0, 7);
     const item = all[month] ?? (all[month] = { month, revenue: 0, cost: 0, profit: 0, missing: false, count: 0 });
     item.count += 1;
+    if (invoice.internal) return all;
     item.revenue += Number(invoice.revenue);
     if (!invoice.costComplete || invoice.estimatedMaterialCost == null || invoice.estimatedGrossProfit == null) item.missing = true;
     else {
@@ -257,15 +273,15 @@ export function ReportsPage() {
               ]}
             />
           ) : null}
-          <DatePicker picker="year" aria-label="Năm xem báo cáo" allowClear={false}
+          <DatePicker picker="year" aria-label="Năm xem báo cáo" allowClear={false} disabled={workingYear.locked}
             value={dayjs(`${year}-01-01`)}
-            onChange={(value) => value && setYear(value.year())} />
-          {period && <span>Kỳ {year}: {dayjs(period.periodFrom).format("DD/MM/YYYY")} – {dayjs(period.periodTo).format("DD/MM/YYYY")}</span>}
+            onChange={(value) => value && workingYearStore.set(shop, { year: value.year(), locked: false })} />
+          {period && <span>{period.periodName}: {period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${period.closed ? dayjs(period.periodTo).format("DD/MM/YYYY") : "đang làm việc"}` : "chưa bắt đầu"}</span>}
           <Button
             type="primary"
-            disabled={activeTab === "shrinkage" || activeTab === "invoice-margins" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
+            disabled={activeTab === "carryover-debt" || activeTab === "shrinkage" || activeTab === "invoice-margins" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
             onClick={() => {
-              if (activeTab === "shrinkage" || activeTab === "invoice-margins") return;
+              if (activeTab === "carryover-debt" || activeTab === "shrinkage" || activeTab === "invoice-margins") return;
               void downloadReportCsv({
                 type: activeTab,
                 scope,
@@ -282,35 +298,42 @@ export function ReportsPage() {
         </Space>
       }
     >
+      {period && !period.started && <Alert type="info" showIcon style={{ marginBottom: 16 }}
+        message="Kỳ này chưa có ngày bắt đầu" description={<Link to="/">Vào Tổng quan để lưu ngày bắt đầu trước khi xem Báo cáo theo năm</Link>} />}
       <Tabs
         activeKey={activeTab}
         onChange={(k) => setActiveTab(k as typeof activeTab)}
         items={[
           {
+            key: "carryover-debt",
+            label: "Công nợ chuyển kỳ",
+            children: period?.started ? <CarryoverDebtReport key={`${shop}-${year}`} year={year} /> : null,
+          },
+          {
             key: "invoice-margins",
             label: "Lãi gộp hóa đơn / tháng",
             children: <>
               <Alert type="info" showIcon style={{ marginBottom: 16 }}
-                message="Lãi gộp vật tư tham khảo — chưa phải lãi quyết toán"
-                description="Lãi = tiền phiếu sau giảm giá − khối lượng × giá nhập tham khảo tại ngày giao. Không bao gồm tiền công, phụ kiện, phế liệu và hao hụt kiểm kê. Nếu thiếu dữ liệu giá tham khảo, hệ thống để trống lãi, không tự tính bằng 0. Lãi cuối kỳ vẫn lấy từ bản chốt."
+                message="Lãi ước tính theo giá nhập chuẩn — chưa phải lãi quyết toán"
+                description="Giá vật tư ở đây là khối lượng × giá nhập chuẩn đã lưu tại ngày lập phiếu, không phải giá vốn thực tế của lô hàng. Lãi ước tính = tiền bán − giá vật tư này; chưa trừ tiền công, phế liệu và hao hụt. Phiếu chuyển Xưởng được liệt kê riêng với lãi 0 và không cộng vào doanh thu/lãi tháng."
               />
               <h3>Lãi gộp theo tháng (chưa trừ chi phí hoạt động)</h3>
               <PagedTable rowKey="month" size="small" loading={loading} dataSource={invoiceMonths} columns={[
                 { title: "Tháng", dataIndex: "month", align: "center" },
-                { title: "Số hóa đơn", dataIndex: "count", align: "center" },
+                { title: "Số phiếu (gồm nội bộ)", dataIndex: "count", align: "center" },
                 { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
-                { title: "Giá vật tư tham khảo", dataIndex: "cost", align: "center", render: (v: number, row) => row.missing ? "Thiếu giá tham khảo" : formatMoney(v) },
-                { title: "Lãi gộp tham khảo", dataIndex: "profit", align: "center", render: (v: number, row) => row.missing ? "Chưa đủ dữ liệu" : formatMoney(v) },
+                { title: "Giá vật tư theo giá nhập chuẩn", dataIndex: "cost", align: "center", render: (v: number, row) => row.missing ? "Thiếu giá nhập chuẩn" : formatMoney(v) },
+                { title: "Lãi gộp ước tính", dataIndex: "profit", align: "center", render: (v: number, row) => row.missing ? "Chưa đủ dữ liệu" : formatMoney(v) },
               ]} />
               <h3 style={{ marginTop: 20 }}>Chi tiết từng hóa đơn</h3>
               <PagedTable<InvoiceGrossMargin> rowKey="documentId" size="small" loading={loading}
                 dataSource={invoiceMargins} columns={[
                   { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
                   { title: "Số phiếu", dataIndex: "documentCode", align: "center" },
-                  { title: "Khách", dataIndex: "customerName" },
-                  { title: "Tiền bán", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
-                  { title: "Giá vật tư", dataIndex: "estimatedMaterialCost", align: "center", render: (v: number | null) => v == null ? "Thiếu giá" : formatMoney(v) },
-                  { title: "Lãi gộp tham khảo", dataIndex: "estimatedGrossProfit", align: "center", render: (v: number | null) => v == null ? "Chưa đủ dữ liệu" : formatMoney(v) },
+                  { title: "Khách / nơi nhận", dataIndex: "customerName", render: (v: string, row) => row.internal ? <>{v} <Tag color="blue">Nội bộ</Tag></> : v },
+                  { title: "Tiền bán / giá chuyển", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
+                  { title: "Giá vật tư / giá chuyển", dataIndex: "estimatedMaterialCost", align: "center", render: (v: number | null) => v == null ? "Thiếu giá" : formatMoney(v) },
+                  { title: "Lãi gộp ước tính", dataIndex: "estimatedGrossProfit", align: "center", render: (v: number | null) => v == null ? "Chưa đủ dữ liệu" : formatMoney(v) },
                 ]} />
             </>,
           },
@@ -320,7 +343,7 @@ export function ReportsPage() {
             children: (
               <>
                 {book === "all" ? (
-                  <Alert type="info" showIcon message="Báo cáo gộp theo năm" description={<Link to="/tong-hop-hai-ben">Xem Tổng hợp hai bên</Link>} />
+                  <Alert type="info" showIcon message="Báo cáo gộp theo năm không còn được sử dụng" />
                 ) : shop === "MANUFACTURING" ? (
                   <FactoryProfitSummary year={year} />
                 ) : (
@@ -345,12 +368,12 @@ export function ReportsPage() {
                   </Col>
                   <Col xs={24} md={6}>
                     <Card size="small">
-                      <Statistic title="Tiền thực thu" value={formatMoney(profit?.cashCollected ?? 0)} />
+                      <Statistic title="Đã thu từ hóa đơn trong kỳ" value={formatMoney(profit?.cashCollected ?? 0)} />
                     </Card>
                   </Col>
                   <Col xs={24} md={6}>
                     <Card size="small">
-                      <Statistic title="Doanh thu chưa thu tiền" value={formatMoney(profit?.uncollectedRevenue ?? 0)} />
+                      <Statistic title="Tiền còn phải thu từ phiếu bán trong kỳ" value={formatMoney(profit?.uncollectedRevenue ?? 0)} />
                     </Card>
                   </Col>
                   <Col xs={24} md={6}>
@@ -362,6 +385,8 @@ export function ReportsPage() {
 
                 </Row>
 
+                <Alert type="info" showIcon style={{ marginBottom: 12 }}
+                  message="Số phiếu bán gồm cả phiếu chuyển nội bộ sang Xưởng. Doanh thu và đã thu chỉ tính phiếu bán cho khách; cột đã thu cộng cả lần khách trả sau ngày bán." />
                 <PagedTable<DailyRevenueRow>
                   rowKey="day"
                   loading={loading}
@@ -371,7 +396,7 @@ export function ReportsPage() {
                     { title: "Ngày", dataIndex: "day", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
                     { title: "Số phiếu bán", dataIndex: "saleCount", align: "center" },
                     { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
-                                        { title: "Tiền thực thu", dataIndex: "cashCollected", align: "center", render: (v: number) => formatMoney(v) },
+                    { title: "Đã thu từ phiếu ngày này", dataIndex: "cashCollected", align: "center", render: (v: number) => formatMoney(v) },
                     {
                       title: "Chi phí hoạt động",
                       dataIndex: "operatingExpense",
@@ -605,9 +630,10 @@ export function ReportsPage() {
                       <Space style={{ marginBottom: 16 }} wrap>
                         <DatePicker
                           picker="year"
+                          disabled={workingYear.locked}
                           allowClear={false}
                           value={dayjs(`${year}-01-01`)}
-                          onChange={(val) => val && setYear(val.year())}
+                          onChange={(val) => val && workingYearStore.set(shop, { year: val.year(), locked: false })}
                         />
                       </Space>
                       <Table<PayrollReportRow>

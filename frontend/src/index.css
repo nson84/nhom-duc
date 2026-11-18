@@ -443,6 +443,14 @@ body {
   min-width: 0;
 }
 
+.year-period-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
 /* Card / bảng: bo 12px, nổi khỏi nền bằng shadow (sáng) hoặc border (tối) */
 .app-content .ant-card {
   background: var(--color-surface);
@@ -459,16 +467,17 @@ body {
  */
 .app-content .ant-card.app-fill-card,
 .app-content > .ant-card:only-child:not(.startup-card) {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  display: block;
   min-height: 100%;
+  height: auto;
 }
 .app-content .ant-card.app-fill-card > .ant-card-body,
 .app-content > .ant-card:only-child:not(.startup-card) > .ant-card-body {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
+  display: flow-root;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
   padding-bottom: 24px;
 }
 
@@ -478,6 +487,17 @@ body {
 }
 
 .app-content > .ant-card.report-page-card:only-child > .ant-card-body {
+  display: block;
+  flex: 0 0 auto;
+}
+
+/* Tồn kho có nhiều thẻ KPI: khung phải cao theo nội dung và ôm trọn bảng/phân trang. */
+.app-content > .ant-card.stock-page-card:only-child {
+  flex: 0 0 auto;
+  min-height: 100%;
+}
+
+.app-content > .ant-card.stock-page-card:only-child > .ant-card-body {
   display: block;
   flex: 0 0 auto;
 }
@@ -1753,4 +1773,12 @@ html[data-theme="light"] .chart-day-toggle > button.is-active {
   .app-content > .ant-card:only-child:not(.startup-card) {
     min-height: 100%;
   }
+}
+
+.customer-summary-row > .ant-col {
+  display: flex;
+}
+
+.customer-summary-row > .ant-col > .ant-card {
+  width: 100%;
 }

@@ -26,11 +26,15 @@ pub fn ensure_started() -> Result<(), String> {
         message.to_string()
     })?;
 
+    let data_dir = app_data_dir();
+    let image_dir = data_dir.join("image");
+    fs::create_dir_all(&image_dir).map_err(|err| format!("Không tạo được thư mục ảnh: {err}"))?;
     let mut command = Command::new("java");
     command
         .arg("-jar")
         .arg(&jar)
-        .current_dir(jar.parent().unwrap_or(std::path::Path::new(".")))
+        .current_dir(&data_dir)
+        .env("ALUMINUM_IMAGE_DIR", &image_dir)
         .stdin(Stdio::null());
 
     let log_path = app_data_dir().join("backend.log");

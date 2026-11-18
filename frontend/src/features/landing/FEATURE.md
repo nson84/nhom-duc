@@ -15,16 +15,6 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 **Không được hiện:** giá nhập, tồn, doanh thu, lãi, lương, cấu hình sao lưu.
 
-### `/noi-dung-gioi-thieu` — Nội dung trang giới thiệu
-
-| | |
-|--|--|
-| File | `features/landing/LandingContentPage.tsx` |
-| Ai dùng | **Admin only** |
-| API | landing-content get/update |
-
-**Chức năng:** sửa chữ/sections trang `/gioi-thieu` (hero, điểm mạnh, CTA…).
-
 ## Bổ sung theo code hiện tại
 
 Trang công khai không trả giá vốn, tồn, doanh thu hoặc lương.

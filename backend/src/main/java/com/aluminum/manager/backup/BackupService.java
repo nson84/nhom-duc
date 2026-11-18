@@ -55,7 +55,10 @@ public class BackupService {
 	private final SettingsService settingsService;
 	private final AuditService audit;
 	private final Clock clock;
-	private volatile LocalDate lastScheduledRunDate;
+	private final RecoveryKeyService recoveryKey;
+	private final EncryptedBackupCodec codec;
+	private final BackupFrequencyService frequency;
+	private final CloudBackupService cloudBackups;
 	@Value("${ALUMINUM_IMAGE_DIR:image}")
 	private String imageDirectory;
 	// Authentication and backup history belong to this installation, not the business restore.
@@ -67,12 +70,20 @@ public class BackupService {
 			DataSource dataSource,
 			SettingsService settingsService,
 			AuditService audit,
-			Clock clock) {
+			Clock clock,
+			RecoveryKeyService recoveryKey,
+			EncryptedBackupCodec codec,
+			BackupFrequencyService frequency,
+			CloudBackupService cloudBackups) {
 		this.jdbc = jdbc;
 		this.dataSource = dataSource;
 		this.settingsService = settingsService;
 		this.audit = audit;
 		this.clock = clock;
+		this.recoveryKey = recoveryKey;
+		this.codec = codec;
+		this.frequency = frequency;
+		this.cloudBackups = cloudBackups;
 	}
 
 	@Transactional(readOnly = true)
@@ -89,6 +100,8 @@ public class BackupService {
 				"SELECT * FROM backup_logs ORDER BY started_at DESC, id DESC LIMIT 1",
 				(rs, i) -> mapLog(rs));
 		BackupLogDto latest = latestList.isEmpty() ? null : latestList.get(0);
+		LocalDateTime next = latest == null ? LocalDateTime.now(clock)
+				: latest.startedAt().plusHours(frequency.get());
 		boolean failed = latest != null && "FAILED".equals(latest.status());
 		String warning = failed
 				? "Lần sao lưu gần nhất đã thất bại: " + (latest.errorMessage() == null ? "Không rõ lỗi" : latest.errorMessage())
@@ -98,6 +111,8 @@ public class BackupService {
 				failed,
 				warning,
 				settings.backupTime(),
+				frequency.get(),
+				next,
 				settings.backupRetentionDays(),
 				resolveBackupDirectory(settings.backupDirectory()).toAbsolutePath().toString());
 	}
@@ -105,12 +120,13 @@ public class BackupService {
 	@Transactional(readOnly = true)
 	public BackupSettingsDto getSettings() {
 		ShopSettings s = settingsService.get();
-		return new BackupSettingsDto(s.backupTime(), s.backupRetentionDays(), s.backupDirectory());
+		return new BackupSettingsDto(s.backupTime(), frequency.get(), s.backupRetentionDays(), s.backupDirectory());
 	}
 
 	@Transactional
 	public BackupSettingsDto updateSettings(BackupSettingsDto request) {
 		ShopSettings current = settingsService.get();
+		frequency.set(request.frequencyHours());
 		ShopSettings updated = settingsService.update(new ShopSettings(
 				current.shopName(),
 				current.shopAddress(),
@@ -119,7 +135,7 @@ public class BackupService {
 				request.backupRetentionDays(),
 				request.backupDirectory() == null ? "" : request.backupDirectory().trim()));
 		return new BackupSettingsDto(
-				updated.backupTime(), updated.backupRetentionDays(), updated.backupDirectory());
+				updated.backupTime(), frequency.get(), updated.backupRetentionDays(), updated.backupDirectory());
 	}
 
 	public BackupLogDto createManualBackup() {
@@ -132,25 +148,33 @@ public class BackupService {
 		return result;
 	}
 
+	public void verifyLocal(long id) {
+		verifiedArchive(id);
+	}
+
+	public Path verifiedArchive(long id) {
+		List<BackupLogDto> rows = jdbc.query("SELECT * FROM backup_logs WHERE id = ?",
+				(rs, i) -> mapLog(rs), id);
+		if (rows.isEmpty() || !"SUCCESS".equals(rows.get(0).status()))
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy bản sao lưu thành công", null);
+		BackupLogDto backup = rows.get(0);
+		Path file = Paths.get(backup.backupPath());
+		try {
+			if (!Files.isRegularFile(file) || !sha256(Files.readAllBytes(file)).equalsIgnoreCase(backup.checksumSha256()))
+				throw new IOException("Checksum bản sao lưu không khớp");
+			codec.decrypt(file, recoveryKey.key(), java.io.OutputStream.nullOutputStream());
+		} catch (IOException e) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Bản sao lưu không giải mã hoặc kiểm tra toàn vẹn được", null);
+		}
+		return file;
+	}
+
 	@Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
 	public void scheduledBackupTick() {
 		try {
-			ShopSettings settings = settingsService.get();
-			LocalTime target = LocalTime.parse(settings.backupTime());
-			LocalDate today = LocalDate.now(clock);
-			LocalTime now = LocalTime.now(clock);
-			if (now.isBefore(target) || today.equals(lastScheduledRunDate)) {
-				return;
-			}
-			Integer doneToday = jdbc.queryForObject("""
-					SELECT COUNT(*) FROM backup_logs
-					WHERE status = 'SUCCESS' AND DATE(started_at) = ?
-					""", Integer.class, java.sql.Date.valueOf(today));
-			if (doneToday != null && doneToday > 0) {
-				lastScheduledRunDate = today;
-				return;
-			}
-			lastScheduledRunDate = today;
+			LocalDateTime latest = jdbc.query("SELECT started_at FROM backup_logs ORDER BY started_at DESC, id DESC LIMIT 1",
+					rs -> rs.next() ? rs.getTimestamp(1).toLocalDateTime() : null);
+			if (latest != null && latest.plusHours(frequency.get()).isAfter(LocalDateTime.now(clock))) return;
 			performBackup("scheduled", null);
 		} catch (Exception ex) {
 			log.warn("Không chạy được lịch sao lưu tự động", ex);
@@ -224,7 +248,7 @@ public class BackupService {
 		ShopSettings settings = settingsService.get();
 		Path dir = resolveBackupDirectory(settings.backupDirectory());
 		LocalDateTime started = LocalDateTime.now(clock);
-		String filename = "aluminum-" + prefix + "-" + started.format(FILE_TS) + ".sql";
+		String filename = "aluminum-" + prefix + "-" + started.format(FILE_TS) + ".ndbak";
 		Path file = dir.resolve(filename);
 
 		long logId = insertLog(file.toAbsolutePath().toString(), started);
@@ -232,22 +256,32 @@ public class BackupService {
 			Files.createDirectories(dir);
 			String sqlDump = buildDatabaseDump(started);
 			byte[] bytes = sqlDump.getBytes(StandardCharsets.UTF_8);
-			Files.write(file, bytes);
+			Path temp = Files.createTempFile(dir, "backup-", ".tmp");
+			try {
+				codec.encrypt(bytes, recoveryKey.key(), temp);
+				try { Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE); }
+				catch (java.nio.file.AtomicMoveNotSupportedException e) {
+					Files.move(temp, file);
+				}
+			} finally { Files.deleteIfExists(temp); }
 			if (!Files.isRegularFile(file) || Files.size(file) == 0) {
 				throw new IOException("File sao lưu rỗng sau khi ghi");
 			}
-			String checksum = sha256(bytes);
+			byte[] archiveBytes = Files.readAllBytes(file);
+			codec.decrypt(file, recoveryKey.key(), java.io.OutputStream.nullOutputStream());
+			String checksum = sha256(archiveBytes);
 			LocalDateTime completed = LocalDateTime.now(clock);
 			jdbc.update("""
 					UPDATE backup_logs
 					SET completed_at = ?, status = 'SUCCESS', file_size_bytes = ?, checksum_sha256 = ?
 					WHERE id = ?
-					""", Timestamp.valueOf(completed), (long) bytes.length, checksum, logId);
+					""", Timestamp.valueOf(completed), (long) archiveBytes.length, checksum, logId);
 			if (adminId != null) {
 				audit.record(adminId, "CREATE_BACKUP", "backup_logs", String.valueOf(logId),
 						"Sao lưu thành công (" + prefix + "): " + file.getFileName());
 			}
-			cleanupOldBackups(settings.backupRetentionDays());
+			cloudBackups.syncAfterBackup();
+			// Keep every valid local archive until cloud upload and retention can be verified independently.
 		} catch (Exception ex) {
 			log.error("Backup failed", ex);
 			LocalDateTime completed = LocalDateTime.now(clock);
@@ -367,7 +401,10 @@ public class BackupService {
 		List<BackupLogDto> oldLogs = jdbc.query("""
 				SELECT * FROM backup_logs WHERE started_at < ? AND status = 'SUCCESS'
 				""", (rs, i) -> mapLog(rs), Timestamp.valueOf(cutoff));
+		String latestPath = jdbc.query("SELECT backup_path FROM backup_logs WHERE status = 'SUCCESS' ORDER BY started_at DESC, id DESC LIMIT 1",
+				rs -> rs.next() ? rs.getString(1) : null);
 		for (BackupLogDto old : oldLogs) {
+			if (old.backupPath() != null && old.backupPath().equals(latestPath)) continue;
 			if (old.backupPath() != null) {
 				try {
 					Files.deleteIfExists(Paths.get(old.backupPath()));
@@ -447,6 +484,9 @@ public class BackupService {
 		}
 		if (val instanceof Number n) {
 			return n.toString();
+		}
+		if (val instanceof byte[] binary) {
+			return "X'" + HexFormat.of().formatHex(binary) + "'";
 		}
 		if (val instanceof Timestamp ts) {
 			return "'" + ts.toLocalDateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")) + "'";

@@ -1,15 +1,22 @@
 import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Space, Statistic, message } from "antd";
+import { PrinterOutlined } from "@ant-design/icons";
+import { PrintDocument } from "../../components/print-document";
+import { buildPayrollMonthHtml } from "./payroll-print";
 import { ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { vndAmountRules, vndInputNumberProps } from "../../utils/vnd-input";
+import { useShop } from "../shop/shop-store";
+import { useWorkingYear } from "../dashboard/working-year";
+import { getMonthStatus, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
 import {
   adjustPayrollDetail,
   calculatePayroll,
   closePayrollPeriod,
   createOrGetPayrollPeriod,
+  getMonthlyBoard,
   payPayrollPeriod,
   reopenPayrollPeriod,
   type PayrollDetail,
@@ -17,15 +24,38 @@ import {
 } from "./attendance-api";
 
 export function PayrollPage() {
-  const [monthPicker, setMonthPicker] = useState<Dayjs>(() => dayjs());
+  const workingYear = useWorkingYear(useShop());
+  const [monthPicker, setMonthPicker] = useState<Dayjs>(() => dayjs(`${workingYear.year}-01-01`));
+  const [resolvedWorkingYear, setResolvedWorkingYear] = useState<number | null>(null);
+  const [workingPeriod, setWorkingPeriod] = useState<YearPeriod | null>(null);
+  const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
   const [period, setPeriod] = useState<PayrollPeriod | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingDetail, setEditingDetail] = useState<PayrollDetail | null>(null);
   const [statement, setStatement] = useState<PayrollDetail | null>(null);
   const [showReopen, setShowReopen] = useState(false);
   const [showPay, setShowPay] = useState(false);
+  const [printHtml, setPrintHtml] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setResolvedWorkingYear(null);
+    getYearPeriod(workingYear.year)
+      .then((value) => { if (active) { setWorkingPeriod(value); setMonthPicker(dayjs(workingYear.month ? `${workingYear.month}-01` : value.periodFrom)); setResolvedWorkingYear(workingYear.year); } })
+      .catch(() => { if (active) { setMonthPicker(dayjs(`${workingYear.year}-01-01`)); setResolvedWorkingYear(workingYear.year); } });
+    return () => { active = false; };
+  }, [workingYear.year, workingYear.month]);
+
+  useEffect(() => {
+    let active = true;
+    getMonthStatus(monthPicker.format("YYYY-MM")).then((value) => { if (active) setMonthStatus(value); })
+      .catch(() => { if (active) setMonthStatus("NOT_OPEN"); });
+    return () => { active = false; };
+  }, [monthPicker]);
 
   const load = useCallback(async () => {
+    if (resolvedWorkingYear !== workingYear.year) return;
     setLoading(true);
     try {
       setPeriod(await createOrGetPayrollPeriod(monthPicker.year(), monthPicker.month() + 1));
@@ -34,7 +64,7 @@ export function PayrollPage() {
     } finally {
       setLoading(false);
     }
-  }, [monthPicker]);
+  }, [monthPicker, resolvedWorkingYear, workingYear.year]);
 
   useEffect(() => {
     void load();
@@ -48,14 +78,27 @@ export function PayrollPage() {
       title={`Tiền công tháng ${monthPicker.format("MM/YYYY")}`}
       extra={
         <Space wrap>
+          {period ? <Button icon={<PrinterOutlined />} loading={printing} onClick={async () => {
+            setPrinting(true);
+            try {
+              const board = await getMonthlyBoard(period.year, period.month);
+              setPrintHtml(buildPayrollMonthHtml(period, board));
+            } catch (error) {
+              message.error(toApiError(error).message);
+            } finally {
+              setPrinting(false);
+            }
+          }}>In bảng công và lương</Button> : null}
           <DatePicker
             picker="month"
             allowClear={false}
+            disabled={!!workingYear.month}
+            disabledDate={(date) => !!workingPeriod?.started && (date.endOf("month").isBefore(dayjs(workingPeriod.periodFrom), "day") || date.startOf("month").isAfter(dayjs(workingPeriod.periodTo), "day"))}
             format="MM/YYYY"
             value={monthPicker}
             onChange={(val) => val && setMonthPicker(val)}
           />
-          {period && !isClosed ? (
+          {period && !isClosed && monthStatus === "OPEN" ? (
             <>
               <Button
                 loading={loading}
@@ -109,6 +152,8 @@ export function PayrollPage() {
         </Space>
       }
     >
+      {monthStatus !== "OPEN" && <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message={monthStatus === "CLOSED" ? "Tháng đã khóa; chỉ xem tiền công" : "Hãy mở tháng ở Tổng quan trước khi lập tiền công"} />}
       {period ? (
         <>
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
@@ -250,6 +295,7 @@ export function PayrollPage() {
           }}
         />
       ) : null}
+      {printHtml ? <PrintDocument title={`Bảng công và lương ${monthPicker.format("MM/YYYY")}`} html={printHtml} onClose={() => setPrintHtml(null)} /> : null}
     </Card>
   );
 }

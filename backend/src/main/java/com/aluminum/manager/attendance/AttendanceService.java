@@ -74,14 +74,17 @@ public class AttendanceService {
 	private final DocumentSequenceService sequences;
 	private final Clock clock;
 	private final ShopAccess shops;
+	private final com.aluminum.manager.dashboard.YearEndBalanceService yearEndBalances;
 
 	public AttendanceService(
-			JdbcTemplate jdbc, AuditService audit, DocumentSequenceService sequences, Clock clock, ShopAccess shops) {
+			JdbcTemplate jdbc, AuditService audit, DocumentSequenceService sequences, Clock clock, ShopAccess shops,
+			com.aluminum.manager.dashboard.YearEndBalanceService yearEndBalances) {
 		this.jdbc = jdbc;
 		this.audit = audit;
 		this.sequences = sequences;
 		this.clock = clock;
 		this.shops = shops;
+		this.yearEndBalances = yearEndBalances;
 	}
 
 	// ---------- Employees ----------
@@ -1080,6 +1083,12 @@ public class AttendanceService {
 	@Transactional
 	public PayrollPeriodDto createOrGetPeriod(PayrollPeriodRequest request) {
 		validateYearMonth(request.year(), request.month());
+		List<Long> existing = jdbc.queryForList("SELECT id FROM payroll_periods WHERE period_year = ? AND period_month = ?",
+				Long.class, request.year(), request.month());
+		if (!"OPEN".equals(yearEndBalances.monthStatus(YearMonth.of(request.year(), request.month())))) {
+			if (!existing.isEmpty()) return getPayrollPeriod(existing.get(0));
+			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED, "Hãy mở tháng ở Tổng quan trước khi lập kỳ công", null);
+		}
 		int created = jdbc.update("""
 				INSERT INTO payroll_periods (period_year, period_month, status, notes)
 				VALUES (?, ?, 'OPEN', ?)
@@ -1133,12 +1142,20 @@ public class AttendanceService {
 	@Transactional
 	public PayrollPeriodDto calculatePayroll(long periodId) {
 		PeriodHeader header = lockPeriod(periodId);
+		requirePayrollMonthOpen(header.year(), header.month());
 		if (!"OPEN".equals(header.status())) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED,
 					"Kỳ công đã chốt, không tự tính lại. Hãy mở lại kỳ công nếu cần tính lại", null);
 		}
 		LocalDate start = LocalDate.of(header.year(), header.month(), 1);
 		LocalDate end = YearMonth.of(header.year(), header.month()).atEndOfMonth();
+		var workingPeriod = yearEndBalances.selectedWorkingPeriod();
+		if (workingPeriod != null) {
+			if (start.isBefore(workingPeriod.periodFrom())) start = workingPeriod.periodFrom();
+			if (end.isAfter(workingPeriod.periodTo())) end = workingPeriod.periodTo();
+			if (start.isAfter(end)) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Tháng tiền công nằm ngoài kỳ năm đang làm việc", null);
+		}
 
 		Map<Long, BigDecimal[]> existingAdjustments = new HashMap<>();
 		jdbc.query("""
@@ -1282,6 +1299,7 @@ public class AttendanceService {
 	public PayrollPeriodDto adjustPayrollDetail(
 			long periodId, long detailId, PayrollAdjustDetailRequest request) {
 		PeriodHeader header = lockPeriod(periodId);
+		requirePayrollMonthOpen(header.year(), header.month());
 		if (!"OPEN".equals(header.status())) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED,
 					"Kỳ công đã chốt, không chỉnh sửa phụ cấp và tiền ứng", null);
@@ -1311,6 +1329,7 @@ public class AttendanceService {
 	@Transactional
 	public PayrollPeriodDto closePeriod(long periodId) {
 		PeriodHeader header = lockPeriod(periodId);
+		requirePayrollMonthOpen(header.year(), header.month());
 		if ("CLOSED".equals(header.status())) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED, "Kỳ công này đã được chốt", null);
 		}
@@ -1342,6 +1361,11 @@ public class AttendanceService {
 	@Transactional
 	public PayrollPeriodDto reopenPeriod(long periodId, String reason) {
 		PeriodHeader header = lockPeriod(periodId);
+		requirePayrollMonthOpen(header.year(), header.month());
+		Integer monthClosed = jdbc.queryForObject("SELECT COUNT(*) FROM shop_month_periods WHERE shop_id = ? AND month_start = ? AND closed_at IS NOT NULL",
+				Integer.class, shops.currentId(), LocalDate.of(header.year(), header.month(), 1));
+		if (monthClosed != null && monthClosed > 0)
+			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED, "Tháng đã chốt; không thể mở lại kỳ công", null);
 		if (!"CLOSED".equals(header.status())) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ mở lại được kỳ công đang khóa", null);
 		}
@@ -1386,6 +1410,7 @@ public class AttendanceService {
 					"Số tiền chi vượt phần lương còn lại (" + remaining.stripTrailingZeros().toPlainString() + ")", null);
 		}
 		LocalDateTime now = LocalDateTime.now(clock);
+		yearEndBalances.requireWorkingDate(now);
 		String code = sequences.nextCode("FINANCE_EXPENSE", now.toLocalDate(), ShopContext.MANUFACTURING);
 		String desc = blank(request.description()) != null
 				? request.description().trim()
@@ -1462,7 +1487,14 @@ public class AttendanceService {
 		return !status.isEmpty() && "CLOSED".equals(status.get(0));
 	}
 
+	private void requirePayrollMonthOpen(int year, int month) {
+		if (!"OPEN".equals(yearEndBalances.monthStatus(YearMonth.of(year, month))))
+			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED,
+					"Tháng " + month + "/" + year + " chưa mở hoặc đã khóa", null);
+	}
+
 	private void requireNotLocked(LocalDate date) {
+		yearEndBalances.requireWorkingDate(date.atStartOfDay());
 		if (isPeriodClosed(date.getYear(), date.getMonthValue())) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED,
 					"Kỳ công tháng " + date.getMonthValue() + "/" + date.getYear() + " đã chốt, không thể chỉnh sửa", null);

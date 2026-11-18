@@ -11,7 +11,7 @@ import { login } from "./auth-api";
 import { authStore } from "./auth-store";
 
 const ACCOUNT_OPTIONS = [
-  { value: "admin", label: "admin — xem báo cáo" },
+  { value: "admin", label: "admin — sao lưu và cài đặt" },
   { value: "phanphoi", label: "phanphoi — phân phối" },
   { value: "xuong", label: "xuong — xưởng" },
 ] as const;

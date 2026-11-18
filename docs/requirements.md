@@ -1,6 +1,6 @@
 # Phạm vi MVP
 
-Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xưởng và Phân phối. Phần mềm quản lý sản phẩm, phiếu nhập/bán, khách mua, nhân sự xưởng, thu chi, báo cáo và sao lưu. Admin xem gộp hai bên; phân phối do chủ quản lý, không có nhân viên hay tiền công.
+Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xưởng và Phân phối. Phần mềm quản lý sản phẩm, phiếu nhập/bán, khách mua, nhân sự xưởng, thu chi, báo cáo và sao lưu. Admin chỉ quản lý Sao lưu và Cài đặt; phân phối do chủ quản lý, không có nhân viên hay tiền công.
 
 ## Đã khóa
 
@@ -20,6 +20,9 @@ Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xư
 - Form phiếu chi thủ công của cả Xưởng và Phân phối dùng năm lựa chọn: điện, ăn mỗi ngày, nước và bánh kẹo giữa giờ, vật tư máy móc, sửa chữa/thay thế/bảo dưỡng. Bốn khoản đầu thuộc chi phí hoạt động, khoản sửa chữa thuộc bảo trì; chi trả phiếu nhập vẫn ghi trên phiếu nhập để tránh trùng.
 - Doanh thu, tiền thực thu và chi phí hoạt động là ba số khác nhau. Tiền nhập hàng chưa bán không phải chi phí kỳ.
 - Kỳ chốt năm là khoảng ngày do từng cửa hàng chọn, có thể theo Tết âm lịch và đi qua 31/12. Năm trên màn hình là tên kỳ. Kỳ sau bắt đầu ngay sau ngày chốt kỳ trước. Tồn và công nợ chuyển tiếp theo chứng từ gốc; thu/trả nợ cũ sau ngày chốt không tính lãi lần hai. Tiền công tháng thuộc kỳ chứa ngày cuối tháng.
+- Tháng là kỳ làm việc chính nằm trong kỳ năm: chọn tháng và bấm Mở tháng trước khi ghi phiếu. Mọi màn nghiệp vụ theo ngày dùng phần giao của tháng và kỳ năm; ví dụ năm bắt đầu 18/02 thì tháng đầu tính từ 18/02. Khóa tháng khóa ghi/sửa chứng từ của tháng đó và chỉ sau đó mới mở tháng tiếp; Xưởng phải chốt kỳ công trước. Phiếu thanh toán nợ cũ ghi vào tháng nhận/trả thực tế đang mở. Có thể chốt năm khi tháng cuối vẫn mở. Cần xử lý phiếu kho nháp trong khoảng chốt.
+- Sổ Thu chi lọc và cộng tiền theo ngày nhận/trả thực tế. Khoản trả cho hóa đơn cũ không xuất hiện trong Sổ Thu chi của tháng lập hóa đơn; báo cáo công nợ vẫn gắn khoản trả với hóa đơn gốc.
+- Ngày bắt đầu và kết thúc kỳ chưa chốt được lưu bằng hai thao tác riêng cho từng sổ, từng tên năm. Sau khi lưu ngày bắt đầu, số liệu kỳ được tính từ ngày đó đến hiện tại. Ngày kết thúc dự kiến có thể đổi trước khi chốt và không giới hạn dữ liệu đang làm việc; chốt là bước xác nhận riêng sau kiểm kê. Tổng quan, Thu chi, Báo cáo, kiểm kê Xưởng và Sổ cuối năm dùng cùng khoảng kỳ; kỳ đã chốt không đổi ngày. Tên kỳ là chuỗi tùy ý, chẳng hạn “Kỳ 02/2026–02/2027”; số năm trong bộ chọn là khóa tra cứu.
 - Tăng ca chỉ tính khi đã duyệt. Kỳ công đã chốt không đổi theo hồ sơ mới.
 - Thưởng lễ theo từng nhân viên được tính vào chi phí Xưởng. Khoản đã nhận trực tiếp không cộng lại vào tiền công cuối tháng.
 - Giờ qua đêm và làm tròn là cấu hình, không hard-code một công thức cho mọi cửa hàng.

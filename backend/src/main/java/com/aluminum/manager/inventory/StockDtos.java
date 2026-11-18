@@ -66,6 +66,7 @@ public final class StockDtos {
 	) {
 	}
 
+
 	public record ItemDto(
 			Long id,
 			Long productId,
@@ -179,7 +180,8 @@ public final class StockDtos {
 	) {
 	}
 
-	public record InventoryCountRequest(@NotEmpty List<@Valid InventoryCountItemRequest> items) {
+	public record InventoryCountRequest(@NotEmpty List<@Valid InventoryCountItemRequest> items,
+			@NotNull LocalDateTime countDate) {
 	}
 
 	public record InventoryCountResult(int adjustedItems, BigDecimal shortageKg, BigDecimal surplusKg,

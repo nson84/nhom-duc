@@ -4,7 +4,7 @@ Mỗi thư mục chức năng có `FEATURE.md` mô tả hành vi hiện tại. T
 
 | Vai trò | Phạm vi hiện tại |
 | --- | --- |
-| Admin | Chọn sổ và xem báo cáo hai bên; không ghi nghiệp vụ kho/thu chi; quản lý cài đặt, sao lưu và nội dung giới thiệu. |
+| Admin | Chỉ Sao lưu và Cài đặt; không truy cập nghiệp vụ, báo cáo gộp hoặc Sổ cuối năm. |
 | Phân phối | Vận hành sổ phân phối; không truy cập nhân viên, chấm công hay tiền công. |
 | Xưởng | Vận hành sổ xưởng, quyết toán và nhân sự xưởng. |
 
@@ -21,8 +21,9 @@ Router nằm tại `frontend/src/app/router.tsx`, menu và bộ chọn sổ tạ
 | Quyết toán xưởng, phế liệu | [factory](../frontend/src/features/factory/FEATURE.md) |
 | Nhân viên, chấm công, tiền công xưởng | [attendance](../frontend/src/features/attendance/FEATURE.md) |
 | Thu chi, báo cáo | [finance](../frontend/src/features/finance/FEATURE.md) |
+| Công nợ chuyển kỳ | [finance](../frontend/src/features/finance/FEATURE.md) |
 | Sổ cuối năm để in PDF | [annual-book](../frontend/src/features/annual-book/FEATURE.md) |
-| Admin tổng hợp hai bên | [admin](../frontend/src/features/admin/FEATURE.md) |
+| Quyền Admin | [admin](../frontend/src/features/admin/FEATURE.md) |
 | Sao lưu, cài đặt, tài khoản QR | [backup](../frontend/src/features/backup/FEATURE.md), [settings](../frontend/src/features/settings/FEATURE.md) |
 
 ## Theo màn hình / frontend
@@ -64,3 +65,5 @@ Router nằm tại `frontend/src/app/router.tsx`, menu và bộ chọn sổ tạ
 - [Cấu hình khởi tạo](../backend/src/main/java/com/aluminum/manager/config/FEATURE.md)
 
 Các tài liệu xuyên chức năng: [API](api-specification.md), [cơ sở dữ liệu](database-erd.md), [kiểm thử](test-plan.md), [hướng dẫn chạy](../README.md).
+
+Mục Chốt sổ tháng (/chot-so-thang) thuộc dashboard cho Xưởng và Phân phối.

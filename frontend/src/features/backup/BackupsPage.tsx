@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Space, Tag, message } from "antd";
+import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -9,6 +9,23 @@ import {
   listBackups,
   restoreBackup,
   updateBackupSettings,
+  getCloudSettings,
+  saveCloudSettings,
+  testCloudConnection,
+  getCloudStatus,
+  listCloudObjects,
+  syncCloud,
+  downloadCloud,
+  verifyCloud,
+  verifyLocal,
+  prepareCloud,
+  prepareLocal,
+  getRecoveryKey,
+  importRecoveryKey,
+  type CloudSettings,
+  type CloudInput,
+  type CloudStatus,
+  type CloudObject,
   type BackupLog,
   type BackupSettings,
   type BackupStatus,
@@ -29,13 +46,30 @@ export function BackupsPage() {
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState<BackupLog | null>(null);
   const [editingSettings, setEditingSettings] = useState(false);
+  const [cloud, setCloud] = useState<CloudSettings | null>(null);
+  const [editingCloud, setEditingCloud] = useState(false);
+  const [testingCloud, setTestingCloud] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+  const [cloudObjects, setCloudObjects] = useState<CloudObject[]>([]);
+  const [syncingCloud, setSyncingCloud] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+  const [verifyingObject, setVerifyingObject] = useState<CloudObject | null>(null);
+  const [prepareMode, setPrepareMode] = useState(false);
+  const [enteredRecoveryKey, setEnteredRecoveryKey] = useState("");
+  const [databaseUsername, setDatabaseUsername] = useState("");
+  const [databasePassword, setDatabasePassword] = useState("");
+  const [preparingLocal, setPreparingLocal] = useState<BackupLog | null>(null);
+  const [importingRecoveryKey, setImportingRecoveryKey] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, l] = await Promise.all([getBackupStatus(), listBackups()]);
+      const [s, l, c, cs] = await Promise.all([getBackupStatus(), listBackups(), getCloudSettings(), getCloudStatus()]);
       setStatus(s);
       setLogs(l);
+      setCloud(c);
+      setCloudStatus(cs);
+      setCloudObjects(cs.configured ? await listCloudObjects().catch(() => []) : []);
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
@@ -52,6 +86,12 @@ export function BackupsPage() {
       title="Sao lưu & Phục hồi dữ liệu"
       extra={
         <Space>
+          <Button onClick={async () => {
+            try { setRecoveryKey(await getRecoveryKey()); }
+            catch (error) { message.error(toApiError(error).message); }
+          }}>Khóa phục hồi</Button>
+          <Button onClick={() => setImportingRecoveryKey(true)}>Nhập khóa máy cũ</Button>
+          <Button onClick={() => setEditingCloud(true)}>Cấu hình Cloudflare R2</Button>
           <Button onClick={() => setEditingSettings(true)}>Cấu hình lịch sao lưu</Button>
           <Button
             type="primary"
@@ -86,7 +126,8 @@ export function BackupsPage() {
 
       {status ? (
         <Descriptions bordered size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 16 }}>
-          <Descriptions.Item label="Giờ sao lưu tự động hằng ngày">{status.backupTime}</Descriptions.Item>
+          <Descriptions.Item label="Tần suất sao lưu">Mỗi {status.frequencyHours} giờ</Descriptions.Item>
+          <Descriptions.Item label="Dự kiến lần tiếp theo">{dayjs(status.nextBackupAt).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
           <Descriptions.Item label="Thời gian lưu giữ">{status.retentionDays} ngày</Descriptions.Item>
           <Descriptions.Item label="Thư mục lưu trữ" span={2}>
             <code>{status.effectiveDirectory}</code>
@@ -98,6 +139,45 @@ export function BackupsPage() {
           </Descriptions.Item>
         </Descriptions>
       ) : null}
+
+      <Alert type={cloud?.configured ? "info" : "warning"} showIcon style={{ marginBottom: 16 }}
+        message={cloud?.configured ? `R2 đã lưu cấu hình: ${cloud.bucket}` : "Chưa cấu hình Cloudflare R2"}
+        description={<Space wrap>
+          <span>Khóa R2 được lưu riêng trên máy. Chỉ tải bản sao lên cloud sau khi mã hóa và kiểm tra khôi phục.</span>
+          {cloud?.configured ? <Button loading={testingCloud} onClick={async () => {
+            setTestingCloud(true);
+            try { await testCloudConnection(); message.success("Kết nối R2 thành công"); }
+            catch (error) { message.error(toApiError(error).message); }
+            finally { setTestingCloud(false); }
+          }}>Kiểm tra kết nối</Button> : null}
+        </Space>} />
+
+      {cloudStatus ? <Descriptions bordered size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 16 }}>
+        <Descriptions.Item label="Bản chờ đồng bộ">{cloudStatus.pending}</Descriptions.Item>
+        <Descriptions.Item label="Bản cloud gần nhất">{cloudStatus.latestKey || "Chưa có"}</Descriptions.Item>
+        {cloudStatus.lastError ? <Descriptions.Item label="Đồng bộ" span={2}>{cloudStatus.lastError}</Descriptions.Item> : null}
+      </Descriptions> : null}
+      {cloud?.configured ? <Button loading={syncingCloud} style={{ marginBottom: 16 }} onClick={async () => {
+        setSyncingCloud(true);
+        try { const count = await syncCloud(); message.success(`Đã tải ${count} bản sao lưu lên R2`); await load(); }
+        catch (error) { message.error(toApiError(error).message); }
+        finally { setSyncingCloud(false); }
+      }}>Đồng bộ R2 ngay</Button> : null}
+
+      {cloudObjects.length ? <PagedTable<CloudObject> rowKey="key" dataSource={cloudObjects}
+        columns={[
+          { title: "Bản trên R2", dataIndex: "key" },
+          { title: "Tải lên", dataIndex: "uploadedAt", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
+          { title: "Kích thước", dataIndex: "size", render: (v: number) => formatBytes(v) },
+          { title: "Thao tác", render: (_, item) => <Space wrap>
+            <Button onClick={async () => {
+              try { const path = await downloadCloud(item.key); message.success(`Đã tải về: ${path}`); }
+              catch (error) { message.error(toApiError(error).message); }
+            }}>Tải về máy</Button>
+            <Button onClick={() => { setPrepareMode(false); setVerifyingObject(item); }}>Kiểm tra</Button>
+            <Button onClick={() => { setPrepareMode(true); setVerifyingObject(item); }}>Dựng DB thử</Button>
+          </Space> },
+        ]} /> : null}
 
       <Alert type="warning" showIcon style={{ marginBottom: 16 }}
         message="Tạm khóa khôi phục tự động"
@@ -147,8 +227,11 @@ export function BackupsPage() {
           {
             title: "Thao tác",
             width: 120,
-            render: (_, log) =>
-              log.status === "SUCCESS" ? <span title="Đang xây quy trình kiểm thử trên database riêng">Tạm khóa</span> : null,
+            render: (_, log) => log.status === "SUCCESS" && log.backupPath?.endsWith(".ndbak")
+              ? <Space><Button onClick={async () => {
+                  try { await verifyLocal(log.id); message.success("Bản sao lưu hợp lệ"); }
+                  catch (error) { message.error(toApiError(error).message); }
+                }}>Kiểm tra</Button><Button onClick={() => setPreparingLocal(log)}>Dựng DB thử</Button></Space> : <span>Tạm khóa</span>,
           },
         ]}
       />
@@ -168,6 +251,7 @@ export function BackupsPage() {
         <BackupSettingsModal
           initial={{
             backupTime: status.backupTime,
+            frequencyHours: status.frequencyHours,
             backupRetentionDays: status.retentionDays,
             backupDirectory: status.effectiveDirectory,
           }}
@@ -178,8 +262,106 @@ export function BackupsPage() {
           }}
         />
       ) : null}
+      {editingCloud ? <CloudSettingsModal initial={cloud} onClose={() => setEditingCloud(false)}
+        onSaved={() => { setEditingCloud(false); void load(); }} /> : null}
+      <Modal open={!!recoveryKey} title="Khóa phục hồi khi mất máy" footer={<Button onClick={() => setRecoveryKey(null)}>Đã lưu an toàn</Button>}
+        onCancel={() => setRecoveryKey(null)}>
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+          message="Lưu khóa này ở nơi riêng ngoài máy tính. Mất cả máy và khóa sẽ không giải mã được bản sao trên R2." />
+        <Input.TextArea value={recoveryKey || ""} readOnly autoSize={{ minRows: 2 }} />
+      </Modal>
+      <Modal open={!!verifyingObject} title={prepareMode ? "Dựng database khôi phục thử" : "Kiểm tra bản sao từ R2"}
+        okText={prepareMode ? "Dựng DB riêng" : "Tải và kiểm tra"}
+        onCancel={() => { setVerifyingObject(null); setEnteredRecoveryKey(""); setDatabasePassword(""); }}
+        onOk={async () => {
+          if (!verifyingObject) return;
+          try {
+            if (prepareMode) {
+              const result = await prepareCloud(verifyingObject.key, enteredRecoveryKey,
+                databaseUsername, databasePassword);
+              message.success(`Đã dựng ${result.databaseName}: ${result.sqlStatements} câu lệnh, ${result.imagesVerified} ảnh`);
+            } else {
+              await verifyCloud(verifyingObject.key, enteredRecoveryKey);
+              message.success("Đã tải, giải mã và kiểm tra toàn vẹn");
+            }
+            setVerifyingObject(null); setEnteredRecoveryKey(""); setDatabasePassword("");
+          } catch (error) { message.error(toApiError(error).message); }
+        }}>
+        <p>Nhập khóa phục hồi đã cất ngoài máy. Trên máy đang dùng, có thể để trống. Database đang làm việc không bị thay thế.</p>
+        <Input.Password value={enteredRecoveryKey} onChange={event => setEnteredRecoveryKey(event.target.value)}
+          placeholder="Khóa phục hồi" autoComplete="off" />
+        {prepareMode ? <MysqlRestoreFields username={databaseUsername} password={databasePassword}
+          onUsername={setDatabaseUsername} onPassword={setDatabasePassword} /> : null}
+      </Modal>
+      <Modal open={!!preparingLocal} title="Dựng database khôi phục thử" okText="Dựng DB riêng"
+        onCancel={() => { setPreparingLocal(null); setDatabasePassword(""); }}
+        onOk={async () => {
+          if (!preparingLocal) return;
+          try { const result = await prepareLocal(preparingLocal.id, databaseUsername, databasePassword);
+            message.success(`Đã dựng ${result.databaseName}: ${result.sqlStatements} câu lệnh, ${result.imagesVerified} ảnh`);
+            setPreparingLocal(null); setDatabasePassword(""); }
+          catch (error) { message.error(toApiError(error).message); }
+        }}>
+        <p>Nhập tài khoản MySQL có quyền tạo database thử. Mật khẩu chỉ dùng cho thao tác này và không được lưu.</p>
+        <MysqlRestoreFields username={databaseUsername} password={databasePassword}
+          onUsername={setDatabaseUsername} onPassword={setDatabasePassword} />
+      </Modal>
+      <Modal open={importingRecoveryKey} title="Nhập khóa phục hồi từ máy cũ" okText="Lưu khóa"
+        onCancel={() => { setImportingRecoveryKey(false); setEnteredRecoveryKey(""); }}
+        onOk={async () => {
+          try { await importRecoveryKey(enteredRecoveryKey); message.success("Đã lưu khóa phục hồi");
+            setImportingRecoveryKey(false); setEnteredRecoveryKey(""); }
+          catch (error) { message.error(toApiError(error).message); }
+        }}>
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message="Chỉ nhập trên máy mới. Khóa đang dùng trên máy hiện tại không bị ghi đè." />
+        <Input.Password value={enteredRecoveryKey} onChange={event => setEnteredRecoveryKey(event.target.value)}
+          placeholder="Khóa đã lưu ở nơi riêng" autoComplete="off" />
+      </Modal>
     </Card>
   );
+}
+
+function MysqlRestoreFields({ username, password, onUsername, onPassword }: {
+  username: string; password: string; onUsername: (value: string) => void; onPassword: (value: string) => void;
+}) {
+  return <Space direction="vertical" style={{ width: "100%", marginTop: 12 }}>
+    <Input value={username} onChange={event => onUsername(event.target.value)}
+      placeholder="Tài khoản MySQL có quyền CREATE DATABASE" autoComplete="off" />
+    <Input.Password value={password} onChange={event => onPassword(event.target.value)}
+      placeholder="Mật khẩu MySQL" autoComplete="new-password" />
+  </Space>;
+}
+
+function CloudSettingsModal({ initial, onClose, onSaved }: {
+  initial: CloudSettings | null; onClose: () => void; onSaved: () => void;
+}) {
+  const [form] = Form.useForm<CloudInput>();
+  const [saving, setSaving] = useState(false);
+  return <Modal open title="Kết nối Cloudflare R2" okText="Lưu cấu hình" cancelText="Hủy"
+    confirmLoading={saving} onCancel={onClose} onOk={() => form.submit()}>
+    <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+      message="Khóa trong ảnh đã gửi trước đây cần được tạo lại trên Cloudflare trước khi dùng cho dữ liệu thật." />
+    <Form form={form} layout="vertical" initialValues={{
+      endpoint: initial?.endpoint || "", bucket: initial?.bucket || "nhom-duc-backup",
+      accessKeyId: initial?.accessKeyId || "", secretAccessKey: "",
+    }} onFinish={async (values) => {
+      setSaving(true);
+      try { await saveCloudSettings(values); message.success("Đã lưu cấu hình R2"); onSaved(); }
+      catch (error) { message.error(toApiError(error).message); }
+      finally { setSaving(false); }
+    }}>
+      <Form.Item name="endpoint" label="S3 API endpoint" rules={[{ required: true }]}>
+        <Input placeholder="https://<account-id>.r2.cloudflarestorage.com" />
+      </Form.Item>
+      <Form.Item name="bucket" label="Bucket" rules={[{ required: true }]}><Input /></Form.Item>
+      <Form.Item name="accessKeyId" label="Access Key ID" rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
+      <Form.Item name="secretAccessKey" label="Secret Access Key"
+        extra={initial?.configured ? "Để trống nếu giữ khóa đã lưu." : "Khóa chỉ hiển thị một lần trên Cloudflare."}>
+        <Input.Password autoComplete="new-password" />
+      </Form.Item>
+    </Form>
+  </Modal>;
 }
 
 function RestoreModal({
@@ -282,8 +464,9 @@ function BackupSettingsModal({
           }
         }}
       >
-        <Form.Item name="backupTime" label="Giờ sao lưu hằng ngày (HH:mm)" rules={[{ required: true }]}>
-          <Input placeholder="22:00" />
+        <Form.Item name="backupTime" hidden><Input /></Form.Item>
+        <Form.Item name="frequencyHours" label="Tần suất sao lưu (giờ)" rules={[{ required: true }]}>
+          <Select options={[1, 2, 4, 8, 24].map(value => ({ value, label: `Mỗi ${value} giờ` }))} />
         </Form.Item>
         <Form.Item name="backupRetentionDays" label="Số ngày giữ bản sao lưu" rules={[{ required: true }]}>
           <InputNumber min={1} max={3650} style={{ width: "100%" }} />

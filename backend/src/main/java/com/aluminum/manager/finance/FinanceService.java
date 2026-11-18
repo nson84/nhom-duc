@@ -2,6 +2,7 @@ package com.aluminum.manager.finance;
 
 import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
+import com.aluminum.manager.dashboard.YearEndBalanceService;
 import com.aluminum.manager.finance.FinanceDtos.CreateTransactionRequest;
 import com.aluminum.manager.finance.FinanceDtos.DailyRevenueRowDto;
 import com.aluminum.manager.finance.FinanceDtos.FinanceSummaryDto;
@@ -50,14 +51,17 @@ public class FinanceService {
 	private final AuditService audit;
 	private final Clock clock;
 	private final ShopAccess shops;
+	private final YearEndBalanceService yearPeriods;
 
 	public FinanceService(
-			JdbcTemplate jdbc, DocumentSequenceService sequences, AuditService audit, Clock clock, ShopAccess shops) {
+			JdbcTemplate jdbc, DocumentSequenceService sequences, AuditService audit, Clock clock, ShopAccess shops,
+			YearEndBalanceService yearPeriods) {
 		this.jdbc = jdbc;
 		this.sequences = sequences;
 		this.audit = audit;
 		this.clock = clock;
 		this.shops = shops;
+		this.yearPeriods = yearPeriods;
 	}
 
 	// ---------- Transactions ----------
@@ -72,7 +76,9 @@ public class FinanceService {
 				       ft.is_internal, s.code AS shop_code
 				FROM financial_transactions ft
 				JOIN shops s ON s.id = ft.shop_id
-				WHERE ft.transaction_date >= ? AND ft.transaction_date < ?
+				LEFT JOIN stock_documents d ON d.id = ft.reference_id AND ft.reference_type = 'STOCK_DOCUMENT'
+				WHERE ft.transaction_date >= ?
+				  AND ft.transaction_date < ?
 				""" + shops.shopOnly("ft"));
 		List<Object> args = new ArrayList<>();
 		args.add(Timestamp.valueOf(range.from().atStartOfDay()));
@@ -132,6 +138,7 @@ public class FinanceService {
 		}
 
 		LocalDateTime when = request.transactionDate() == null ? LocalDateTime.now(clock) : request.transactionDate();
+		yearPeriods.requireWorkingDate(when);
 		if (!shops.isDistribution()) assertFactoryYearOpen(when);
 		String code = sequences.nextCode("FINANCE_EXPENSE", when.toLocalDate());
 		BigDecimal amount = InventoryMath.snapshotMoney(request.amount());
@@ -152,6 +159,7 @@ public class FinanceService {
 	@Transactional
 	public TransactionDto voidTransaction(long id, String reason) {
 		TransactionDto tx = getTransaction(id);
+		yearPeriods.requireWorkingDate(tx.transactionDate());
 		if ("VOID".equals(tx.status())) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Phiếu thu/chi này đã được hủy trước đó", null);
 		}
@@ -230,7 +238,7 @@ public class FinanceService {
 	@Transactional(readOnly = true)
 	public FinanceSummaryDto summary(LocalDate from, LocalDate to) {
 		DateRange range = range(from, to);
-		BigDecimal saleReceipt = sumByCategory("INCOME", "SALE_RECEIPT", range);
+		BigDecimal saleReceipt = sumDocumentPayments("INCOME", "SALE_RECEIPT", range);
 		BigDecimal otherIncome = sumByCategory("INCOME", "OTHER_INCOME", range);
 		BigDecimal totalIncome = saleReceipt.add(otherIncome).setScale(MONEY_SCALE, ROUNDING);
 
@@ -238,7 +246,7 @@ public class FinanceService {
 		BigDecimal payrollExpense = shops.isDistribution()
 				? BigDecimal.ZERO : sumByCategory("EXPENSE", "PAYROLL", range);
 		BigDecimal otherExpense = sumByCategory("EXPENSE", "OTHER_EXPENSE", range);
-		BigDecimal purchasePayment = sumByCategory("EXPENSE", "PURCHASE_PAYMENT", range);
+		BigDecimal purchasePayment = sumDocumentPayments("EXPENSE", "PURCHASE_PAYMENT", range);
 		BigDecimal totalExpense = operatingExpense.add(payrollExpense).add(otherExpense).add(purchasePayment)
 				.setScale(MONEY_SCALE, ROUNDING);
 
@@ -271,7 +279,7 @@ public class FinanceService {
 		BigDecimal revenue = queryMoney("""
 				SELECT COALESCE(SUM(total_amount), 0)
 				FROM stock_documents
-				WHERE document_type = 'SALE' AND status = 'CONFIRMED'
+				WHERE document_type = 'SALE' AND status = 'CONFIRMED' AND is_internal = 0
 				  AND document_date >= ? AND document_date < ?
 				""", start, end);
 
@@ -279,7 +287,7 @@ public class FinanceService {
 				SELECT COALESCE(SUM(i.cost_total_snapshot), 0)
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
-				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				""", start, end);
 
@@ -292,7 +300,7 @@ public class FinanceService {
 				SELECT COALESCE(SUM(i.standard_cost_total_snapshot), 0)
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
-				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				"""), BigDecimal.class, start, end);
 		BigDecimal standardCogs = scaleMoney(standardCogsRaw);
@@ -300,7 +308,7 @@ public class FinanceService {
 				SELECT COUNT(*)
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
-				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				  AND i.standard_cost_total_snapshot IS NULL
 				"""), Integer.class, start, end);
@@ -330,18 +338,11 @@ public class FinanceService {
 				SELECT COALESCE(SUM(p.amount), 0)
 				FROM sales_payments p
 				JOIN stock_documents d ON d.id = p.document_id
-				WHERE d.status = 'CONFIRMED'
-				  AND p.payment_date >= ? AND p.payment_date < ?
-				""", start, end);
-
-		BigDecimal paidForSalesInPeriod = queryMoney("""
-				SELECT COALESCE(SUM(p.amount), 0)
-				FROM sales_payments p
-				JOIN stock_documents d ON d.id = p.document_id
-				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				""", start, end);
-		BigDecimal uncollected = revenue.subtract(paidForSalesInPeriod).max(BigDecimal.ZERO)
+
+		BigDecimal uncollected = revenue.subtract(cashCollected).max(BigDecimal.ZERO)
 				.setScale(MONEY_SCALE, ROUNDING);
 
 		BigDecimal purchaseStockValue = queryMoney("""
@@ -351,7 +352,7 @@ public class FinanceService {
 				  AND document_date >= ? AND document_date < ?
 				""", start, end);
 
-		BigDecimal purchasePaymentOutflow = sumByCategory("EXPENSE", "PURCHASE_PAYMENT", range);
+		BigDecimal purchasePaymentOutflow = sumDocumentPayments("EXPENSE", "PURCHASE_PAYMENT", range);
 
 		Map<LocalDate, DailyAccumulator> daily = new LinkedHashMap<>();
 		for (LocalDate d = range.from(); !d.isAfter(range.to()); d = d.plusDays(1)) {
@@ -359,7 +360,8 @@ public class FinanceService {
 		}
 
 		jdbc.query(shops.apply("""
-				SELECT DATE(document_date) AS day, COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0) AS rev
+				SELECT DATE(document_date) AS day, COUNT(*) AS cnt,
+				       COALESCE(SUM(CASE WHEN is_internal = 0 THEN total_amount ELSE 0 END), 0) AS rev
 				FROM stock_documents
 				WHERE document_type = 'SALE' AND status = 'CONFIRMED'
 				  AND document_date >= ? AND document_date < ?
@@ -377,7 +379,7 @@ public class FinanceService {
 				       COALESCE(SUM(i.standard_cost_total_snapshot), 0) AS standard_cogs
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
-				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				GROUP BY DATE(d.document_date)
 				"""), rs -> {
@@ -389,12 +391,12 @@ public class FinanceService {
 		}, start, end);
 
 		jdbc.query(shops.apply("""
-				SELECT DATE(p.payment_date) AS day, COALESCE(SUM(p.amount), 0) AS cash
+				SELECT DATE(d.document_date) AS day, COALESCE(SUM(p.amount), 0) AS cash
 				FROM sales_payments p
 				JOIN stock_documents d ON d.id = p.document_id
-				WHERE d.status = 'CONFIRMED'
-				  AND p.payment_date >= ? AND p.payment_date < ?
-				GROUP BY DATE(p.payment_date)
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
+				  AND d.document_date >= ? AND d.document_date < ?
+				GROUP BY DATE(d.document_date)
 				"""), rs -> {
 			DailyAccumulator acc = daily.get(rs.getDate("day").toLocalDate());
 			if (acc != null) {
@@ -433,6 +435,7 @@ public class FinanceService {
 						acc.cogs.subtract(acc.standardCogs).setScale(MONEY_SCALE, ROUNDING)));
 			}
 		});
+		dailyRows.sort((left, right) -> right.day().compareTo(left.day()));
 
 		return new ProfitReportDto(
 				range.from(),
@@ -464,7 +467,7 @@ public class FinanceService {
 		Timestamp start = Timestamp.valueOf(period.from().atStartOfDay());
 		Timestamp end = Timestamp.valueOf(period.to().plusDays(1).atStartOfDay());
 		String sql = shops.apply("""
-				SELECT d.id, d.document_code, DATE(d.document_date) AS sale_day,
+				SELECT d.id, d.document_code, DATE(d.document_date) AS sale_day, d.is_internal,
 				       COALESCE(d.counterparty_name, 'Khách chưa gắn') AS customer_name,
 				       d.total_amount AS revenue,
 				       SUM(i.quantity_base * COALESCE(
@@ -485,26 +488,32 @@ public class FinanceService {
 				FROM stock_documents d
 				JOIN stock_document_items i ON i.document_id = d.id
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
-				  AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				GROUP BY d.id, d.document_code, DATE(d.document_date),
-				         d.counterparty_name, d.total_amount
+				         d.counterparty_name, d.total_amount, d.is_internal
 				ORDER BY sale_day DESC, d.id DESC
 				""");
 		return jdbc.query(sql, (rs, index) -> invoiceMargin(
 				rs.getLong("id"), rs.getString("document_code"),
 				rs.getDate("sale_day").toLocalDate(), rs.getString("customer_name"),
 				rs.getBigDecimal("revenue"), rs.getBigDecimal("reference_cost"),
-				rs.getInt("missing_cost")), start, end);
+				rs.getInt("missing_cost"), rs.getBoolean("is_internal")), start, end);
 	}
 
 	static FinanceDtos.InvoiceGrossMarginDto invoiceMargin(long id, String code, LocalDate day,
 			String customer, BigDecimal revenueValue, BigDecimal referenceCost, int missingCost) {
+		return invoiceMargin(id, code, day, customer, revenueValue, referenceCost, missingCost, false);
+	}
+
+	static FinanceDtos.InvoiceGrossMarginDto invoiceMargin(long id, String code, LocalDate day,
+			String customer, BigDecimal revenueValue, BigDecimal referenceCost, int missingCost, boolean internal) {
 		BigDecimal revenue = scaleMoney(revenueValue);
+		if (internal) return new FinanceDtos.InvoiceGrossMarginDto(id, code, day, customer, revenue,
+				revenue, BigDecimal.ZERO.setScale(MONEY_SCALE, ROUNDING), true, true);
 		boolean complete = missingCost == 0 && referenceCost != null;
 		BigDecimal cost = complete ? scaleMoney(referenceCost) : null;
 		return new FinanceDtos.InvoiceGrossMarginDto(id, code, day, customer, revenue,
-				cost, cost == null ? null : revenue.subtract(cost), complete);
+				cost, cost == null ? null : revenue.subtract(cost), complete, false);
 	}
 
 	@Transactional(readOnly = true)
@@ -526,7 +535,7 @@ public class FinanceService {
 				JOIN stock_documents d ON d.id = i.document_id
 				JOIN products p ON p.id = i.product_id
 				JOIN product_categories c ON c.id = p.category_id
-				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				""");
 		List<Object> args = new ArrayList<>();
@@ -697,6 +706,11 @@ public class FinanceService {
 
 	@Transactional(readOnly = true)
 	public List<PayrollReportRowDto> payrollReport(Integer year) {
+		return payrollReport(year, null, null);
+	}
+
+	@Transactional(readOnly = true)
+	public List<PayrollReportRowDto> payrollReport(Integer year, LocalDate from, LocalDate to) {
 		if (!ShopScope.all() && shops.isDistribution()) {
 			return List.of();
 		}
@@ -717,7 +731,13 @@ public class FinanceService {
 				WHERE 1 = 1
 				""");
 		List<Object> args = new ArrayList<>();
-		if (year != null) {
+		if (from != null && to != null) {
+			DateRange range = range(from, to);
+			sql.append(" AND LAST_DAY(MAKEDATE(pp.period_year, 1) + INTERVAL (pp.period_month - 1) MONTH) >= ?")
+				.append(" AND LAST_DAY(MAKEDATE(pp.period_year, 1) + INTERVAL (pp.period_month - 1) MONTH) <= ?");
+			args.add(range.from());
+			args.add(range.to());
+		} else if (year != null) {
 			sql.append(" AND pp.period_year = ?");
 			args.add(year);
 		}
@@ -745,8 +765,8 @@ public class FinanceService {
 			ProfitReportDto report = profitReport(from, to);
 			sb.append("Chỉ tiêu,Số tiền\r\n");
 			sb.append("Doanh thu bán hàng,").append(report.revenue().toPlainString()).append("\r\n");
-			sb.append("Tiền thực thu,").append(report.cashCollected().toPlainString()).append("\r\n");
-			sb.append("Doanh thu chưa thu tiền,").append(report.uncollectedRevenue().toPlainString()).append("\r\n");
+			sb.append("Đã thu từ hóa đơn trong kỳ,").append(report.cashCollected().toPlainString()).append("\r\n");
+			sb.append("Tiền còn phải thu từ phiếu bán trong kỳ,").append(report.uncollectedRevenue().toPlainString()).append("\r\n");
 			sb.append("Chi phí hoạt động,").append(report.operatingExpenses().toPlainString()).append("\r\n");
 			return sb.toString();
 		}
@@ -852,7 +872,7 @@ public class FinanceService {
 				sb.append("TỔNG GIÁ TRỊ TỒN,,,,,,,,,").append(sumValue.setScale(2, ROUNDING).toPlainString()).append("\r\n");
 			}
 			case "payroll" -> {
-				List<PayrollReportRowDto> rows = payrollReport(year);
+				List<PayrollReportRowDto> rows = payrollReport(year, from, to);
 				sb.append("Kỳ công,Trạng thái,Số nhân viên,Tổng công,Lương cơ bản,Tăng ca,Phụ cấp,Khấu trừ,Tổng tiền công,Đã chi\r\n");
 				BigDecimal sumTotal = BigDecimal.ZERO;
 				for (PayrollReportRowDto r : rows) {
@@ -882,10 +902,10 @@ public class FinanceService {
 				sb.append("Chi phí hoạt động,").append(p.operatingExpenses().setScale(2, ROUNDING).toPlainString()).append("\r\n");
 				sb.append("Lợi nhuận thuần dự kiến,").append(p.netProfit().setScale(2, ROUNDING).toPlainString()).append("\r\n");
 				sb.append("Lợi nhuận thuần theo giá nhập chuẩn,").append(p.standardNetProfit().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Tiền thực thu trong kỳ,").append(p.cashCollected().setScale(2, ROUNDING).toPlainString()).append("\r\n");
+				sb.append("Đã thu từ hóa đơn trong kỳ,").append(p.cashCollected().setScale(2, ROUNDING).toPlainString()).append("\r\n");
 				sb.append("Tiền chi nhập kho (không tính chi phí kỳ),").append(p.purchasePaymentOutflow().setScale(2, ROUNDING).toPlainString()).append("\r\n\r\n");
 				sb.append("Ngày,Số phiếu bán,Doanh thu,Giá vốn,Lãi gộp,Giá vốn chuẩn,Lãi gộp chuẩn,"
-						+ "Chênh lệch giá nhập,Tiền thực thu,Chi phí hoạt động\r\n");
+						+ "Chênh lệch giá nhập,Đã thu từ phiếu ngày này,Chi phí hoạt động\r\n");
 				for (DailyRevenueRowDto d : p.dailyRows()) {
 					sb.append(d.day()).append(",")
 							.append(d.saleCount()).append(",")
@@ -904,6 +924,19 @@ public class FinanceService {
 	}
 
 	// ---------- Helpers ----------
+
+	private BigDecimal sumDocumentPayments(String type, String category, DateRange range) {
+		return queryMoney("""
+				SELECT COALESCE(SUM(ft.amount), 0)
+				FROM financial_transactions ft
+				JOIN stock_documents d ON d.id = ft.reference_id AND ft.reference_type = 'STOCK_DOCUMENT'
+				WHERE ft.transaction_type = ? AND ft.category = ? AND ft.status = 'CONFIRMED'
+				  AND d.status = 'CONFIRMED' AND d.is_internal = 0
+				  AND ft.transaction_date >= ? AND ft.transaction_date < ?
+				""", type, category,
+				Timestamp.valueOf(range.from().atStartOfDay()),
+				Timestamp.valueOf(range.to().plusDays(1).atStartOfDay()));
+	}
 
 	private BigDecimal sumByCategory(String type, String category, DateRange range) {
 		return queryMoney("""
@@ -942,8 +975,8 @@ public class FinanceService {
 		if (end.isBefore(start)) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu", null);
 		}
-		if (start.plusDays(366).isBefore(end)) {
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Khoảng thời gian báo cáo không quá 366 ngày", null);
+		if (start.plusDays(400).isBefore(end)) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Khoảng thời gian báo cáo không quá 400 ngày", null);
 		}
 		return new DateRange(start, end);
 	}

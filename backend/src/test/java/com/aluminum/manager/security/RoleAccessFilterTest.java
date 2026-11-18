@@ -36,7 +36,9 @@ class RoleAccessFilterTest {
 	@Test
 	void backupRoutesAreAdminOnlyForEveryMethod() throws Exception {
 		for (String method : new String[]{"GET", "POST", "PUT", "PATCH", "DELETE"}) {
-			for (String path : new String[]{"/api/v1/backups", "/api/v1/backups/status", "/api/v1/backups/1/restore"}) {
+			for (String path : new String[]{"/api/v1/backups", "/api/v1/backups/status", "/api/v1/backups/1/restore",
+					"/api/v1/backups/cloud/sync", "/api/v1/backups/cloud/prepare",
+					"/api/v1/backups/recovery-key", "/api/v1/backups/recovery-key/import"}) {
 				assertEquals(200, status(UserRole.ADMIN, method, path, null), method + " " + path);
 				assertEquals(403, status(UserRole.DISTRIBUTION, method, path, null), method + " " + path);
 				assertEquals(403, status(UserRole.MANUFACTURING, method, path, null), method + " " + path);
@@ -55,5 +57,16 @@ class RoleAccessFilterTest {
 	@Test
 	void distributionCanStillEnterOperatingExpenses() throws Exception {
 		assertEquals(200, status("POST", "/api/v1/finance/transactions", null));
+	}
+
+	@Test
+	void adminOnlyUsesBackupSettingsAndAuth() throws Exception {
+		for (String path : new String[]{"/api/v1/admin/combined/years/2025", "/api/v1/annual-book/2025",
+				"/api/v1/reports/profit", "/api/v1/finance/transactions", "/api/v1/bank-accounts"}) {
+			assertEquals(403, status(UserRole.ADMIN, "GET", path, null), path);
+		}
+		assertEquals(200, status(UserRole.ADMIN, "GET", "/api/v1/settings", null));
+		assertEquals(200, status(UserRole.ADMIN, "PUT", "/api/v1/settings", null));
+		assertEquals(200, status(UserRole.ADMIN, "POST", "/api/v1/auth/change-password", null));
 	}
 }

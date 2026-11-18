@@ -1,8 +1,7 @@
-import { Button, Card, Form, Input, InputNumber, Space } from "antd";
+import { Button, Card, Form, Input, InputNumber } from "antd";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link } from "react-router-dom";
 import { z } from "zod";
 import { ApiError } from "../../services/error-handler";
 import { getSettings, updateSettings, type ShopSettings } from "./settings-api";
@@ -61,12 +60,6 @@ export function SettingsPage() {
   return (
     <Card
       title="Cài đặt"
-      extra={
-        <Space wrap>
-          <Link to="/tai-khoan-qr">Tài khoản QR nhận tiền</Link>
-          <Link to="/noi-dung-gioi-thieu">Sửa nội dung trang giới thiệu</Link>
-        </Space>
-      }
     >
       <Form layout="vertical" onFinish={onSubmit} style={{ maxWidth: 720 }}>
         <Controller
