@@ -36,4 +36,17 @@ class R2CloudServiceTest {
 		assertThrows(IllegalArgumentException.class, () -> service.save(new R2CloudService.Input(
 				"https://attacker.example.com", "nhom-duc-backup", "key", "secret")));
 	}
+
+	@Test void configurationFileIsPrivateToOwner() throws Exception {
+		Path file = Files.createFile(directory.resolve("private.properties"));
+		R2CloudService.setOwnerOnly(file);
+		var posix = Files.getFileAttributeView(file, java.nio.file.attribute.PosixFileAttributeView.class);
+		if (posix != null) {
+			assertEquals(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"), posix.readAttributes().permissions());
+		} else {
+			var acl = Files.getFileAttributeView(file, java.nio.file.attribute.AclFileAttributeView.class).getAcl();
+			assertEquals(1, acl.size());
+			assertEquals(Files.getOwner(file), acl.get(0).principal());
+		}
+	}
 }
