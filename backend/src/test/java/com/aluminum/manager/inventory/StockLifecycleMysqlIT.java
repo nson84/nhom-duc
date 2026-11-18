@@ -66,7 +66,8 @@ class StockLifecycleMysqlIT {
         category = jdbc.queryForObject("SELECT id FROM product_categories WHERE shop_id = ? AND name = 'Test aluminium'", Long.class, shopId);
         jdbc.update("INSERT INTO products (shop_id, product_code, name, category_id, base_unit_name) VALUES (?, 'TEST-AL', 'Test aluminium', ?, 'kg')", shopId, category);
         product = jdbc.queryForObject("SELECT id FROM products WHERE shop_id = ? AND product_code = 'TEST-AL'", Long.class, shopId);
-        jdbc.update("INSERT INTO product_units (product_id, unit_name, factor_to_base, is_base_unit) VALUES (?, 'kg', 1, 1)", product);
+        // The products insert trigger already creates its base kg unit.
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM product_units WHERE product_id = ? AND unit_name = 'kg'", Integer.class, product));
         jdbc.update("INSERT INTO product_units (product_id, unit_name, factor_to_base) VALUES (?, 'tấn', 1000)", product);
         unit = jdbc.queryForObject("SELECT id FROM product_units WHERE product_id = ? AND unit_name = 'tấn'", Long.class, product);
         jdbc.update("INSERT INTO customers (shop_id, name) VALUES (?, 'Test customer')", shopId);
