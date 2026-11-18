@@ -675,12 +675,25 @@ function PayDebtModal({
   onClose: () => void;
   onPaid: () => void;
 }) {
-  const [form] = Form.useForm<{ mode: "full" | "partial"; amount?: number; paymentMethod: string; collectedBy: string; note?: string }>();
+  const [form] = Form.useForm<{ mode: "full" | "partial"; amount?: number; paymentMethod: string; collectedBy: string; note?: string; paymentDate: Dayjs }>();
   const [saving, setSaving] = useState(false);
   const [payments, setPayments] = useState<
     { id: number; paymentDate: string; amount: number; paymentMethod: string | null; note: string | null; collectedBy?: string | null }[]
   >([]);
   const mode = Form.useWatch("mode", form) ?? "full";
+  const working = useWorkingYear(useShop());
+  const [paymentRange, setPaymentRange] = useState<[string,string] | null>(null);
+  useEffect(() => {
+    let active = true;
+    getYearPeriod(working.year).then(period => {
+      const visible = visiblePeriod(period, working.month);
+      if (!active || !visible?.started) return;
+      setPaymentRange([visible.periodFrom, visible.periodTo]);
+      const today = dayjs();
+      form.setFieldValue("paymentDate", today.isBefore(dayjs(visible.periodFrom), "day") || today.isAfter(dayjs(visible.periodTo), "day") ? dayjs(visible.periodFrom) : today);
+    }).catch(error => { if (active) message.error(toApiError(error).message); });
+    return () => { active=false; };
+  }, [working.year,working.month,form]);
   const remaining = doc.remainingAmount;
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -788,6 +801,7 @@ function PayDebtModal({
                   Số tiền thu: <b>{formatMoney(amount)}</b> ({paymentMethodLabel(values.paymentMethod)})
                 </p>
                 <p style={{ margin: "4px 0" }}>
+                  Ngày nhận tiền: <b>{values.paymentDate.format("DD/MM/YYYY HH:mm")}</b><br />
                   Người thu tiền: <b>{values.collectedBy.trim()}</b>
                 </p>
                 <p style={{ margin: "4px 0" }}>
@@ -806,6 +820,7 @@ function PayDebtModal({
                   amount,
                   paymentMethod: values.paymentMethod,
                   collectedBy: values.collectedBy.trim(),
+                  paymentDate: values.paymentDate.format("YYYY-MM-DDTHH:mm:ss"),
                   idempotencyKey,
                 });
                 message.success("Đã ghi lần trả nợ");
@@ -819,6 +834,12 @@ function PayDebtModal({
           });
         }}
       >
+        <Form.Item name="paymentDate" label="Ngày thực nhận tiền"
+          rules={[{ required: true, message: "Chọn ngày nhận tiền" }]}>
+          <DatePicker showTime format="DD/MM/YYYY HH:mm" disabled={!paymentRange}
+            disabledDate={date => !paymentRange || date.isBefore(dayjs(paymentRange[0]), "day")
+              || date.isAfter(dayjs(paymentRange[1]), "day")} />
+        </Form.Item>
         <Form.Item name="mode" label="Hình thức trả">
           <Select
             options={[

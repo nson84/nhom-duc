@@ -34,3 +34,7 @@ Nhiều tài khoản đám mây, đồng bộ Internet, công nợ chuyên sâu 
 **Đã có trong MVP (nhẹ):** sổ khách mua theo shop, trả nợ một phần trên phiếu bán, in danh sách nợ + mã VietQR từ TK nhận khai báo local ở Cài đặt (không gọi API ngân hàng).
 
 Phân phối không có lương. Lãi kỳ chỉ hiện sau khi chốt. Tồn đầu và cuối kỳ được định giá từ phiếu nhập mới nhất trở về trước.
+
+## Bổ sung 19/11/2026
+
+Tiền công, phụ cấp và khấu trừ giữ theo từng tháng theo xác nhận người dùng. Ứng lương mới cần ngày thực chi. Không dùng FIFO. Thiếu giá vốn phải hiển thị thiếu dữ liệu, không coi là 0.

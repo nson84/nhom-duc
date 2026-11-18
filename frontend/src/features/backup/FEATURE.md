@@ -21,3 +21,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 ## Bổ sung theo code hiện tại
 
 Thao tác sao lưu và phục hồi dành cho Admin.
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

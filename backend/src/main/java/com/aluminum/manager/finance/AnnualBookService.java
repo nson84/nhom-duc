@@ -328,6 +328,16 @@ public class AnnualBookService {
             return new WageEvent(date.getYear(), date.getMonthValue(), rs.getLong(1), rs.getString(2), date,
                     "Thưởng lễ: " + rs.getString(4), rs.getBigDecimal(5), rs.getString(6), rs.getBoolean(7));
         }, shopId, first, last));
+        events.addAll(jdbc.query("""
+                SELECT e.id, e.full_name, a.advance_date, a.amount, a.note
+                FROM payroll_advance_entries a JOIN payroll_details pd ON pd.id = a.payroll_detail_id
+                JOIN employees e ON e.id = pd.employee_id
+                WHERE e.shop_id = ? AND a.advance_date BETWEEN ? AND ?
+                """, (rs, i) -> {
+            LocalDate date = rs.getDate(3).toLocalDate();
+            return new WageEvent(date.getYear(), date.getMonthValue(), rs.getLong(1), rs.getString(2), date,
+                    "Ứng lương", rs.getBigDecimal(4), rs.getString(5), true);
+        }, shopId, first, last));
         events.sort(Comparator.comparing(WageEvent::date).thenComparing(WageEvent::employee));
         return events;
     }

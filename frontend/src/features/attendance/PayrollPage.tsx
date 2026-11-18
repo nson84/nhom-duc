@@ -13,6 +13,7 @@ import { useWorkingYear } from "../dashboard/working-year";
 import { getMonthStatus, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
 import {
   adjustPayrollDetail,
+  addPayrollAdvance,
   calculatePayroll,
   closePayrollPeriod,
   createOrGetPayrollPeriod,
@@ -35,6 +36,7 @@ export function PayrollPage() {
   const [statement, setStatement] = useState<PayrollDetail | null>(null);
   const [showReopen, setShowReopen] = useState(false);
   const [showPay, setShowPay] = useState(false);
+  const [advancing, setAdvancing] = useState<PayrollDetail | null>(null);
   const [printHtml, setPrintHtml] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
 
@@ -219,7 +221,8 @@ export function PayrollPage() {
                   isClosed ? (
                     <Button size="small" onClick={() => setStatement(d)}>Xem bảng kê</Button>
                   ) : (
-                    <Button size="small" onClick={() => setEditingDetail(d)}>Phụ cấp và tiền ứng</Button>
+                    <Space wrap><Button size="small" onClick={() => setEditingDetail(d)}>Phụ cấp và tiền ứng</Button>
+                      <Button size="small" onClick={() => setAdvancing(d)}>Ghi ứng lương</Button></Space>
                   ),
               },
             ]}
@@ -249,6 +252,13 @@ export function PayrollPage() {
         </Modal>
       ) : null}
 
+      {advancing && period && <AdvanceModal detail={advancing} year={period.year} month={period.month}
+        periodFrom={workingPeriod?.periodFrom}
+        onClose={() => setAdvancing(null)} onSubmit={async values => {
+          setPeriod(await addPayrollAdvance(period.id, advancing.id, values));
+          setAdvancing(null);
+          message.success("Đã ghi khoản ứng lương");
+        }} />}
       {editingDetail && period ? (
         <AdjustModal
           detail={editingDetail}
@@ -298,6 +308,40 @@ export function PayrollPage() {
       {printHtml ? <PrintDocument title={`Bảng công và lương ${monthPicker.format("MM/YYYY")}`} html={printHtml} onClose={() => setPrintHtml(null)} /> : null}
     </Card>
   );
+}
+
+function AdvanceModal({detail, year, month, periodFrom, onClose, onSubmit}: {
+  detail: PayrollDetail; year: number; month: number; onClose: () => void;
+  periodFrom?: string;
+  onSubmit: (values: { date: string; amount: number; note?: string; idempotencyKey: string }) => Promise<void>;
+}) {
+  const [form] = Form.useForm<{date: Dayjs; amount: number; note?: string}>();
+  const [saving, setSaving] = useState(false);
+  const [key] = useState(() => crypto.randomUUID());
+  const monthStart = dayjs(`${year}-${String(month).padStart(2,"0")}-01`);
+  const firstDate = periodFrom && dayjs(periodFrom).isAfter(monthStart) ? dayjs(periodFrom) : monthStart;
+  return <Modal open title={`Ứng lương — ${detail.fullName}`} onCancel={onClose} okText="Ghi ứng" cancelText="Quay lại"
+    confirmLoading={saving} onOk={() => form.submit()}>
+    <Form form={form} layout="vertical" initialValues={{date: firstDate}}
+      onFinish={async values => {
+        setSaving(true);
+        try { await onSubmit({...values, date: values.date.format("YYYY-MM-DD"), idempotencyKey: key}); }
+        catch(error) { message.error(toApiError(error).message); }
+        finally { setSaving(false); }
+      }}>
+      <Form.Item name="date" label="Ngày ứng" rules={[{required:true}]}>
+        <DatePicker format="DD/MM/YYYY" disabledDate={date => date.year() !== year || date.month()+1 !== month || date.isBefore(firstDate, "day")} />
+      </Form.Item>
+      <Form.Item name="amount" label="Số tiền ứng" rules={vndAmountRules}>
+        <InputNumber {...vndInputNumberProps} min={500} max={detail.totalPay} style={{width:"100%"}} />
+      </Form.Item>
+      <Form.Item name="note" label="Ghi chú"><Input.TextArea maxLength={500} /></Form.Item>
+    </Form>
+    <p>Các khoản đã ghi</p>
+    {(detail.advances ?? []).map(entry => <p key={entry.id}>{dayjs(entry.date).format("DD/MM/YYYY")} · {formatMoney(entry.amount)} · {entry.note}</p>)}
+    {detail.advanceAmount > (detail.advances ?? []).reduce((sum,entry)=>sum+entry.amount,0) &&
+      <p>Phần ứng cũ chưa có ngày {formatMoney(detail.advanceAmount - (detail.advances ?? []).reduce((sum,entry)=>sum+entry.amount,0))}</p>}
+  </Modal>;
 }
 
 function AdjustModal({

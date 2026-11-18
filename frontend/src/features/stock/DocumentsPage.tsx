@@ -2083,7 +2083,7 @@ function SaleInvoiceModal({ doc, onClose }: { doc: StockDocument; onClose: () =>
   );
 }
 
-function PaymentModal({
+export function PaymentModal({
   label,
   remaining,
   kind,

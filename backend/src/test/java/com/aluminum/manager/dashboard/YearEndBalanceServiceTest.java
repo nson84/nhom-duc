@@ -19,6 +19,24 @@ import org.springframework.jdbc.core.RowMapper;
 
 class YearEndBalanceServiceTest {
     @Test
+    void closingAgainCannotOverwriteHistoricalSnapshot() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class, invocation -> {
+            if (invocation.getMethod().getName().equals("queryForObject")) {
+                if (invocation.getArgument(1) == Integer.class) return Integer.valueOf(1);
+                return Long.valueOf(2);
+            }
+            return null;
+        });
+        var service = new YearEndBalanceService(jdbc, mock(ShopAccess.class));
+        var failure = assertThrows(BusinessException.class, () -> service.save(2025,
+                LocalDate.of(2025, 2, 18), LocalDate.of(2025, 2, 28),
+                java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO));
+        assertTrue(failure.getMessage().contains("Kỳ đã chốt"));
+        org.mockito.Mockito.verify(jdbc, org.mockito.Mockito.never())
+                .update(anyString(), any(Object[].class));
+    }
+
+    @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
     void cannotSaveEndBeforeStart() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);

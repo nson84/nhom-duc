@@ -286,7 +286,12 @@ public class YearEndBalanceService {
                 .stream().findFirst().orElse(null);
     }
 
+    @Transactional
     public void save(int year, LocalDate from, LocalDate to, BigDecimal inventoryKg, BigDecimal inventoryValue, BigDecimal profit) {
+        jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shops.currentId());
+        Integer existing = jdbc.queryForObject("SELECT COUNT(*) FROM year_end_balances WHERE shop_id = ? AND year_number = ?",
+                Integer.class, shops.currentId(), year);
+        if (existing != null && existing > 0) throw invalid("Kỳ đã chốt; bản chốt lịch sử được giữ nguyên");
         validatePeriod(from, to, null, null);
         if (to.isAfter(LocalDate.now())) throw invalid("Không thể chốt ngày tương lai");
         Integer drafts = jdbc.queryForObject("""

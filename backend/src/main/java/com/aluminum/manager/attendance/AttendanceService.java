@@ -1316,6 +1316,10 @@ public class AttendanceService {
 		BigDecimal allowances = scaleMoney(request.allowances());
 		BigDecimal deductions = (BigDecimal) rows.get(0).get("deductions");
 		BigDecimal advance = scaleMoney(request.advanceAmount());
+		BigDecimal datedAdvances = jdbc.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM payroll_advance_entries WHERE payroll_detail_id = ?",
+				BigDecimal.class, detailId);
+		if (advance.compareTo(datedAdvances) < 0)
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Tổng ứng không được thấp hơn các khoản ứng đã ghi ngày", null);
 		BigDecimal totalPay = scaleMoney(basePay.add(overtimePay).add(bonusPay).add(allowances)
 				.subtract(deductions).subtract(advance).max(BigDecimal.ZERO));
 		jdbc.update("""
@@ -1429,6 +1433,46 @@ public class AttendanceService {
 
 	// ---------- Helpers ----------
 
+	@Transactional
+	public PayrollPeriodDto addPayrollAdvance(long periodId, long detailId, AttendanceDtos.PayrollAdvanceRequest request) {
+		PeriodHeader header = lockPeriod(periodId);
+		requirePayrollMonthOpen(header.year(), header.month());
+		if (!"OPEN".equals(header.status()))
+			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED, "Kỳ công đã chốt", null);
+		yearEndBalances.requireWorkingDate(request.date().atStartOfDay());
+		if (request.date().getYear() != header.year() || request.date().getMonthValue() != header.month())
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày ứng phải thuộc tháng tiền công", null);
+		var rows = jdbc.query("SELECT total_pay FROM payroll_details WHERE id = ? AND payroll_period_id = ? FOR UPDATE",
+				(rs, i) -> rs.getBigDecimal(1), detailId, periodId);
+		if (rows.isEmpty()) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy dòng lương", null);
+		Integer duplicate = jdbc.queryForObject("SELECT COUNT(*) FROM payroll_advance_entries WHERE idempotency_key = ?",
+				Integer.class, request.idempotencyKey());
+		if (duplicate != null && duplicate > 0) return getPayrollPeriod(periodId);
+		BigDecimal amount = scaleMoney(request.amount());
+		if (amount.compareTo(rows.get(0)) > 0)
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Tiền ứng vượt tiền công còn lĩnh", null);
+		long advanceId = insert("INSERT INTO payroll_advance_entries (payroll_detail_id, advance_date, amount, note, idempotency_key) VALUES (?, ?, ?, ?, ?)",
+				detailId, request.date(), amount, request.note(), request.idempotencyKey());
+		String expenseCode = sequences.nextCode("FINANCE_EXPENSE", request.date(), ShopContext.MANUFACTURING);
+		insert("""
+				INSERT INTO financial_transactions (transaction_code, transaction_date, transaction_type, category,
+				    amount, description, reference_type, reference_id, status, idempotency_key, shop_id, is_internal)
+				VALUES (?, ?, 'EXPENSE', 'PAYROLL', ?, ?, 'PAYROLL_ADVANCE', ?, 'CONFIRMED', ?, ?, 0)
+				""", expenseCode, request.date().atStartOfDay(), amount,
+				"Ứng lương tháng " + header.month() + "/" + header.year() + " · Dòng lương " + detailId
+						+ (request.note() == null ? "" : " · " + request.note()),
+				advanceId, request.idempotencyKey(), shops.currentId());
+		jdbc.update("UPDATE payroll_details SET advance_amount = advance_amount + ?, total_pay = total_pay - ? WHERE id = ?",
+				amount, amount, detailId);
+		audit.record(CurrentAdmin.get().id(), "PAYROLL_ADVANCE", "payroll_details", String.valueOf(detailId), "Ghi ứng lương ngày " + request.date());
+		return getPayrollPeriod(periodId);
+	}
+
+	private List<AttendanceDtos.PayrollAdvanceDto> payrollAdvances(long detailId) {
+		return jdbc.query("SELECT id, advance_date, amount, note FROM payroll_advance_entries WHERE payroll_detail_id = ? ORDER BY advance_date, id",
+				(rs, i) -> new AttendanceDtos.PayrollAdvanceDto(rs.getLong(1), rs.getDate(2).toLocalDate(), rs.getBigDecimal(3), rs.getString(4)), detailId);
+	}
+
 	private List<PayrollDetailDto> payrollDetails(long periodId) {
 		return jdbc.query("""
 				SELECT d.id, d.employee_id, e.employee_code, e.full_name,
@@ -1450,7 +1494,8 @@ public class AttendanceService {
 				rs.getBigDecimal("allowances"),
 				rs.getBigDecimal("deductions"),
 				rs.getBigDecimal("total_pay"), rs.getBigDecimal("advance_amount"), rs.getBigDecimal("overtime_hours"),
-				rs.getBigDecimal("holiday_bonus_pay"), rs.getBigDecimal("holiday_bonus_received")), periodId);
+				rs.getBigDecimal("holiday_bonus_pay"), rs.getBigDecimal("holiday_bonus_received"),
+				payrollAdvances(rs.getLong("id"))), periodId);
 	}
 
 	private BigDecimal payrollOvertimeHours(long employeeId, LocalDate start, LocalDate end) {

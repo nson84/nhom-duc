@@ -93,3 +93,7 @@ Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và b
 
 - Ở chi tiết khách Phân phối/Xưởng, lọc ngày lập phiếu và trạng thái thanh toán, in PDF: phiếu mới trước; các lần trả ghi đúng ngày; tổng tiền/đã trả/còn nợ cuối bản bằng tổng đúng các phiếu lọc. Phiếu nội bộ cộng kg nhưng không cộng giá chuyển vào công nợ.
 - Ở Tiền công Xưởng, chọn tháng rồi in: đối chiếu từng ngày sáng/chiều, số công, tăng ca đã duyệt, thưởng ngày với bảng chấm công; đối chiếu khoản lương và tổng thực lĩnh với bảng kỳ công. Kỳ chưa chốt ghi tạm tính; tiền ứng cũ không có ngày thì không tự tạo ngày giả.
+
+## Bổ sung 19/11/2026
+
+Chạy frontend npm run build và backend mvnw.cmd test. MySQL riêng: sao chép scripts/test-mysql-env.local.example.ps1 thành scripts/test-mysql-env.local.ps1, điền cục bộ rồi chạy scripts/test-mysql.ps1. Chưa coi các ca tích hợp đã đạt khi chưa cấu hình và chạy. Xem audit-progress-20261119.md.

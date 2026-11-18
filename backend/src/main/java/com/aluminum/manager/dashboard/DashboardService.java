@@ -56,15 +56,15 @@ public class DashboardService {
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
 				  AND d.document_date >= ? AND d.document_date < ?
 				""", range);
-		BigDecimal cogs = money("""
-				SELECT COALESCE(SUM(i.cost_total_snapshot), 0)
+		BigDecimal cogs = jdbc.queryForObject(shops.apply("""
+				SELECT CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE'
 				  AND d.status = 'CONFIRMED'
 				  AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
-				""", range);
+				"""), BigDecimal.class, Timestamp.valueOf(range.from().atStartOfDay()), Timestamp.valueOf(range.to().plusDays(1).atStartOfDay()));
 		BigDecimal cash = money("""
 				SELECT COALESCE(SUM(p.amount), 0)
 				FROM sales_payments p
@@ -101,7 +101,7 @@ public class DashboardService {
 				revenue,
 				cash,
 				cogs,
-				revenue.subtract(cogs).setScale(MONEY_SCALE, ROUNDING),
+				cogs == null ? null : revenue.subtract(cogs).setScale(MONEY_SCALE, ROUNDING),
 				expenses,
 				inventory,
 				payroll,
@@ -280,7 +280,7 @@ public class DashboardService {
 		}, start, end);
 		jdbc.query(shops.apply("""
 				SELECT DATE(d.document_date) AS day,
-				       COALESCE(SUM(i.cost_total_snapshot), 0) AS cogs
+				       CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END AS cogs
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE'
@@ -292,7 +292,7 @@ public class DashboardService {
 			LocalDate day = rs.getDate("day").toLocalDate();
 			MutablePoint point = points.get(day);
 			if (point != null) {
-				point.cogs = scale(rs.getBigDecimal("cogs"));
+				point.cogs = rs.getBigDecimal("cogs");
 			}
 		}, start, end);
 		jdbc.query(shops.apply("""
@@ -315,7 +315,7 @@ public class DashboardService {
 				point.revenue,
 				point.cash,
 				point.cogs,
-				point.revenue.subtract(point.cogs).setScale(MONEY_SCALE, ROUNDING))));
+				point.cogs == null ? null : point.revenue.subtract(point.cogs).setScale(MONEY_SCALE, ROUNDING))));
 		return result;
 	}
 

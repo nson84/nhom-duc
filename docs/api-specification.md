@@ -122,3 +122,7 @@ Mục lục [feature.md](feature.md) dẫn tới tài liệu từng module và m
 | POST | `/backups/{id}/restore` | Tiếp tục trả 503; chưa cho ghi đè database hoạt động |
 
 GET /api/v1/dashboard/monthly-book?year=...&month=YYYY-MM đọc số liệu hoặc bản chốt. POST cùng đường dẫn với year, month, counts lưu bản chốt bất biến theo shop/tháng. counts gồm categoryId, rawKg, scrapKg.
+
+## Bổ sung 19/11/2026
+
+POST /api/v1/payroll/periods/{id}/details/{detailId}/advances: ghi ứng lương có date, amount, note, idempotencyKey. Chỉ kỳ lương và tháng đang mở; ngày ứng phải thuộc tháng lương và kỳ làm việc. Khoản ứng ghi chi PAYROLL_ADVANCE, trừ tiền còn lĩnh.

@@ -9,6 +9,7 @@ frontend/node_modules/
 frontend/dist/
 backups/
 R2-CAN-DIEN-GI.txt
+scripts/test-mysql-env.local.ps1
 .runtime/
 backend/.runtime/
 frontend/src-tauri/target/

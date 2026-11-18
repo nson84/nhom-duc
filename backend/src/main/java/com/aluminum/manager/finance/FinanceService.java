@@ -283,15 +283,15 @@ public class FinanceService {
 				  AND document_date >= ? AND document_date < ?
 				""", start, end);
 
-		BigDecimal cogs = queryMoney("""
-				SELECT COALESCE(SUM(i.cost_total_snapshot), 0)
+		BigDecimal cogs = jdbc.queryForObject(shops.apply("""
+				SELECT CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
-				""", start, end);
+				"""), BigDecimal.class, start, end);
 
-		BigDecimal grossProfit = revenue.subtract(cogs).setScale(MONEY_SCALE, ROUNDING);
+		BigDecimal grossProfit = cogs == null ? null : revenue.subtract(cogs).setScale(MONEY_SCALE, ROUNDING);
 
 		// Giá vốn chuẩn: dùng snapshot giá chuẩn đã chốt trên từng dòng bán.
 		// Dòng cũ (trước khi có lịch sử giá) không có snapshot nên được tính là chưa đủ dữ liệu,
@@ -313,8 +313,8 @@ public class FinanceService {
 				  AND i.standard_cost_total_snapshot IS NULL
 				"""), Integer.class, start, end);
 		boolean standardComplete = missingStandard == null || missingStandard == 0;
-		BigDecimal standardGrossProfit = revenue.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING);
-		BigDecimal standardNetProfit = standardGrossProfit.subtract(
+		BigDecimal standardGrossProfit = standardComplete ? revenue.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING) : null;
+		BigDecimal standardNetProfit = standardGrossProfit == null ? null : standardGrossProfit.subtract(
 				queryMoney("""
 						SELECT COALESCE(SUM(amount), 0)
 						FROM financial_transactions
@@ -322,7 +322,7 @@ public class FinanceService {
 						  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'PAYROLL', 'OTHER_EXPENSE')
 						  AND transaction_date >= ? AND transaction_date < ?
 						""", start, end)).setScale(MONEY_SCALE, ROUNDING);
-		BigDecimal priceVariance = cogs.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING);
+		BigDecimal priceVariance = cogs == null || !standardComplete ? null : cogs.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING);
 
 		BigDecimal operatingExpenses = queryMoney("""
 				SELECT COALESCE(SUM(amount), 0)
@@ -332,7 +332,7 @@ public class FinanceService {
 				  AND transaction_date >= ? AND transaction_date < ?
 				""", start, end);
 
-		BigDecimal netProfit = grossProfit.subtract(operatingExpenses).setScale(MONEY_SCALE, ROUNDING);
+		BigDecimal netProfit = grossProfit == null ? null : grossProfit.subtract(operatingExpenses).setScale(MONEY_SCALE, ROUNDING);
 
 		BigDecimal cashCollected = queryMoney("""
 				SELECT COALESCE(SUM(p.amount), 0)
@@ -375,7 +375,7 @@ public class FinanceService {
 		}, start, end);
 
 		jdbc.query(shops.apply("""
-				SELECT DATE(d.document_date) AS day, COALESCE(SUM(i.cost_total_snapshot), 0) AS cogs,
+				SELECT DATE(d.document_date) AS day, CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END AS cogs,
 				       COALESCE(SUM(i.standard_cost_total_snapshot), 0) AS standard_cogs
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
@@ -385,8 +385,8 @@ public class FinanceService {
 				"""), rs -> {
 			DailyAccumulator acc = daily.get(rs.getDate("day").toLocalDate());
 			if (acc != null) {
-				acc.cogs = scaleMoney(rs.getBigDecimal("cogs"));
-				acc.standardCogs = scaleMoney(rs.getBigDecimal("standard_cogs"));
+				acc.cogs = rs.getBigDecimal("cogs");
+				acc.standardCogs = rs.getInt("missing_standard") > 0 ? null : scaleMoney(rs.getBigDecimal("standard_cogs"));
 			}
 		}, start, end);
 
@@ -421,18 +421,18 @@ public class FinanceService {
 		List<DailyRevenueRowDto> dailyRows = new ArrayList<>();
 		daily.forEach((day, acc) -> {
 			if (acc.saleCount > 0 || acc.revenue.signum() > 0 || acc.cash.signum() > 0 || acc.expense.signum() > 0) {
-				BigDecimal standardGross = acc.revenue.subtract(acc.standardCogs).setScale(MONEY_SCALE, ROUNDING);
+				BigDecimal standardGross = acc.standardCogs == null ? null : acc.revenue.subtract(acc.standardCogs).setScale(MONEY_SCALE, ROUNDING);
 				dailyRows.add(new DailyRevenueRowDto(
 						day,
 						acc.saleCount,
 						acc.revenue,
 						acc.cogs,
-						acc.revenue.subtract(acc.cogs).setScale(MONEY_SCALE, ROUNDING),
+						acc.cogs == null ? null : acc.revenue.subtract(acc.cogs).setScale(MONEY_SCALE, ROUNDING),
 						acc.cash,
 						acc.expense,
 						acc.standardCogs,
 						standardGross,
-						acc.cogs.subtract(acc.standardCogs).setScale(MONEY_SCALE, ROUNDING)));
+						acc.cogs == null || acc.standardCogs == null ? null : acc.cogs.subtract(acc.standardCogs).setScale(MONEY_SCALE, ROUNDING)));
 			}
 		});
 		dailyRows.sort((left, right) -> right.day().compareTo(left.day()));
@@ -528,7 +528,7 @@ public class FinanceService {
 				       c.name AS category_name, p.base_unit_name,
 				       COALESCE(SUM(i.quantity_base), 0) AS qty_sold,
 				       COALESCE(SUM(i.line_total), 0) AS revenue,
-				       COALESCE(SUM(i.cost_total_snapshot), 0) AS cogs,
+				       CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END AS cogs,
 				       COALESCE(SUM(i.standard_cost_total_snapshot), 0) AS standard_cogs,
 				       SUM(CASE WHEN i.standard_cost_total_snapshot IS NULL THEN 1 ELSE 0 END) AS missing_standard
 				FROM stock_document_items i
@@ -556,9 +556,9 @@ public class FinanceService {
 				""");
 		return jdbc.query(shops.apply(sql.toString()), (rs, i) -> {
 			BigDecimal rev = scaleMoney(rs.getBigDecimal("revenue"));
-			BigDecimal cogs = scaleMoney(rs.getBigDecimal("cogs"));
+			BigDecimal cogs = rs.getBigDecimal("cogs");
 			BigDecimal standardCogs = scaleMoney(rs.getBigDecimal("standard_cogs"));
-			BigDecimal standardGross = rev.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING);
+			BigDecimal standardGross = rs.getInt("missing_standard") > 0 ? null : rev.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING);
 			return new ProductSalesRowDto(
 					rs.getLong("product_id"),
 					rs.getString("product_code"),
@@ -568,10 +568,10 @@ public class FinanceService {
 					rs.getBigDecimal("qty_sold").setScale(QTY_SCALE, ROUNDING),
 					rev,
 					cogs,
-					rev.subtract(cogs).setScale(MONEY_SCALE, ROUNDING),
+					cogs == null ? null : rev.subtract(cogs).setScale(MONEY_SCALE, ROUNDING),
 					standardCogs,
 					standardGross,
-					cogs.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING));
+					cogs == null || standardGross == null ? null : cogs.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING));
 		}, args.toArray());
 	}
 
@@ -808,27 +808,27 @@ public class FinanceService {
 							.append(csv(r.baseUnitName())).append(",")
 							.append(r.quantityBaseSold().stripTrailingZeros().toPlainString()).append(",")
 							.append(r.revenue().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(r.cogs().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(r.grossProfit().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(r.standardCogs().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(r.standardGrossProfit().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(r.priceVariance().setScale(2, ROUNDING).toPlainString()).append("\r\n");
+							.append(csvMoney(r.cogs())).append(",")
+							.append(csvMoney(r.grossProfit())).append(",")
+							.append(csvMoney(r.standardCogs())).append(",")
+							.append(csvMoney(r.standardGrossProfit())).append(",")
+							.append(csvMoney(r.priceVariance())).append("\r\n");
 					sumQty = sumQty.add(r.quantityBaseSold());
 					sumRev = sumRev.add(r.revenue());
-					sumCogs = sumCogs.add(r.cogs());
-					sumProfit = sumProfit.add(r.grossProfit());
+					sumCogs = sumCogs == null || r.cogs() == null ? null : sumCogs.add(r.cogs());
+					sumProfit = sumProfit == null || r.grossProfit() == null ? null : sumProfit.add(r.grossProfit());
 					sumStandardCogs = sumStandardCogs.add(r.standardCogs());
-					sumStandardProfit = sumStandardProfit.add(r.standardGrossProfit());
-					sumVariance = sumVariance.add(r.priceVariance());
+					sumStandardProfit = sumStandardProfit == null || r.standardGrossProfit() == null ? null : sumStandardProfit.add(r.standardGrossProfit());
+					sumVariance = sumVariance == null || r.priceVariance() == null ? null : sumVariance.add(r.priceVariance());
 				}
 				sb.append("TỔNG CỘNG,,,,")
 						.append(sumQty.stripTrailingZeros().toPlainString()).append(",")
 						.append(sumRev.setScale(2, ROUNDING).toPlainString()).append(",")
-						.append(sumCogs.setScale(2, ROUNDING).toPlainString()).append(",")
-						.append(sumProfit.setScale(2, ROUNDING).toPlainString()).append(",")
+						.append(csvMoney(sumCogs)).append(",")
+						.append(csvMoney(sumProfit)).append(",")
 						.append(sumStandardCogs.setScale(2, ROUNDING).toPlainString()).append(",")
-						.append(sumStandardProfit.setScale(2, ROUNDING).toPlainString()).append(",")
-						.append(sumVariance.setScale(2, ROUNDING).toPlainString()).append("\r\n");
+						.append(csvMoney(sumStandardProfit)).append(",")
+						.append(csvMoney(sumVariance)).append("\r\n");
 			}
 			case "price-variance" -> {
 				List<PurchasePriceVarianceRowDto> rows = purchasePriceVariance(from, to, categoryId);
@@ -850,7 +850,7 @@ public class FinanceService {
 					sumVariance = sumVariance.add(r.varianceValue());
 				}
 				sb.append("TỔNG CHÊNH LỆCH,,,,,,,,,")
-						.append(sumVariance.setScale(2, ROUNDING).toPlainString()).append(",\r\n");
+						.append(csvMoney(sumVariance)).append(",\r\n");
 			}
 			case "inventory" -> {
 				List<InventoryReportRowDto> rows = inventoryReport(from, to, categoryId);
@@ -894,14 +894,14 @@ public class FinanceService {
 				ProfitReportDto p = profitReport(from, to);
 				sb.append("Chỉ tiêu,Số tiền\r\n");
 				sb.append("Doanh thu bán hàng,").append(p.revenue().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Giá vốn hàng bán,").append(p.cogs().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Lãi gộp,").append(p.grossProfit().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Giá vốn theo giá nhập chuẩn,").append(p.standardCogs().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Lãi gộp theo giá nhập chuẩn,").append(p.standardGrossProfit().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Chênh lệch giá nhập (thực tế - chuẩn),").append(p.priceVariance().setScale(2, ROUNDING).toPlainString()).append("\r\n");
+				sb.append("Giá vốn hàng bán,").append(csvMoney(p.cogs())).append("\r\n");
+				sb.append("Lãi gộp,").append(csvMoney(p.grossProfit())).append("\r\n");
+				sb.append("Giá vốn theo giá nhập chuẩn,").append(csvMoney(p.standardCogs())).append("\r\n");
+				sb.append("Lãi gộp theo giá nhập chuẩn,").append(csvMoney(p.standardGrossProfit())).append("\r\n");
+				sb.append("Chênh lệch giá nhập (thực tế - chuẩn),").append(csvMoney(p.priceVariance())).append("\r\n");
 				sb.append("Chi phí hoạt động,").append(p.operatingExpenses().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Lợi nhuận thuần dự kiến,").append(p.netProfit().setScale(2, ROUNDING).toPlainString()).append("\r\n");
-				sb.append("Lợi nhuận thuần theo giá nhập chuẩn,").append(p.standardNetProfit().setScale(2, ROUNDING).toPlainString()).append("\r\n");
+				sb.append("Lợi nhuận thuần dự kiến,").append(csvMoney(p.netProfit())).append("\r\n");
+				sb.append("Lợi nhuận thuần theo giá nhập chuẩn,").append(csvMoney(p.standardNetProfit())).append("\r\n");
 				sb.append("Đã thu từ hóa đơn trong kỳ,").append(p.cashCollected().setScale(2, ROUNDING).toPlainString()).append("\r\n");
 				sb.append("Tiền chi nhập kho (không tính chi phí kỳ),").append(p.purchasePaymentOutflow().setScale(2, ROUNDING).toPlainString()).append("\r\n\r\n");
 				sb.append("Ngày,Số phiếu bán,Doanh thu,Giá vốn,Lãi gộp,Giá vốn chuẩn,Lãi gộp chuẩn,"
@@ -910,11 +910,11 @@ public class FinanceService {
 					sb.append(d.day()).append(",")
 							.append(d.saleCount()).append(",")
 							.append(d.revenue().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(d.cogs().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(d.grossProfit().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(d.standardCogs().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(d.standardGrossProfit().setScale(2, ROUNDING).toPlainString()).append(",")
-							.append(d.priceVariance().setScale(2, ROUNDING).toPlainString()).append(",")
+							.append(csvMoney(d.cogs())).append(",")
+							.append(csvMoney(d.grossProfit())).append(",")
+							.append(csvMoney(d.standardCogs())).append(",")
+							.append(csvMoney(d.standardGrossProfit())).append(",")
+							.append(csvMoney(d.priceVariance())).append(",")
 							.append(d.cashCollected().setScale(2, ROUNDING).toPlainString()).append(",")
 							.append(d.operatingExpense().setScale(2, ROUNDING).toPlainString()).append("\r\n");
 				}
@@ -949,6 +949,10 @@ public class FinanceService {
 				category,
 				Timestamp.valueOf(range.from().atStartOfDay()),
 				Timestamp.valueOf(range.to().plusDays(1).atStartOfDay()));
+	}
+
+	private static String csvMoney(BigDecimal value) {
+		return value == null ? "Chưa đủ dữ liệu giá vốn" : value.setScale(2, ROUNDING).toPlainString();
 	}
 
 	private BigDecimal queryMoney(String sql, Object... args) {

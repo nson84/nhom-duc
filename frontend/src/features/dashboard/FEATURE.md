@@ -34,3 +34,7 @@ Phân phối chọn năm và khoảng ngày riêng để chốt, rồi bấm **C
 Hộp thoại chốt năm Phân phối hỏi đã kiểm kê tồn kho chưa và hiển thị khoảng ngày của kỳ. Chọn **Đã kiểm kê, chốt năm** để tiếp tục hoặc **Quay lại** để kiểm tra.
 
 Chốt sổ tháng tùy chọn tại /chot-so-thang, độc lập với Khóa tháng. Kiểm kê nguyên liệu và vụn theo loại, ô trống tính là 0 sau xác nhận. Bản lưu bất biến gồm doanh thu ngoài, giá trị nhập và chi hoạt động/lương theo ngày chi. Đây chưa phải tính lãi quyết toán tháng. Popup ngày cuối tháng theo ngày máy, rộng 60vw, nhắc sau 3 giờ hoặc bỏ qua tháng hiện tại. Trạng thái nhắc lưu trên trình duyệt theo cửa hàng/tháng.
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

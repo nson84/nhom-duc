@@ -49,3 +49,7 @@ File in: `features/customers/debt-print.ts`, QR: `utils/vietqr.ts`.
 Chi tiết khách xưởng có thống kê năm và dòng phiếu theo kg; phiếu đã lập và xác nhận được xem là đã giao.
 
 Chi tiết khách ẩn ghi chú hồ sơ. Nút Lịch nhắc nợ mở bảng lịch trong hộp thoại.
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

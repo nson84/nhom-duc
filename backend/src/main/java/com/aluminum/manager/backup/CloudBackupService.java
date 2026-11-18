@@ -78,6 +78,7 @@ public class CloudBackupService {
 		if (!cloud.settings().configured()) return 0;
 		String bucket = cloud.settings().bucket();
 		int uploaded = 0;
+		boolean failed = false;
 		for (LocalBackup backup : localBackups()) {
 			if (!Files.isRegularFile(backup.path())) continue;
 			String key = "backups/" + backup.path().getFileName();
@@ -105,11 +106,11 @@ public class CloudBackupService {
 					return Boolean.TRUE;
 				});
 				if (Boolean.TRUE.equals(changed)) uploaded++;
-				lastError = null;
 			} catch (Exception e) {
-				lastError = "Có bản sao chưa đồng bộ; thử lại khi kết nối R2 hoạt động";
+				failed = true;
 			}
 		}
+		lastError = failed ? "Có bản sao chưa đồng bộ; thử lại khi kết nối R2 hoạt động" : null;
 		return uploaded;
 	}
 

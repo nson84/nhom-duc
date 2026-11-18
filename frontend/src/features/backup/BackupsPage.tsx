@@ -60,6 +60,7 @@ export function BackupsPage() {
   const [databasePassword, setDatabasePassword] = useState("");
   const [preparingLocal, setPreparingLocal] = useState<BackupLog | null>(null);
   const [importingRecoveryKey, setImportingRecoveryKey] = useState(false);
+  const [checkingBackup, setCheckingBackup] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,7 +144,7 @@ export function BackupsPage() {
       <Alert type={cloud?.configured ? "info" : "warning"} showIcon style={{ marginBottom: 16 }}
         message={cloud?.configured ? `R2 đã lưu cấu hình: ${cloud.bucket}` : "Chưa cấu hình Cloudflare R2"}
         description={<Space wrap>
-          <span>Khóa R2 được lưu riêng trên máy. Chỉ tải bản sao lên cloud sau khi mã hóa và kiểm tra khôi phục.</span>
+          <span>Bản sao được mã hóa và kiểm tra toàn vẹn trước khi tải lên R2.</span>
           {cloud?.configured ? <Button loading={testingCloud} onClick={async () => {
             setTestingCloud(true);
             try { await testCloudConnection(); message.success("Kết nối R2 thành công"); }
@@ -270,11 +271,13 @@ export function BackupsPage() {
           message="Lưu khóa này ở nơi riêng ngoài máy tính. Mất cả máy và khóa sẽ không giải mã được bản sao trên R2." />
         <Input.TextArea value={recoveryKey || ""} readOnly autoSize={{ minRows: 2 }} />
       </Modal>
-      <Modal open={!!verifyingObject} title={prepareMode ? "Dựng database khôi phục thử" : "Kiểm tra bản sao từ R2"}
+      <Modal open={!!verifyingObject} confirmLoading={checkingBackup} closable={!checkingBackup} maskClosable={!checkingBackup}
+        cancelButtonProps={{disabled: checkingBackup}} title={prepareMode ? "Dựng database khôi phục thử" : "Kiểm tra bản sao từ R2"}
         okText={prepareMode ? "Dựng DB riêng" : "Tải và kiểm tra"}
         onCancel={() => { setVerifyingObject(null); setEnteredRecoveryKey(""); setDatabasePassword(""); }}
         onOk={async () => {
           if (!verifyingObject) return;
+          setCheckingBackup(true);
           try {
             if (prepareMode) {
               const result = await prepareCloud(verifyingObject.key, enteredRecoveryKey,
@@ -286,6 +289,7 @@ export function BackupsPage() {
             }
             setVerifyingObject(null); setEnteredRecoveryKey(""); setDatabasePassword("");
           } catch (error) { message.error(toApiError(error).message); }
+          finally { setCheckingBackup(false); }
         }}>
         <p>Nhập khóa phục hồi đã cất ngoài máy. Trên máy đang dùng, có thể để trống. Database đang làm việc không bị thay thế.</p>
         <Input.Password value={enteredRecoveryKey} onChange={event => setEnteredRecoveryKey(event.target.value)}

@@ -89,7 +89,12 @@ public class BackupController {
 			}
 		}
 		var file = cloudBackups.download(request.key());
-		cloudBackups.verify(file, request.recoveryKey());
+		try {
+			cloudBackups.verify(file, request.recoveryKey());
+		} catch (IOException e) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Không xác minh được bản sao. Hãy kiểm tra đúng khóa phục hồi và thử tải lại bản sao.", null);
+		}
 		return ApiResponse.ok("VERIFIED", "Bản sao lưu tải từ R2 đã giải mã và kiểm tra toàn vẹn");
 	}
 
@@ -100,7 +105,7 @@ public class BackupController {
 			return ApiResponse.ok(stagedRestore.prepare(file, request.recoveryKey(),
 					request.databaseUsername(), request.databasePassword()),
 					"Đã dựng bản sao trên database riêng; dữ liệu đang làm việc không thay đổi");
-		} catch (IOException e) {
+		} catch (IOException | IllegalArgumentException e) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, e.getMessage(), null);
 		}
 	}

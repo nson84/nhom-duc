@@ -45,32 +45,32 @@ export type DailyRevenueRow = {
   day: string;
   saleCount: number;
   revenue: number;
-  cogs: number;
-  grossProfit: number;
+  cogs: number | null;
+  grossProfit: number | null;
   cashCollected: number;
   operatingExpense: number;
-  standardCogs: number;
-  standardGrossProfit: number;
+  standardCogs: number | null;
+  standardGrossProfit: number | null;
   /** Giá vốn thực tế − giá vốn chuẩn. Dương: nhập đắt hơn giá chuẩn. */
-  priceVariance: number;
+  priceVariance: number | null;
 };
 
 export type ProfitReport = {
   from: string;
   to: string;
   revenue: number;
-  cogs: number;
-  grossProfit: number;
+  cogs: number | null;
+  grossProfit: number | null;
   operatingExpenses: number;
-  netProfit: number;
+  netProfit: number | null;
   cashCollected: number;
   uncollectedRevenue: number;
   purchaseStockValue: number;
   purchasePaymentOutflow: number;
-  standardCogs: number;
-  standardGrossProfit: number;
-  standardNetProfit: number;
-  priceVariance: number;
+  standardCogs: number | null;
+  standardGrossProfit: number | null;
+  standardNetProfit: number | null;
+  priceVariance: number | null;
   /** False khi còn dòng bán chưa xác định được giá chuẩn (thiếu lịch sử giá nhập). */
   standardCostComplete: boolean;
   dailyRows: DailyRevenueRow[];
@@ -96,11 +96,11 @@ export type ProductSalesRow = {
   baseUnitName: string;
   quantityBaseSold: number;
   revenue: number;
-  cogs: number;
-  grossProfit: number;
-  standardCogs: number;
-  standardGrossProfit: number;
-  priceVariance: number;
+  cogs: number | null;
+  grossProfit: number | null;
+  standardCogs: number | null;
+  standardGrossProfit: number | null;
+  priceVariance: number | null;
 };
 
 /** Soát chênh lệch giữa giá nhập chuẩn và giá nhập thực tế đã ghi trên phiếu nhập. */

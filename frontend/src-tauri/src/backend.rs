@@ -1,5 +1,5 @@
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -15,7 +15,21 @@ pub fn ensure_started() -> Result<(), String> {
     let addr = format!("127.0.0.1:{port}")
         .parse::<SocketAddr>()
         .map_err(|err| err.to_string())?;
-    if TcpStream::connect_timeout(&addr, Duration::from_millis(400)).is_ok() {
+    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(400)) {
+        stream.set_read_timeout(Some(Duration::from_secs(3))).map_err(|err| err.to_string())?;
+        stream.set_write_timeout(Some(Duration::from_secs(3))).map_err(|err| err.to_string())?;
+        stream.write_all(format!("GET /api/v1/system/ready HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes())
+            .map_err(|err| format!("Không kiểm tra được backend ở cổng {port}: {err}"))?;
+        let mut response = String::new();
+        stream.take(16384).read_to_string(&mut response).map_err(|err| err.to_string())?;
+        let body = response.split_once("\r\n\r\n").map(|(_, body)| body).unwrap_or("");
+        let ready: serde_json::Value = serde_json::from_str(body).unwrap_or(serde_json::Value::Null);
+        if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+            return Err(format!("Cổng {port} đang có dịch vụ nhưng backend chưa sẵn sàng. Kiểm tra Java, MySQL và backend.log."));
+        }
+        if ready["data"]["application"] != "aluminum-manager" || ready["data"]["database"] != "UP" {
+            return Err(format!("Cổng {port} đang được dịch vụ khác sử dụng. Hãy kiểm tra tiến trình trước khi mở ứng dụng."));
+        }
         log("Backend đã chạy, ứng dụng desktop không khởi động thêm tiến trình.");
         return Ok(());
     }
@@ -51,8 +65,8 @@ pub fn ensure_started() -> Result<(), String> {
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let child = command.spawn().map_err(|err| {
-        let message = format!("Không khởi động được Java: {err}");
+    let mut child = command.spawn().map_err(|err| {
+        let message = format!("Không khởi động được Java. Cài Java 17, MySQL 8 rồi mở lại ứng dụng. Chi tiết: {err}");
         log(&message);
         message
     })?;

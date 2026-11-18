@@ -1,10 +1,13 @@
-import { Alert, Space } from "antd";
+import { Alert, Button, Space, message } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { PagedTable } from "../../components/PagedTable";
 import { api } from "../../services/api-client";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
+import { PaymentModal } from "../stock/DocumentsPage";
+import { addPayment, getDocument, type StockDocument } from "../stock/stock-api";
+import { useCanWrite } from "../auth/auth-store";
 
 type Invoice = {
   id: number;
@@ -23,6 +26,9 @@ const date = (value: string) => dayjs(value).format("DD/MM/YYYY");
 export function CarryoverDebtReport({ year }: { year: number }) {
   const [report, setReport] = useState<Report>();
   const [error, setError] = useState("");
+  const [paying, setPaying] = useState<StockDocument>();
+  const [refresh, setRefresh] = useState(0);
+  const canWrite = useCanWrite();
   useEffect(() => {
     const controller = new AbortController();
     setReport(undefined);
@@ -31,7 +37,7 @@ export function CarryoverDebtReport({ year }: { year: number }) {
       .then((response) => { if (!controller.signal.aborted) setReport(response.data.data); })
       .catch((caught) => { if (!controller.signal.aborted) setError(toApiError(caught).message); });
     return () => controller.abort();
-  }, [year]);
+  }, [year, refresh]);
 
   return <Space direction="vertical" style={{ width: "100%" }}>
     <Alert showIcon type="info" message={report ? `Cả kỳ từ ${date(report.from)} đến ${date(report.to)}` : "Công nợ của cả kỳ năm đang chọn"}
@@ -55,8 +61,32 @@ export function CarryoverDebtReport({ year }: { year: number }) {
           { title: "Ngày thanh toán và số tiền", render: (_, row) => row.payments.length
             ? row.payments.map((payment, i) => <div key={i}>{dayjs(payment.date).format("DD/MM/YYYY HH:mm")} · {formatMoney(payment.amount)}</div>)
             : "—" },
+          { title: "Thanh toán", render: (_, row) => canWrite && row.remainingDebt > 0
+            ? <Button onClick={async () => {
+                try {
+                  const document = await getDocument(row.id);
+                  if (document.totalAmount <= document.paidAmount) {
+                    message.info("Phiếu đã thanh toán đủ tính đến hiện tại");
+                    return;
+                  }
+                  setPaying(document);
+                } catch (caught) { message.error(toApiError(caught).message); }
+              }}>{type === "SALE" ? "Thu nợ" : "Trả nhà cung cấp"}</Button>
+            : null },
         ]} />
       </section>;
     })}
+    {paying && <PaymentModal label={paying.documentType === "SALE" ? "Thu nợ cũ" : "Trả nhà cung cấp"}
+      remaining={paying.totalAmount - paying.paidAmount}
+      kind={paying.documentType === "SALE" ? "SALE" : "PURCHASE"}
+      onClose={() => setPaying(undefined)}
+      onSubmit={async (values) => {
+        try {
+          await addPayment(paying.id, values);
+          setPaying(undefined);
+          setRefresh(value => value + 1);
+          message.success("Đã ghi thanh toán cho phiếu gốc");
+        } catch (caught) { message.error(toApiError(caught).message); throw caught; }
+      }} />}
   </Space>;
 }

@@ -57,7 +57,7 @@ cd backend
 .\mvnw.cmd test
 ```
 
-Các phép thử này khóa quy tắc bán 10 cây × 3,5 kg, giá vốn bình quân, từ chối tồn âm, mã phiếu, tháng 2 nhuận và tăng ca chưa duyệt.
+Các phép thử kiểm tra quy đổi khối lượng, phép tính kho, từ chối tồn âm, mã phiếu, tháng 2 nhuận và tăng ca chưa duyệt. Các phép thử toán học về bình quân không xác định công thức lãi quyết toán Phân phối.
 
 ## Quyết toán nhôm xưởng theo năm
 
@@ -90,12 +90,13 @@ Giá nhập không còn là một ô bị ghi đè. Mỗi loại nhôm có một
 
 Khi lập phiếu nhập với đơn giá khác giá hiện tại, popup hiện giá cũ/mới và ngày bắt đầu áp dụng trước khi lưu. Có thể chỉ lưu phiếu hoặc đồng thời cập nhật giá chuẩn; lịch sử giữ cả mốc cũ nếu đổi nhiều lần trong cùng ngày.
 
-Hai lớp số được giữ tách biệt:
+Các nguồn giá được sử dụng theo nghiệp vụ:
 
-- **Phân phối: giá vốn thực tế** — bình quân gia quyền từ các lần nhập thật. Mỗi phiếu bán lưu giá vốn tại lúc xác nhận.
-- **Giá vốn chuẩn phân phối** — lấy theo giá nhập tham khảo có hiệu lực đúng **ngày phiếu**, lưu snapshot trên dòng phiếu. Phiếu bán xưởng có trường giá nhập tham chiếu riêng, không dùng làm giá vốn hằng ngày.
+- **Phân phối** quản lý khối lượng tồn liên tục. Giá trị tồn cuối kỳ được phân bổ từ các phiếu nhập mới nhất trở về trước theo số cân thực tế khi quyết toán.
+- **Giá nhập chuẩn Phân phối** lấy theo lịch sử có hiệu lực đúng ngày phiếu, lưu trên dòng phiếu để tính lãi gộp ước tính. Phiếu bán Xưởng có giá nhôm tham chiếu riêng.
+- Dự án hiện không có thuật toán FIFO. Phép tính bình quân còn trong luồng kho Xưởng phục vụ dữ liệu kho hiện có. Lãi quyết toán dùng công thức theo kỳ và kiểm kê cuối kỳ của từng sổ.
 
-Báo cáo **Chênh lệch giá nhập** cho biết nhập thực tế đắt hay rẻ hơn giá chuẩn; trong tab Doanh thu & Lợi nhuận có thêm *Lãi gộp theo giá nhập chuẩn* và *Chênh lệch giá nhập (thực tế − chuẩn)*.
+Báo cáo **Chênh lệch giá nhập** đối chiếu giá nhập thực tế với giá chuẩn. Lãi gộp hóa đơn theo giá nhập chuẩn là số ước tính. Các đường báo cáo cũ đọc snapshot giá vốn còn cần đối chiếu trước khi dùng để quyết toán.
 
 Chạy thử luồng này khi backend đang chạy:
 

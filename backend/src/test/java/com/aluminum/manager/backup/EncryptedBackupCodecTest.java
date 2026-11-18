@@ -12,6 +12,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class EncryptedBackupCodecTest {
+	@Test void rejectsOversizedDecompressedStream() {
+		var output = new ByteArrayOutputStream();
+		assertThrows(IOException.class, () -> EncryptedBackupCodec.copyLimited(
+				new java.io.ByteArrayInputStream(new byte[1024]), output, 512));
+		assertTrue(output.size() <= 512);
+	}
+
 	@TempDir Path directory;
 	private final EncryptedBackupCodec codec = new EncryptedBackupCodec();
 

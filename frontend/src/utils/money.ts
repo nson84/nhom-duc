@@ -1,5 +1,6 @@
 /** Hiển thị tiền: dấu phẩy ngăn nghìn (75,000,000 đ). */
-export function formatMoney(value: number | string): string {
+export function formatMoney(value: number | string | null | undefined): string {
+  if (value == null) return "Chưa đủ dữ liệu";
   const amount = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(amount)) {
     return "0 đ";

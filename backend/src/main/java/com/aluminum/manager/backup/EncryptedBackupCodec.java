@@ -21,8 +21,10 @@ import org.springframework.stereotype.Component;
 public class EncryptedBackupCodec {
 	private static final byte[] MAGIC = { 'N', 'D', 'B', 'A', 'K', 1 };
 	private static final int IV_SIZE = 12;
+	private static final long MAX_PLAINTEXT_BYTES = 256L * 1024 * 1024;
 
 	public void encrypt(byte[] plain, byte[] key, Path target) throws IOException {
+		if (plain.length > MAX_PLAINTEXT_BYTES) throw new IOException("Dữ liệu sao lưu vượt giới hạn 256 MB");
 		byte[] iv = new byte[IV_SIZE];
 		new SecureRandom().nextBytes(iv);
 		try (OutputStream file = Files.newOutputStream(target)) {
@@ -47,10 +49,21 @@ public class EncryptedBackupCodec {
 			Cipher cipher = init(Cipher.DECRYPT_MODE, key, iv);
 			cipher.updateAAD(MAGIC);
 			try (GZIPInputStream gzip = new GZIPInputStream(new CipherInputStream(file, cipher))) {
-				gzip.transferTo(target);
+				copyLimited(gzip, target, MAX_PLAINTEXT_BYTES);
 			}
 		} catch (GeneralSecurityException e) {
 			throw new IOException("Không giải mã được bản sao lưu", e);
+		}
+	}
+
+	static void copyLimited(InputStream source, OutputStream target, long limit) throws IOException {
+		byte[] buffer = new byte[8192];
+		long total = 0;
+		int read;
+		while ((read = source.read(buffer)) != -1) {
+			total += read;
+			if (total > limit) throw new IOException("Dữ liệu giải nén vượt giới hạn an toàn");
+			target.write(buffer, 0, read);
 		}
 	}
 

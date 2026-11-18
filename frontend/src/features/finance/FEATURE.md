@@ -60,3 +60,7 @@ Phiếu chi Phân phối có nhóm bảo trì và người chi. Ghi chú phiếu
 ### Lãi gộp vật tư tham khảo theo hóa đơn / tháng
 
 Tab **Lãi gộp hóa đơn / tháng** có doanh thu, giá vật tư theo giá nhập chuẩn tại ngày giao và lãi vật tư ước tính cho từng hóa đơn. Giá này không phải giá vốn thực tế của lô hàng. Không trừ tiền công, phụ kiện, hao hụt và chi phí hoạt động; **không** dùng làm lãi đã quyết toán. Nếu thiếu giá nhập chuẩn ở phiếu khách ngoài, số lãi để trống thay vì giả định giá vốn bằng 0. Phiếu chuyển nội bộ vẫn hiện trong bảng chi tiết, đánh dấu Nội bộ và lãi 0; số phiếu tháng tính cả nội bộ nhưng doanh thu/giá vật tư/lãi tháng chỉ cộng phiếu khách ngoài. Dữ liệu lấy từ `GET /api/v1/reports/invoice-margins`, chỉ hiện một sổ (không gộp cả hai).
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

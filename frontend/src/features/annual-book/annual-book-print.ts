@@ -146,12 +146,12 @@ function shopHtml(book: AnnualBook) {
             ["Ngày công", qty(w.days), ""], ["Lương cơ bản", money(w.basePay), ""], ["Tăng ca", money(w.overtimePay), "Đã duyệt"],
             ["Thưởng cộng vào lương", money(w.bonusPay), "Gồm thưởng công và thưởng lễ chưa nhận"],
             ["Phụ cấp", money(w.allowances), ""], ["Khấu trừ", money(w.deductions), ""],
-            ["Đã ứng trong tháng", money(w.advanceAmount), w.advanceAmount > 0 ? "Dữ liệu hiện chỉ lưu tổng tháng, chưa lưu ngày ứng" : ""],
+            ["Đã ứng trong tháng", money(w.advanceAmount), w.advanceAmount > sum(events.filter(event => event.kind === "Ứng lương").map(event => event.amount)) ? "Có phần ứng cũ chưa ghi ngày" : ""],
             ["Tiền công còn lĩnh", money(w.totalPay), "Đã trừ tiền ứng"],
           ])}
-          ${events.length ? table(["Ngày", "Khoản thưởng", "Số tiền", "Trạng thái / ghi chú"], events.map((event) => [
+          ${events.length ? table(["Ngày", "Khoản", "Số tiền", "Trạng thái / ghi chú"], events.map((event) => [
             day(event.date), esc(event.kind), money(event.amount),
-            `${event.kind.startsWith("Thưởng lễ") ? event.received ? "Đã nhận trực tiếp; không cộng vào lương" : "Chưa nhận; đã cộng vào lương" : "Đã cộng vào lương"}${event.note ? ` · ${esc(event.note)}` : ""}`,
+            `${event.kind === "Ứng lương" ? "Đã ứng, đã trừ vào thực lĩnh" : event.kind.startsWith("Thưởng lễ") ? event.received ? "Đã nhận trực tiếp; không cộng vào lương" : "Chưa nhận; đã cộng vào lương" : "Đã cộng vào lương"}${event.note ? ` · ${esc(event.note)}` : ""}`,
           ])) : ""}
         </div>`;
       }).join("")}`).join("") || "<p>Chưa có kỳ công nhân viên trong khoảng này.</p>"}

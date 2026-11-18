@@ -23,3 +23,7 @@ Dựng database thử cần Admin nhập tạm tài khoản MySQL có quyền CR
 Lịch backup mặc định 4 giờ; chọn 1/2/4/8/24 giờ ở trang Admin. Không xóa bản backup local cũ theo retention lúc này, để tránh xóa bản cuối trước khi cloud được xác minh. Bộ tạo SQL V2 hiện vẫn dùng bộ nhớ theo kích thước dữ liệu và ảnh; cần tối ưu streaming trước khi dùng với dữ liệu rất lớn.
 
 [backup](../../../../../../../../frontend/src/features/backup/FEATURE.md)
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
