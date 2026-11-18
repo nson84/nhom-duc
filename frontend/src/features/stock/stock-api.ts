@@ -183,6 +183,10 @@ export async function saveDocument(id: number | undefined, input: DocumentInput,
   return response.data.data;
 }
 
+export async function editConfirmedDocument(id: number, input: DocumentInput) {
+  return (await api.put<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/confirmed`, input)).data.data;
+}
+
 export async function documentAction(id: number, action: "confirm" | "cancel") {
   return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/${action}`)).data.data;
 }
@@ -210,8 +214,16 @@ export async function listBalances(params: { q?: string; onlyInStock?: boolean }
   return (await api.get<Envelope<StockBalance[]>>("/api/v1/stock-balances", { params })).data.data;
 }
 
-export async function saveInventoryCount(items: { productId: number; categoryId: number; countedQuantityKg: number; scrapKg?: number }[]) {
-  return (await api.post<Envelope<InventoryCountResult>>("/api/v1/stock-balances/count", { items })).data.data;
+export type DeliveredByCategoryRow = { categoryName: string; quantityKg: number };
+
+export async function getDeliveredByCategory(params: { from?: string; to?: string; customerIds?: number[]; categoryId?: number; scope?: "all" }) {
+  return (await api.get<Envelope<DeliveredByCategoryRow[]>>("/api/v1/stock-documents/delivered-by-category", { params: {
+    from: params.from, to: params.to, customerIds: params.customerIds?.join(","), categoryId: params.categoryId, scope: params.scope,
+  } })).data.data;
+}
+
+export async function saveInventoryCount(items: { productId: number; categoryId: number; countedQuantityKg: number; scrapKg?: number }[], countDate: string) {
+  return (await api.post<Envelope<InventoryCountResult>>("/api/v1/stock-balances/count", { items, countDate })).data.data;
 }
 
 export async function listMovements(productId: number) {

@@ -19,6 +19,8 @@ Bảng nhân viên, chấm công, tiền công và bảng trong modal cuộn nga
 
 ### `/cham-cong` — Chấm công
 
+Khi mở trang, tháng mặc định là tháng bắt đầu của kỳ làm việc đang chọn ở Tổng quan Xưởng. Nếu Tổng quan đã chọn một tháng, bảng mở đúng tháng đó và khóa bộ chọn tháng; chỉ hiện các ngày nằm trong kỳ năm. Chưa bấm Mở tháng thì chỉ xem, không chấm công. Khóa tháng ở Tổng quan yêu cầu kỳ công tháng đó đã chốt và khóa chỉnh sửa chấm công.
+
 | | |
 |--|--|
 | File | `features/attendance/AttendancePage.tsx` |
@@ -36,9 +38,13 @@ Trong **Lịch nghỉ lễ**, chọn ngày trong năm đang xem, nhập mức th
 
 ### `/tien-cong` — Tiền công
 
+Khi mở trang, tháng mặc định là tháng bắt đầu của kỳ làm việc đang chọn ở Tổng quan Xưởng. Nếu Tổng quan đã chọn một tháng, kỳ công mở đúng tháng đó và khóa bộ chọn tháng. Phải bấm Mở tháng trước khi lập/chỉnh kỳ công, chốt kỳ công trước khi bấm Khóa tháng ở Tổng quan; không thể mở lại kỳ công sau khi tháng đã khóa.
+
 Khi mở trang hoặc đổi tháng, kỳ đang mở tự tính lại theo dữ liệu chấm công mới nhất. Kỳ đã chốt dùng bảng kê đã lưu.
 
 Nhập tổng tiền lương đã ứng của từng người trong kỳ mở. Hệ thống trừ khi tính thực lĩnh và kiểm tra số ứng trước khi chốt. Sau khi chốt, mở **Xem bảng kê** theo tên để xem công, giờ tăng ca đã duyệt, thưởng lễ, tiền ứng và tổng nhận.
+
+Nút **In bảng công và lương** xuất tháng đang chọn thành bản in/PDF: mỗi nhân viên có các ngày chấm công, sáng/chiều, công, tăng ca đã duyệt, thưởng ngày và bảng từng khoản tính lương; cuối bản in tổng hợp tháng và số đã chi. Kỳ chưa chốt ghi rõ là tạm tính. Tiền ứng hiện chỉ lưu tổng tháng nên bản in không tự tạo ngày ứng.
 
 | | |
 |--|--|
@@ -55,3 +61,7 @@ Nhập tổng tiền lương đã ứng của từng người trong kỳ mở. H
 ## Bổ sung theo code hiện tại
 
 Chỉ vai trò Xưởng được thao tác nhân sự; Phân phối không có nhân viên/chấm công/lương.
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

@@ -20,7 +20,7 @@ Prefix `/api/v1`. Mọi phản hồi có `success`. Lỗi có `code` và `messag
 | GET | `/dashboard/summary?from&to` | Doanh thu, tiền thu, lãi gộp, chi phí, tồn, tiền công |
 | POST | `/dashboard/distribution-close?from&to&annual=true&year=2026` | Chốt năm Phân phối theo khoảng ngày tự chọn; `year` là tên kỳ. Kỳ liền sau phải bắt đầu ngày tiếp theo. |
 | GET | `/dashboard/year-end?year` | Bản số dư chốt năm theo sổ đang chọn; `data: null` nếu chưa chốt. Gồm `periodFrom`, `periodTo`, `inventoryKg`, `inventoryValue`, `customerDebt`, `supplierDebt`, `profit`, `closedAt` |
-| GET | `/reports/annual-book?year&shopCode` | Dữ liệu cho sổ cuối năm: khách, phiếu bán/nhập, thanh toán, thu chi, công thợ, tồn kho. Admin xem hai sổ; role vận hành chỉ xem `shopCode` của mình. |
+| GET | `/reports/annual-book?year&shopCode` | Dữ liệu cho sổ cuối năm: khách, phiếu bán/nhập, thanh toán, thu chi, công thợ, tồn kho. Xưởng/Phân phối chỉ xem `shopCode` của mình; Admin bị từ chối. |
 | GET | `/dashboard/charts?from&to` | Theo ngày, múi giờ Việt Nam, `to` tính đến hết ngày |
 
 ## Landing page công khai (khách xem, để lại thông tin)
@@ -62,6 +62,10 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 | GET/POST | `/customers/{id}/reminders` | Lịch nhắc nợ |
 | GET | `/customers/due-reminders` | Nhắc đến hạn chưa xong |
 | PUT | `/stock-documents/{id}/customer` | Gắn / gỡ `customerId` trên phiếu bán |
+| GET | `/stock-documents/delivered-by-category` | Kg đã giao theo loại từ phiếu bán đã xác nhận; lọc `from`, `to`, `categoryId`, `customerIds` (danh sách ID phân cách dấu phẩy), `scope=all` cho Admin |
+| GET | `/dashboard/month-status` | Nhận `month=YYYY-MM`, trả `NOT_OPEN` / `OPEN` / `CLOSED` cho cửa hàng đang chọn |
+| POST | `/dashboard/month-open` | Nhận `year`, `month`; mở tháng đầu hoặc tháng kế tiếp sau khi tháng trước đã khóa |
+| POST | `/dashboard/month-close` | Nhận `year`, `month`; khóa tháng đã mở sau khi hết tháng (Xưởng cần chốt kỳ công trước) |
 | GET | `/products` | SP: mã, tên, ảnh, trạng thái, tổng tồn gộp |
 | POST / PUT | `/products` / `/products/{id}` | Chỉ mã/tên/ảnh/trạng thái; đơn vị kg/tạ/tấn tự tạo |
 | POST/PUT | stock documents items | Bắt buộc `categoryId`; phiếu bán xưởng nhận kg/tạ/tấn, lưu `quantityBase` là kg nhôm thành phẩm |
@@ -91,10 +95,34 @@ Quy tắc bắt buộc:
 | POST | `/factory/scrap-sales/{id}/void` | Hủy phiếu chưa thu tiền |
 | GET | `/factory/customers/{id}/years/{year}` | Kg thành phẩm và từng dòng phiếu đã giao của khách |
 | GET | `/factory/years/{year}/settlement?month=1..12&monthYear=2027` | Công nợ tháng giao với kỳ đã chọn; bỏ `month` để lấy cả kỳ. `monthYear` dùng cho kỳ đi qua năm dương lịch. |
-| GET | `/admin/combined/years/{year}` | Admin xem tổng hai bên; loại giao dịch nội bộ khỏi doanh thu ngoài |
 
 Mục lục [feature.md](feature.md) dẫn tới tài liệu từng module và màn hình. Quyết toán công nợ được tính theo dữ liệu tại lúc xem; dữ liệu nhập lùi ngày có thể thay đổi kết quả.
 
 # Kỳ xem theo tên năm
 
-`GET /api/v1/dashboard/year-period?year=2025` trả `{ year, periodFrom, periodTo, closed }` theo cửa hàng hiện tại. Mốc đã chốt là cố định; kỳ chưa chốt lấy kiểm kê nháp Xưởng hoặc bắt đầu ngay sau kỳ trước đã chốt. Tổng quan, báo cáo và thu chi dùng hai mốc này để lọc dữ liệu.
+`GET /api/v1/dashboard/year-period?year=2025` trả `{ year, periodName, periodFrom, periodTo, closed, started, endSaved }` theo cửa hàng hiện tại. Kỳ chưa bắt đầu có `started=false`; kỳ đang làm việc chưa lưu ngày kết thúc dùng ngày hiện tại làm mốc cuối tạm. Mốc đã chốt là cố định. Tổng quan, báo cáo và thu chi dùng hai mốc này để lọc dữ liệu.
+
+`POST /api/v1/dashboard/year-period/start?year=2025&from=2025-01-29&name=Ky%202025-2026` lưu ngày bắt đầu và tên kỳ cho sổ hiện tại. `POST /api/v1/dashboard/year-period?year=2025&from=2025-01-29&to=2026-02-16` lưu ngày kết thúc dự kiến sau khi đã bắt đầu. Chốt năm là bước riêng, yêu cầu cả hai mốc đã lưu. Kỳ đã chốt không sửa được; khoảng tối đa 400 ngày và kỳ sau phải liền kề kỳ trước đã chốt.
+## Sao lưu mã hóa và Cloudflare R2 (Admin)
+
+| Method | API | Hành vi |
+|---|---|---|
+| GET/PUT | `/backups/settings` | Lịch backup, thêm `frequencyHours` (1, 2, 4, 8, 24); mặc định 4 giờ |
+| POST | `/backups` | Tạo `.ndbak` nén GZIP, mã hóa AES-256-GCM và bắt đầu đồng bộ nền |
+| POST | `/backups/{id}/verify` | Kiểm tra SHA-256 và giải mã bản local |
+| POST | `/backups/{id}/prepare` | Dựng database khôi phục thử, không thay dữ liệu hiện hành |
+| GET/PUT | `/backups/cloud` | Xem/lưu R2 endpoint, bucket, Access Key ID; Secret Access Key chỉ nhận khi ghi |
+| POST | `/backups/cloud/test` | Kiểm tra kết nối R2 |
+| GET | `/backups/cloud/status`, `/backups/cloud/objects` | Trạng thái đồng bộ và danh sách object trên R2 |
+| POST | `/backups/cloud/sync` | Thử tải các bản `.ndbak` còn chờ lên R2 |
+| POST | `/backups/cloud/download?key=...` | Tải archive từ R2 về máy, kiểm tra checksum |
+| POST | `/backups/cloud/verify`, `/backups/cloud/prepare` | Body `{key,recoveryKey}`; kiểm tra hoặc dựng database thử từ cloud |
+| GET | `/backups/recovery-key` | Xuất khóa phục hồi để cất ngoài máy |
+| POST | `/backups/recovery-key/import` | Body `{value}`; nhập khóa trên máy mới, từ chối ghi đè khóa khác |
+| POST | `/backups/{id}/restore` | Tiếp tục trả 503; chưa cho ghi đè database hoạt động |
+
+GET /api/v1/dashboard/monthly-book?year=...&month=YYYY-MM đọc số liệu hoặc bản chốt. POST cùng đường dẫn với year, month, counts lưu bản chốt bất biến theo shop/tháng. counts gồm categoryId, rawKg, scrapKg.
+
+## Bổ sung 19/11/2026
+
+POST /api/v1/payroll/periods/{id}/details/{detailId}/advances: ghi ứng lương có date, amount, note, idempotencyKey. Chỉ kỳ lương và tháng đang mở; ngày ứng phải thuộc tháng lương và kỳ làm việc. Khoản ứng ghi chi PAYROLL_ADVANCE, trừ tiền còn lĩnh.

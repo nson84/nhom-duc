@@ -19,4 +19,9 @@ public class AnnualBookController {
     public ApiResponse<AnnualBookService.Book> book(@RequestParam int year, @RequestParam String shopCode) {
         return ApiResponse.ok(service.book(year, shopCode), null);
     }
+
+    @GetMapping("/carryover-debt")
+    public ApiResponse<AnnualBookService.Carryover> carryover(@RequestParam int year) {
+        return ApiResponse.ok(service.carryover(year), null);
+    }
 }

@@ -4,7 +4,7 @@
 
 ## Chức năng hiện có
 
-`AdminBootstrap` tạo ba tài khoản mặc định nếu thiếu, với mật khẩu ban đầu `1234567` và yêu cầu đổi mật khẩu. Tài khoản đã có giữ mật khẩu, trạng thái và quyền hiện tại khi khởi động lại. `ClockConfig` cấu hình thời gian; không có màn hình riêng.
+`AdminBootstrap` chỉ tạo tài khoản còn thiếu, yêu cầu đổi mật khẩu lần đầu và giữ nguyên tài khoản đã có. Bản cài mới tạo mật khẩu ngẫu nhiên riêng cho từng tài khoản trong tệp `first-run-credentials-*.txt` dưới `%APPDATA%\AluminumManager`, chỉ chủ máy được đọc. Nếu không ghi được tệp an toàn, bootstrap dừng trước khi tạo tài khoản. Khi chạy qua `scripts/dev-backend.ps1`, mật khẩu thử nghiệm `1234567` được cấp qua biến môi trường chỉ cho môi trường dev. `ClockConfig` cấu hình thời gian.
 
 ## Màn hình liên quan
 

@@ -1,6 +1,7 @@
 import { ArrowLeftOutlined, BellOutlined, CheckOutlined, CloseOutlined, DollarOutlined, PlusOutlined, PrinterOutlined } from "@ant-design/icons";
 import {
   Alert,
+  AutoComplete,
   Card,
   Checkbox,
   DatePicker,
@@ -28,10 +29,16 @@ import { useCanWrite, useSession } from "../auth/auth-store";
 import { listBankAccounts, type BankAccount } from "../settings/bank-accounts-api";
 import { getSettings, type ShopSettings } from "../settings/settings-api";
 import { getCustomerYear, type CustomerYear } from "../factory/factory-api";
-import { SHOP_LABELS } from "../shop/shop-store";
+import { SHOP_LABELS, useShop } from "../shop/shop-store";
+import { useWorkingYear } from "../dashboard/working-year";
+import { getYearPeriod } from "../dashboard/dashboard-api";
+import { visiblePeriod } from "../dashboard/working-period";
 import { addPayment, getDocument, type StockDocument } from "../stock/stock-api";
+import { DeliveredByCategory } from "../stock/DeliveredByCategory";
 import { bankName } from "../../utils/vietqr";
 import { buildDebtListHtml, hasBankAccount, openDebtDocuments } from "./debt-print";
+import { PrintDocument } from "../../components/print-document";
+import { buildCustomerHistoryHtml } from "./customer-history-print";
 import {
   createCustomerReminder,
   getCustomer,
@@ -60,6 +67,8 @@ function paymentMethodLabel(raw: string | null | undefined): string {
 }
 
 export function CustomerDetailPage() {
+  const shop = useShop();
+  const workingYear = useWorkingYear(shop);
   const { id } = useParams();
   const customerId = Number(id);
   const navigate = useNavigate();
@@ -69,7 +78,9 @@ export function CustomerDetailPage() {
   const scope = isAdmin ? ("all" as const) : undefined;
 
   const [summary, setSummary] = useState<CustomerSummary | null>(null);
-  const [salesYear, setSalesYear] = useState(dayjs().year());
+  const [salesYear, setSalesYear] = useState(workingYear.year);
+  const [selectedRange, setSelectedRange] = useState<[string, string] | null>(null);
+  const [periodReady, setPeriodReady] = useState(false);
   const [yearSummary, setYearSummary] = useState<CustomerYear | null>(null);
   const [docs, setDocs] = useState<CustomerDocument[]>([]);
   const [reminders, setReminders] = useState<CustomerReminder[]>([]);
@@ -81,20 +92,47 @@ export function CustomerDetailPage() {
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [addingReminder, setAddingReminder] = useState(false);
   const [printingDebt, setPrintingDebt] = useState(false);
+  const [historyHtml, setHistoryHtml] = useState<string | null>(null);
+  const [printingHistory, setPrintingHistory] = useState(false);
+
+  const printHistory = async () => {
+    setPrintingHistory(true);
+    try {
+      const full = await Promise.all(docs.map((row) => getDocument(row.id)));
+      setHistoryHtml(buildCustomerHistoryHtml(summary!, docs, full, selectedRange));
+    } catch (error) {
+      message.error(toApiError(error).message);
+    } finally {
+      setPrintingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setPeriodReady(false);
+    getYearPeriod(workingYear.year).then((value) => {
+      if (!active) return;
+      const shown = visiblePeriod(value, workingYear.month);
+      setSelectedRange(shown?.started ? [shown.periodFrom, shown.periodTo] : null);
+      setSalesYear(workingYear.year);
+      setPeriodReady(true);
+    }).catch(() => { if (active) setPeriodReady(true); });
+    return () => { active = false; };
+  }, [shop, workingYear.year, workingYear.month]);
 
   const load = useCallback(async () => {
-    if (!customerId) return;
+    if (!customerId || !periodReady) return;
     setLoading(true);
     try {
       const [s, d, r] = await Promise.all([
-        getCustomer(customerId, scope),
-        listCustomerDocuments(customerId, paymentFilter, scope),
+        getCustomer(customerId, scope, selectedRange?.[0], selectedRange?.[1]),
+        listCustomerDocuments(customerId, paymentFilter, scope, selectedRange?.[0], selectedRange?.[1]),
         listCustomerReminders(customerId, scope),
       ]);
       setSummary(s);
       setDocs(d);
       setReminders(r);
-      if (initializedYearFor.current !== customerId && d.length > 0) {
+      if (!workingYear.month && initializedYearFor.current !== customerId && d.length > 0) {
         setSalesYear(Math.max(...d.map((doc) => dayjs(doc.documentDate).year())));
         initializedYearFor.current = customerId;
       }
@@ -104,7 +142,7 @@ export function CustomerDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [customerId, paymentFilter, scope, navigate]);
+  }, [customerId, paymentFilter, scope, navigate, selectedRange, periodReady, workingYear.month]);
 
   useEffect(() => {
     void load();
@@ -135,6 +173,7 @@ export function CustomerDetailPage() {
               Danh sách
             </AppActionButton>
             <span>{summary.name}</span>
+            {summary.internalTransfer && <Tag color="blue">Có phiếu nội bộ</Tag>}
           </Space>
         }
         extra={
@@ -150,9 +189,11 @@ export function CustomerDetailPage() {
             </Descriptions.Item>
           ) : null}
           <Descriptions.Item label="SĐT">{summary.phone || "—"}</Descriptions.Item>
-          <Descriptions.Item label="Khối lượng đã giao">{formatQtyInput(summary.deliveredKg)} kg</Descriptions.Item>
+          <Descriptions.Item label="Khối lượng đã giao">{formatQtyInput(summary.deliveredKg)} kg
+            <DeliveredByCategory customerIds={[customerId]} from={selectedRange?.[0]} to={selectedRange?.[1]} scope={scope} shopKey={summary.shopCode} />
+          </Descriptions.Item>
           <Descriptions.Item label="Tiền hàng phải thu">{formatMoney(summary.totalSales)}</Descriptions.Item>
-          <Descriptions.Item label="Đã thu thực tế">{formatMoney(summary.receivedAmount)}</Descriptions.Item>
+          <Descriptions.Item label="Đã thu từ các hóa đơn đã lọc theo ngày bán (tính đến nay)">{formatMoney(summary.receivedAmount)}</Descriptions.Item>
           <Descriptions.Item label="Còn nợ">
             {summary.outstandingDebt > 0 ? (
               <Tag color="red">{formatMoney(summary.outstandingDebt)}</Tag>
@@ -164,13 +205,15 @@ export function CustomerDetailPage() {
         </Descriptions>
       </Card>
 
-      {summary.shopCode === "MANUFACTURING" ? (
+      {summary.shopCode === "MANUFACTURING" && !workingYear.month ? (
         <Card
           title="Sản lượng thành phẩm đã giao"
           extra={<DatePicker picker="year" value={dayjs(`${salesYear}-01-01`)} onChange={(value) => value && setSalesYear(value.year())} />}
         >
           <Descriptions column={{ xs: 1, md: 4 }} size="small">
-            <Descriptions.Item label="Đã giao">{yearSummary ? `${formatQtyInput(yearSummary.quantityKg)} kg` : "—"}</Descriptions.Item>
+            <Descriptions.Item label="Đã giao">{yearSummary ? `${formatQtyInput(yearSummary.quantityKg)} kg` : "—"}
+              <DeliveredByCategory customerIds={[customerId]} from={`${salesYear}-01-01`} to={`${salesYear}-12-31`} scope={scope} shopKey={summary.shopCode} />
+            </Descriptions.Item>
             <Descriptions.Item label="Doanh thu">{formatMoney(yearSummary?.revenue ?? 0)}</Descriptions.Item>
             <Descriptions.Item label="Đã thu của các phiếu">{formatMoney(yearSummary?.paidAmount ?? 0)}</Descriptions.Item>
             <Descriptions.Item label="Còn nợ các phiếu">{formatMoney(yearSummary?.outstandingAmount ?? 0)}</Descriptions.Item>
@@ -196,6 +239,12 @@ export function CustomerDetailPage() {
       <Card
         title="Hóa đơn"
         extra={
+          <Space wrap>
+          <DatePicker.RangePicker
+            format="DD/MM/YYYY"
+            value={selectedRange ? [dayjs(selectedRange[0]), dayjs(selectedRange[1])] : null}
+            onChange={(dates) => setSelectedRange(dates?.[0] && dates?.[1] ? [dates[0].format("YYYY-MM-DD"), dates[1].format("YYYY-MM-DD")] : null)}
+          />
           <Select
             allowClear
             placeholder="Tất cả hóa đơn"
@@ -209,6 +258,10 @@ export function CustomerDetailPage() {
               { value: "PAID", label: "Đã thanh toán" },
             ]}
           />
+          <AppActionButton tone="print" icon={<PrinterOutlined />} loading={printingHistory} onClick={() => void printHistory()}>
+            In hóa đơn đã lọc
+          </AppActionButton>
+          </Space>
         }
       >
         <PagedTable<CustomerDocument>
@@ -221,7 +274,7 @@ export function CustomerDetailPage() {
             onClick: () => setViewingId(row.id),
           })}
           columns={[
-            { title: "Số phiếu", dataIndex: "documentCode", align: "center" },
+            { title: "Số phiếu", dataIndex: "documentCode", align: "center", render: (code: string, row) => <>{code} {row.internalTransfer && <Tag color="blue">Nội bộ</Tag>}</> },
             {
               title: "Ngày",
               dataIndex: "documentDate",
@@ -375,6 +428,7 @@ export function CustomerDetailPage() {
       {printingDebt ? (
         <DebtPrintModal customer={summary} scope={scope} onClose={() => setPrintingDebt(false)} />
       ) : null}
+      {historyHtml ? <PrintDocument title={`Lịch sử mua hàng — ${summary.name}`} html={historyHtml} onClose={() => setHistoryHtml(null)} /> : null}
     </Space>
   );
 }
@@ -565,9 +619,11 @@ function InvoiceDetailModal({ documentId, onClose }: { documentId: number; onClo
             ]}
           />
           <p style={{ textAlign: "center", marginTop: 12, marginBottom: (doc.payments ?? []).length > 0 ? 8 : 0 }}>
-            Thành tiền: <b>{formatMoney(doc.totalAmount)}</b>
-            {" · "}Đã thu: <b>{formatMoney(doc.paidAmount)}</b>
-            {" · "}Còn phải thu: <b>{formatMoney(Math.max(0, doc.totalAmount - doc.paidAmount))}</b>
+            {doc.internal ? <>Giá trị chuyển nội bộ: <b>{formatMoney(doc.totalAmount)}</b> · Không phát sinh tiền phải thu khách hàng</> : <>
+              Thành tiền: <b>{formatMoney(doc.totalAmount)}</b>
+              {" · "}Đã thu: <b>{formatMoney(doc.paidAmount)}</b>
+              {" · "}Còn phải thu: <b>{formatMoney(Math.max(0, doc.totalAmount - doc.paidAmount))}</b>
+            </>}
           </p>
           {(doc.payments ?? []).length > 0 ? (
             <Table
@@ -619,13 +675,25 @@ function PayDebtModal({
   onClose: () => void;
   onPaid: () => void;
 }) {
-  const session = useSession();
-  const [form] = Form.useForm<{ mode: "full" | "partial"; amount?: number; paymentMethod: string; collectedBy: string; note?: string }>();
+  const [form] = Form.useForm<{ mode: "full" | "partial"; amount?: number; paymentMethod: string; collectedBy: string; note?: string; paymentDate: Dayjs }>();
   const [saving, setSaving] = useState(false);
   const [payments, setPayments] = useState<
     { id: number; paymentDate: string; amount: number; paymentMethod: string | null; note: string | null; collectedBy?: string | null }[]
   >([]);
   const mode = Form.useWatch("mode", form) ?? "full";
+  const working = useWorkingYear(useShop());
+  const [paymentRange, setPaymentRange] = useState<[string,string] | null>(null);
+  useEffect(() => {
+    let active = true;
+    getYearPeriod(working.year).then(period => {
+      const visible = visiblePeriod(period, working.month);
+      if (!active || !visible?.started) return;
+      setPaymentRange([visible.periodFrom, visible.periodTo]);
+      const today = dayjs();
+      form.setFieldValue("paymentDate", today.isBefore(dayjs(visible.periodFrom), "day") || today.isAfter(dayjs(visible.periodTo), "day") ? dayjs(visible.periodFrom) : today);
+    }).catch(error => { if (active) message.error(toApiError(error).message); });
+    return () => { active=false; };
+  }, [working.year,working.month,form]);
   const remaining = doc.remainingAmount;
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -711,7 +779,6 @@ function PayDebtModal({
           mode: isValidPaymentAmountVnd(remaining) ? "full" : "partial",
           paymentMethod: "CASH",
           amount: remaining,
-          collectedBy: session?.username ?? "",
         }}
         onFinish={async (values) => {
           const amount = values.mode === "full" ? remaining : Number(values.amount ?? 0);
@@ -734,6 +801,7 @@ function PayDebtModal({
                   Số tiền thu: <b>{formatMoney(amount)}</b> ({paymentMethodLabel(values.paymentMethod)})
                 </p>
                 <p style={{ margin: "4px 0" }}>
+                  Ngày nhận tiền: <b>{values.paymentDate.format("DD/MM/YYYY HH:mm")}</b><br />
                   Người thu tiền: <b>{values.collectedBy.trim()}</b>
                 </p>
                 <p style={{ margin: "4px 0" }}>
@@ -752,6 +820,7 @@ function PayDebtModal({
                   amount,
                   paymentMethod: values.paymentMethod,
                   collectedBy: values.collectedBy.trim(),
+                  paymentDate: values.paymentDate.format("YYYY-MM-DDTHH:mm:ss"),
                   idempotencyKey,
                 });
                 message.success("Đã ghi lần trả nợ");
@@ -765,6 +834,12 @@ function PayDebtModal({
           });
         }}
       >
+        <Form.Item name="paymentDate" label="Ngày thực nhận tiền"
+          rules={[{ required: true, message: "Chọn ngày nhận tiền" }]}>
+          <DatePicker showTime format="DD/MM/YYYY HH:mm" disabled={!paymentRange}
+            disabledDate={date => !paymentRange || date.isBefore(dayjs(paymentRange[0]), "day")
+              || date.isAfter(dayjs(paymentRange[1]), "day")} />
+        </Form.Item>
         <Form.Item name="mode" label="Hình thức trả">
           <Select
             options={[
@@ -798,9 +873,11 @@ function PayDebtModal({
           name="collectedBy"
           label="Người thu tiền"
           rules={requiredNameRules("Nhập người thu tiền", 80)}
-          extra="Tên này in trên danh sách nợ, mỗi lần thu một người"
+          extra="Chọn Hải, Thuấn hoặc nhập tên khác; tên này in trên danh sách nợ"
         >
-          <Input maxLength={80} />
+          <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
+            <Input maxLength={80} />
+          </AutoComplete>
         </Form.Item>
         <Form.Item
           name="paymentMethod"

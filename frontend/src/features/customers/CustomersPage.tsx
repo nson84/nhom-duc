@@ -1,6 +1,6 @@
 import { BellOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { Alert, Card, Col, DatePicker, Form, Input, Modal, Row, Space, Statistic, Switch, Tag, message } from "antd";
-import type { Dayjs } from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppActionButton } from "../../components/AppButtons";
@@ -9,8 +9,12 @@ import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { requiredNameRules } from "../../utils/name-rules";
 import { useCanWrite, useSession } from "../auth/auth-store";
-import { SHOP_LABELS } from "../shop/shop-store";
+import { SHOP_LABELS, useShop } from "../shop/shop-store";
+import { useWorkingYear } from "../dashboard/working-year";
+import { getYearPeriod } from "../dashboard/dashboard-api";
+import { visiblePeriod } from "../dashboard/working-period";
 import { CustomerSuggestSearch } from "./CustomerSuggestSearch";
+import { DeliveredByCategory } from "../stock/DeliveredByCategory";
 import {
   listCustomers,
   listDueReminders,
@@ -22,6 +26,8 @@ import {
 const { RangePicker } = DatePicker;
 
 export function CustomersPage() {
+  const shop = useShop();
+  const workingYear = useWorkingYear(shop);
   const canWrite = useCanWrite();
   const session = useSession();
   const isAdmin = session?.role === "ADMIN";
@@ -30,12 +36,26 @@ export function CustomersPage() {
   const [due, setDue] = useState<CustomerReminder[]>([]);
   const [query, setQuery] = useState("");
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [periodReady, setPeriodReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const scope = isAdmin ? ("all" as const) : undefined;
 
+  useEffect(() => {
+    let active = true;
+    setPeriodReady(false);
+    getYearPeriod(workingYear.year).then((value) => {
+      if (!active) return;
+      const shown = visiblePeriod(value, workingYear.month);
+      setRange(shown?.started ? [dayjs(shown.periodFrom), dayjs(shown.periodTo)] : null);
+      setPeriodReady(true);
+    }).catch(() => { if (active) setPeriodReady(true); });
+    return () => { active = false; };
+  }, [shop, workingYear.year, workingYear.month]);
+
   const load = useCallback(async () => {
+    if (!periodReady) return;
     setLoading(true);
     try {
       const [customers, reminders] = await Promise.all([
@@ -54,7 +74,7 @@ export function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [query, range, scope]);
+  }, [query, range, scope, periodReady]);
 
   useEffect(() => {
     void load();
@@ -103,6 +123,7 @@ export function CustomersPage() {
           onSearch={setQuery}
         />
         <RangePicker
+          disabled={!!workingYear.month}
           format="DD/MM/YYYY"
           value={range}
           onChange={(value) => setRange(value as [Dayjs, Dayjs] | null)}
@@ -111,10 +132,13 @@ export function CustomersPage() {
         />
       </Space>
 
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={6}><Card size="small"><Statistic title="Khối lượng đã giao" value={rows.reduce((sum, row) => sum + (row.deliveredKg ?? 0), 0)} precision={3} suffix="kg" /></Card></Col>
+      <Row className="customer-summary-row" gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col xs={24} md={6}><Card size="small"><Statistic title="Khối lượng đã giao" value={rows.reduce((sum, row) => sum + (row.deliveredKg ?? 0), 0)} precision={3} suffix="kg" />
+          <DeliveredByCategory from={range?.[0]?.format("YYYY-MM-DD")} to={range?.[1]?.format("YYYY-MM-DD")}
+            customerIds={rows.map((row) => row.id)} scope={scope} shopKey={scope} />
+        </Card></Col>
         <Col xs={24} md={6}><Card size="small"><Statistic title="Tiền hàng phải thu" value={formatMoney(rows.reduce((sum, row) => sum + row.totalSales, 0))} /></Card></Col>
-        <Col xs={24} md={6}><Card size="small"><Statistic title="Tiền đã thu thực tế" value={formatMoney(rows.reduce((sum, row) => sum + (row.receivedAmount ?? 0), 0))} /></Card></Col>
+        <Col xs={24} md={6}><Card size="small"><Statistic title="Đã thu từ các hóa đơn đã lọc (tính đến nay)" value={formatMoney(rows.reduce((sum, row) => sum + (row.receivedAmount ?? 0), 0))} /></Card></Col>
         <Col xs={24} md={6}><Card size="small"><Statistic title="Khách còn nợ" value={formatMoney(rows.reduce((sum, row) => sum + row.outstandingDebt, 0))} /></Card></Col>
       </Row>
       <PagedTable<Customer>
@@ -136,7 +160,7 @@ export function CustomersPage() {
                 },
               ]
             : []),
-          { title: "Tên khách", dataIndex: "name", align: "center" },
+          { title: "Tên khách", dataIndex: "name", align: "center", render: (name: string, row) => <>{name} {row.internalTransfer && <Tag color="blue">Nội bộ</Tag>}</> },
           { title: "SĐT", dataIndex: "phone", align: "center", render: (v: string | null) => v || "—" },
           {
             title: "Tiền hàng phải thu",
@@ -144,7 +168,7 @@ export function CustomersPage() {
             align: "center",
             render: (v: number) => formatMoney(v),
           },
-          { title: "Đã thu thực tế", dataIndex: "receivedAmount", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Đã thu từ hóa đơn (đến nay)", dataIndex: "receivedAmount", align: "center", render: (v: number) => formatMoney(v) },
           { title: "Đã giao (kg)", dataIndex: "deliveredKg", align: "center", render: (v: number) => new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(v) },
           {
             title: "Còn nợ",

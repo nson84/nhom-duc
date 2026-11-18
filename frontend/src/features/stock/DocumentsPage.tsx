@@ -11,7 +11,7 @@ import {
   StopOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
-import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, message } from "antd";
+import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Statistic, Tag, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
@@ -41,6 +41,7 @@ import {
 } from "../../utils/vnd-input";
 import {
   KG_PER_TON,
+  kgToTon,
   kgUnit,
   purchaseUnit,
   suggestPurchasePricePerUnit,
@@ -52,6 +53,9 @@ import {
 } from "../products/product-stock-unit";
 import { useCanWrite, useSession } from "../auth/auth-store";
 import { useShop } from "../shop/shop-store";
+import { useWorkingYear } from "../dashboard/working-year";
+import { visiblePeriod } from "../dashboard/working-period";
+import { getMonthStatus, getSummary, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
 import { CustomerFormModal } from "../customers/CustomersPage";
 import { CustomerSuggestSearch } from "../customers/CustomerSuggestSearch";
 import { getCustomer, linkDocumentCustomer, listCustomers, type Customer } from "../customers/customers-api";
@@ -63,15 +67,19 @@ import { getSettings, type ShopSettings } from "../settings/settings-api";
 import {
   addPayment,
   documentAction,
+  editConfirmedDocument,
   getDocument,
+  listBalances,
   listDocuments,
   restoreDocument,
   reverseDocument,
   saveDocument,
   trashDocument,
   type DocumentListFilter,
+  type DocumentInput,
   type DocumentSummary,
   type StockDocument,
+  type StockBalance,
 } from "./stock-api";
 
 type Kind = "PURCHASE" | "SALE";
@@ -143,38 +151,81 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   const canWrite = useCanWrite();
   const text = copy[kind];
   const shop = useShop();
+  const workingYear = useWorkingYear(shop);
+  const [workingPeriod, setWorkingPeriod] = useState<YearPeriod | null>(null);
+  const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
   const session = useSession();
   const draftKey = `${purchaseFormDraftKey(kind)}:${shop}:${session?.username}`;
   const parkedKey = `${draftKey}:parked`;
   const [rows, setRows] = useState<DocumentSummary[]>([]);
+  const [supplierDebt, setSupplierDebt] = useState<number | null>(null);
+  const [stockBalances, setStockBalances] = useState<StockBalance[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [listFilter, setListFilter] = useState<DocumentListFilter>("all");
-  const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [editing, setEditing] = useState<StockDocument | "new" | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
   const [parked, setParked] = useState(() => readParkedDrafts(parkedKey));
   const [parkedId, setParkedId] = useState<string>();
   const draftRestoredRef = useRef(false);
 
+  useEffect(() => {
+    let active = true;
+    setWorkingPeriod(null);
+    setRows([]);
+    setSupplierDebt(null);
+    setStockBalances([]);
+    void getYearPeriod(workingYear.year).then((value) => {
+      if (active) setWorkingPeriod(visiblePeriod(value, workingYear.month));
+    }).catch((error) => { if (active) message.error(toApiError(error).message); });
+    return () => { active = false; };
+  }, [shop, workingYear.year, workingYear.month]);
+
+  useEffect(() => {
+    if (!workingYear.month) { setMonthStatus("NOT_OPEN"); return; }
+    let active = true;
+    getMonthStatus(workingYear.month).then((value) => { if (active) setMonthStatus(value); })
+      .catch(() => { if (active) setMonthStatus("NOT_OPEN"); });
+    return () => { active = false; };
+  }, [shop, workingYear.month]);
+
   const load = useCallback(async () => {
+    if (!workingPeriod) return;
+    if (!workingPeriod.started) { setRows([]); setSupplierDebt(null); return; }
     setLoading(true);
     try {
-      setRows(
-        await listDocuments({
+      const [documents, dashboard, balances] = await Promise.all([
+        listDocuments({
           type: kind,
           filter: listFilter,
           q: query || undefined,
-          from: range?.[0]?.format("YYYY-MM-DD"),
-          to: range?.[1]?.format("YYYY-MM-DD"),
+          from: workingPeriod.periodFrom,
+          to: workingPeriod.periodTo,
         }),
-      );
+        kind === "PURCHASE" ? getSummary(workingPeriod.periodFrom, workingPeriod.periodTo) : Promise.resolve(null),
+        kind === "PURCHASE" ? listBalances({ onlyInStock: false }) : Promise.resolve([]),
+      ]);
+      setRows(documents);
+      setSupplierDebt(dashboard?.supplierDebt ?? null);
+      setStockBalances(balances);
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
       setLoading(false);
     }
-  }, [kind, listFilter, query, range]);
+  }, [kind, listFilter, query, workingYear.year, workingPeriod]);
+
+  const stockByCategory = useMemo(() => {
+    const totals = new Map<number, { name: string; kg: number }>();
+    for (const balance of stockBalances) {
+      const current = totals.get(balance.categoryId);
+      totals.set(balance.categoryId, {
+        name: balance.categoryName,
+        kg: (current?.kg ?? 0) + Number(balance.quantityBase || 0),
+      });
+    }
+    return [...totals.values()].sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  }, [stockBalances]);
 
   useEffect(() => {
     void load();
@@ -186,9 +237,12 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
 
   // F5: mở lại form phiếu nếu còn bản nháp
   useEffect(() => {
-    if (loading || draftRestoredRef.current || editing) return;
+    if (loading || draftRestoredRef.current || editing || !workingPeriod) return;
     const draft = readSessionDraft<DocumentDraftValues>(draftKey) as DocumentDraft | null;
     if (!draft) return;
+    if (!workingPeriod.started || !draft.values.documentDate ||
+        dayjs(draft.values.documentDate).isBefore(dayjs(workingPeriod.periodFrom), "day") ||
+        dayjs(draft.values.documentDate).isAfter(dayjs(workingPeriod.periodTo), "day")) return;
     draftRestoredRef.current = true;
     setParkedId(draft.parkedId);
     if (draft.targetId === "new") {
@@ -206,7 +260,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
         message.info("Đã khôi phục bản nháp sửa phiếu");
       })
       .catch(() => clearSessionDraft(draftKey));
-  }, [loading, editing, draftKey, kind]);
+  }, [loading, editing, draftKey, kind, workingPeriod]);
 
   function updateParked(next: ParkedDraft[]) {
     localStorage.setItem(parkedKey, JSON.stringify(next));
@@ -232,7 +286,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
     <Card
       title={text.title}
       extra={
-        canWrite ? (
+        canWrite && workingPeriod?.started && !workingPeriod.closed && monthStatus === "OPEN" ? (
           <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => setEditing("new")}>
             {text.newLabel}
           </AppActionButton>
@@ -250,13 +304,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
         ) : (
           <LiveSearch value={query} onChange={setQuery} placeholder="Tìm số phiếu hoặc tên nhà cung cấp" style={{ width: 400 }} suggestions={rows.flatMap((r) => [r.documentCode, r.counterpartyName ?? ""])} />
         )}
-        <DatePicker.RangePicker
-          format="DD/MM/YYYY"
-          value={range}
-          onChange={(value) => setRange(value as [Dayjs, Dayjs] | null)}
-          allowClear
-          placeholder={["Từ ngày", "Đến ngày"]}
-        />
+        {workingPeriod ? <Tag color="blue">Năm {workingYear.year}: {dayjs(workingPeriod.periodFrom).format("DD/MM/YYYY")} – {dayjs(workingPeriod.periodTo).format("DD/MM/YYYY")}</Tag> : null}
         <Select
           style={{ width: 220 }}
           value={listFilter}
@@ -264,6 +312,24 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           options={LIST_FILTER_OPTIONS}
         />
       </Space>
+      {workingPeriod && !workingPeriod.started ? <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={`Năm ${workingYear.year} chưa lưu ngày bắt đầu. Hãy mở Tổng quan để bắt đầu kỳ.`} /> : null}
+      {monthStatus !== "OPEN" && <Alert type="info" showIcon style={{ marginBottom: 16 }}
+        message={monthStatus === "CLOSED" ? `Tháng ${workingYear.month} đã khóa; chỉ xem chứng từ.` : "Tháng chưa mở. Vào Tổng quan, chọn tháng rồi bấm Mở tháng để lập phiếu."} />}
+      {kind === "PURCHASE" && workingPeriod?.started && <Card size="small" style={{ marginBottom: 16 }}>
+        <Statistic title="Doanh nghiệp còn nợ nhà cung cấp từ phiếu nhập trong kỳ" value={formatMoney(supplierDebt ?? 0)} />
+      </Card>}
+      {kind === "PURCHASE" && workingPeriod?.started && <Card size="small" title="Tồn kho hiện tại theo loại nhôm" style={{ marginBottom: 16 }}>
+        {stockByCategory.length ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            {stockByCategory.map((item) => (
+              <div key={item.name} style={{ padding: "8px 16px", textAlign: "center" }}>
+                <Statistic title={item.name}
+                  value={`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(shop === "DISTRIBUTION" ? kgToTon(item.kg) : item.kg)} ${shop === "DISTRIBUTION" ? "tấn" : "kg"}`} />
+              </div>
+            ))}
+          </div>
+        ) : <span>Chưa có tồn kho.</span>}
+      </Card>}
       <PagedTable<DocumentSummary>
         rowKey="id"
         loading={loading}
@@ -318,7 +384,9 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
       {(listFilter === "all" || listFilter === "draft") && parked.length > 0 && (
         <Card size="small" title="Phiếu nháp trên thiết bị này" style={{ marginTop: 12 }}>
           <Space direction="vertical">
-            {parked.map((draft) => (
+            {parked.filter((draft) => workingPeriod?.started && draft.values.documentDate &&
+              !dayjs(draft.values.documentDate).isBefore(dayjs(workingPeriod.periodFrom), "day") &&
+              !dayjs(draft.values.documentDate).isAfter(dayjs(workingPeriod.periodTo), "day")).map((draft) => (
               <Button key={draft.parkedId} disabled={editing != null}
                 onClick={() => void resumeDraft(draft)}>
                 Sửa phiếu nháp · {draft.values.counterpartyName || "Chưa nhập đối tác"} · {dayjs(draft.savedAt).format("DD/MM/YYYY HH:mm")}
@@ -333,6 +401,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           draftKey={draftKey}
           parkedId={parkedId}
           document={editing === "new" ? null : editing}
+          workingPeriod={workingPeriod}
           onPark={(draft, saved) => {
             const id = draft.parkedId ?? crypto.randomUUID();
             const others = readParkedDrafts(parkedKey).filter((row) => row.parkedId !== id
@@ -395,6 +464,7 @@ type EditorValues = {
     unitId?: number;
     quantityDocument?: number;
     unitPrice?: number;
+    lineDiscount?: number;
     weightInputUnit?: PurchaseWeightUnit;
     priceInputUnit?: PurchaseWeightUnit;
     /** kg | m2 — đơn vị tính tiền trên phiếu bán. */
@@ -427,6 +497,7 @@ function EditorModal({
   draftKey,
   parkedId,
   document,
+  workingPeriod,
   onPark,
   onClose,
   onSaved,
@@ -435,6 +506,7 @@ function EditorModal({
   draftKey: string;
   parkedId?: string;
   document: StockDocument | null;
+  workingPeriod: YearPeriod | null;
   onPark: (draft: DocumentDraft, saved: boolean) => void;
   onClose: () => void;
   onSaved: (document: StockDocument) => void;
@@ -458,8 +530,21 @@ function EditorModal({
   const [saveCustomerForm, setSaveCustomerForm] = useState<StockDocument | null>(null);
   const idempotencyKey = useMemo(() => parkedId ?? crypto.randomUUID(), [parkedId]);
   const draftAppliedRef = useRef(false);
+  const autoReceiverRef = useRef(document?.receivedBy === document?.counterpartyName ? document?.receivedBy ?? "" : "");
   const items = Form.useWatch("items", form) ?? [];
   const internalTransfer = Form.useWatch("internal", form) === true;
+  const periodStart = workingPeriod?.started ? dayjs(workingPeriod.periodFrom) : null;
+  const periodEnd = workingPeriod?.started ? dayjs(workingPeriod.periodTo) : null;
+
+  function suggestReceiver(name: string) {
+    if (kind !== "SALE") return;
+    const current = String(form.getFieldValue("receivedBy") ?? "").trim();
+    if (current && current !== autoReceiverRef.current) return;
+    const suggested = name.trim();
+    if (suggested.length > 50) return;
+    form.setFieldValue("receivedBy", suggested);
+    autoReceiverRef.current = suggested;
+  }
 
   const legacyAreaDraft = kind === "SALE" && document?.items.some(
     (item) => item.billingUnit === "m2" || item.unitName === "m²",
@@ -484,14 +569,17 @@ function EditorModal({
   }, [draftKey, snapshotDraft]);
 
   const saveDraftDocument = useCallback((values: EditorValues, confirm = false) => {
-    return saveDocument(document?.id, {
+    const input: DocumentInput = {
       documentType: kind,
       documentDate: values.documentDate.format("YYYY-MM-DDTHH:mm:ss"),
       counterpartyName: values.counterpartyName,
       customerId: kind === "SALE" ? values.customerId ?? null : undefined,
       issuedBy: values.issuedBy,
       receivedBy: values.receivedBy,
-      discountAmount: 0,
+      reason: document?.reason ?? undefined,
+      discountAmount: document?.discountAmount ?? 0,
+      paymentMethod: document?.paymentMethod ?? undefined,
+      notes: document?.notes ?? undefined,
       internal: canMarkInternal ? Boolean(values.internal) : false,
       idempotencyKey: document ? undefined : idempotencyKey,
       items: values.items.map((i) => {
@@ -503,12 +591,15 @@ function EditorModal({
           unitId: i.unitId!,
           quantityDocument,
           unitPrice,
-          lineDiscount: 0,
+          lineDiscount: i.lineDiscount ?? 0,
           billingUnit: "kg",
         };
       }),
-    }, confirm);
-  }, [document?.id, kind, canMarkInternal, idempotencyKey]);
+    };
+    return document?.status === "CONFIRMED"
+      ? editConfirmedDocument(document.id, input)
+      : saveDocument(document?.id, input, confirm);
+  }, [document, kind, canMarkInternal, idempotencyKey]);
 
   const askToPark = useCallback((onLeave?: () => void, onContinue?: () => void) => Modal.confirm({
     title: "Bạn muốn tiếp tục hoàn thành phiếu?",
@@ -632,10 +723,10 @@ function EditorModal({
 
 
   useEffect(() => {
-    if (!internalTransfer) return;
+    if (kind !== "SALE") return;
     // Xuất nội bộ chỉ theo khối lượng — ép các dòng m² về kg.
     const list = [...((form.getFieldValue("items") as EditorValues["items"] | undefined) ?? [])];
-    if (list.some((line) => line?.billingUnit === "m2")) {
+    if (internalTransfer && list.some((line) => line?.billingUnit === "m2")) {
       const next = [...list];
       next.forEach((line, index) => {
         if (line?.billingUnit !== "m2") return;
@@ -654,6 +745,22 @@ function EditorModal({
       });
       form.setFieldValue("items", next);
     }
+    const priced = (form.getFieldValue("items") as EditorValues["items"] | undefined) ?? [];
+    let changed = false;
+    const nextPrices = priced.map((line) => {
+      const category = categoryMap.get(line?.categoryId ?? 0);
+      if (!category) return line;
+      const weight = line?.weightInputUnit === "tạ" || line?.weightInputUnit === "kg" ? line.weightInputUnit : "tấn";
+      const current = Number(line?.unitPrice ?? 0);
+      if (line.suggestedPrice !== undefined && current !== line.suggestedPrice) return line;
+      const suggested = internalTransfer
+        ? suggestPurchasePricePerUnit(category, weight)
+        : suggestSalePricePerWeightUnit(category, weight);
+      if (current === suggested) return line;
+      changed = true;
+      return { ...line, unitPrice: suggested, suggestedPrice: suggested };
+    });
+    if (changed) form.setFieldValue("items", nextPrices);
   }, [internalTransfer, form, productMap, categoryMap]);
 
   // Khi danh mục loại nhôm tải xong (hoặc khôi phục bản nháp), cập nhật giá gợi ý cho các dòng
@@ -715,7 +822,11 @@ function EditorModal({
     if (!unit) {
       message.warning("Sản phẩm chưa có đơn vị phù hợp. Hãy Sửa và Lưu lại trong danh mục.");
     }
-    const suggested = category && unit ? suggestSalePricePerUnit(category, unit) : undefined;
+    const suggested = category && unit
+      ? internalTransfer
+        ? suggestPurchasePricePerUnit(category, weight)
+        : suggestSalePricePerUnit(category, unit)
+      : undefined;
     list[index] = {
       ...list[index],
       productId: product.id,
@@ -843,7 +954,9 @@ function EditorModal({
     const nextFactor = weight === "tấn" ? 1000 : weight === "tạ" ? 100 : 1;
     const category = categoryMap.get(line?.categoryId ?? 0);
     const currentPrice = Number(line?.unitPrice ?? 0);
-    const suggested = category ? suggestSalePricePerWeightUnit(category, weight) : currentPrice * nextFactor / oldFactor;
+    const suggested = category
+      ? internalTransfer ? suggestPurchasePricePerUnit(category, weight) : suggestSalePricePerWeightUnit(category, weight)
+      : currentPrice * nextFactor / oldFactor;
     const untouched = line?.suggestedPrice === undefined ? currentPrice === 0 : currentPrice === line.suggestedPrice;
     list[index] = {
       ...line,
@@ -875,14 +988,14 @@ function EditorModal({
   function purchaseLineTotal(item: EditorValues["items"][number]) {
     const qty = Number(item?.quantityDocument ?? 0);
     const displayPrice = Math.round(Number(item?.unitPrice ?? 0));
-    return Math.max(0, Math.round(qty * displayPrice));
+    return Math.max(0, Math.round(qty * displayPrice) - (item?.lineDiscount ?? 0));
   }
 
   const subtotal = items.reduce((sum, item) => {
     if (kind === "PURCHASE") return sum + purchaseLineTotal(item);
     const qty = Number(item?.quantityDocument ?? 0);
     const price = Math.round(Number(item?.unitPrice ?? 0));
-    return sum + Math.max(0, Math.round(qty * price));
+    return sum + Math.max(0, Math.round(qty * price) - (item?.lineDiscount ?? 0));
   }, 0);
 
   return (
@@ -925,11 +1038,20 @@ function EditorModal({
           message="Phiếu nháp m² đã được chuyển sang bán theo cân. Hãy kiểm tra lại khối lượng và nhập đơn giá / kg trước khi lưu."
         />
       ) : null}
+      {document?.status === "CONFIRMED" ? (
+        <Alert type="info" showIcon style={{ marginBottom: 16 }}
+          message="Sửa phiếu trong 24 giờ từ lúc xác nhận"
+          description="Tồn kho, tổng tiền và công nợ sẽ được tính lại. Tổng tiền mới không được thấp hơn số đã thanh toán; kỳ đã chốt không thể sửa." />
+      ) : null}
       <Form<EditorValues>
         form={form}
         layout="vertical"
         className="document-editor-form"
         validateTrigger={[...documentFieldValidateTrigger]}
+        onFinishFailed={({ errorFields }) => {
+          const dateError = errorFields.find((field) => field.name[0] === "documentDate");
+          if (dateError) message.warning(dateError.errors[0]);
+        }}
         initialValues={
           document
             ? {
@@ -953,6 +1075,7 @@ function EditorModal({
                       billingUnit: "kg" as const,
                       quantityDocument: Number(Number(i.quantityBase).toFixed(6)),
                       unitPrice: undefined,
+                      lineDiscount: i.lineDiscount,
                       suggestedPrice: undefined,
                       weightInputUnit: sellByKg ? "kg" : "tấn",
                       priceInputUnit: sellByKg ? "kg" : "tấn",
@@ -977,6 +1100,7 @@ function EditorModal({
                     billingUnit: "kg" as const,
                     quantityDocument,
                     unitPrice,
+                    lineDiscount: i.lineDiscount,
                     weightInputUnit: weight,
                     priceInputUnit: weight,
                     suggestedPrice: unitPrice,
@@ -984,7 +1108,8 @@ function EditorModal({
                 }),
               }
             : {
-                documentDate: dayjs(),
+                documentDate: periodStart && (dayjs().isBefore(periodStart) || periodEnd && dayjs().isAfter(periodEnd))
+                  ? periodStart : dayjs(),
                 internal: false,
                 items: [
                   {
@@ -1046,7 +1171,7 @@ function EditorModal({
               });
             });
             const saved = await saveDraftDocument(values, canMarkInternal);
-            message.success(kind === "PURCHASE" ? "Đã tạo phiếu nhập" : "Đã lưu phiếu");
+            message.success(document?.status === "CONFIRMED" ? "Đã sửa phiếu" : kind === "PURCHASE" ? "Đã tạo phiếu nhập" : "Đã lưu phiếu");
             if (shouldUpdatePrices) {
               for (const [id, price] of updates) {
                 try {
@@ -1084,8 +1209,17 @@ function EditorModal({
           <InputNumber />
         </Form.Item>
         <Space className="doc-form-meta-row" align="start" wrap size={[16, 32]}>
-          <Form.Item name="documentDate" label="Ngày phiếu" rules={[{ required: true, message: "Chọn ngày" }]}>
-            <DatePicker showTime format="DD/MM/YYYY HH:mm" />
+          <Form.Item name="documentDate" label="Ngày phiếu" rules={[{ required: true, message: "Chọn ngày" }, {
+            validator: (_, value: Dayjs | null) => {
+              if (!value || !periodStart) return Promise.resolve();
+              if (value.isBefore(periodStart, "day")) return Promise.reject(new Error(`Ngày phiếu không được trước ${periodStart.format("DD/MM/YYYY")}`));
+              if (periodEnd && value.isAfter(periodEnd, "day")) return Promise.reject(new Error(`Ngày phiếu không được sau ${periodEnd.format("DD/MM/YYYY")}`));
+              if (workingPeriod?.closed) return Promise.reject(new Error("Năm đã chốt, không thể sửa phiếu"));
+              return Promise.resolve();
+            },
+          }]}>
+            <DatePicker showTime needConfirm={false} format="DD/MM/YYYY HH:mm"
+              minDate={periodStart ?? undefined} maxDate={periodEnd ?? undefined} />
           </Form.Item>
           {kind === "SALE" ? (
             <Form.Item name="counterpartyName" label={text.counterparty} rules={optionalNameRules(200)}>
@@ -1102,6 +1236,7 @@ function EditorModal({
                     counterpartyName: String(value),
                     customerId: opt.customerId,
                   });
+                  suggestReceiver(String(value));
                 }}
                 onChange={(value) => {
                   const match =
@@ -1111,6 +1246,7 @@ function EditorModal({
                     counterpartyName: value,
                     customerId: match?.id,
                   });
+                  suggestReceiver(value);
                 }}
               />
             </Form.Item>
@@ -1128,7 +1264,13 @@ function EditorModal({
                 : optionalNameRules(150)
             }
           >
-            <Input style={{ width: 200 }} maxLength={150} showCount={kind === "SALE"} />
+            {kind === "SALE" ? (
+              <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác" style={{ width: 240 }}>
+                <Input maxLength={150} />
+              </AutoComplete>
+            ) : (
+              <Input style={{ width: 200 }} maxLength={150} />
+            )}
           </Form.Item>
           <Form.Item
             name="receivedBy"
@@ -1355,12 +1497,12 @@ function EditorModal({
                         ) : null}
                         <Form.Item
                           name={[field.name, "unitPrice"]}
-                          label={sellByKg ? `Đơn giá / ${current?.weightInputUnit ?? "kg"}` : "Đơn giá / tấn"}
+                          label={internalTransfer ? `Giá nhập nội bộ / ${current?.weightInputUnit ?? "tấn"}` : sellByKg ? `Đơn giá / ${current?.weightInputUnit ?? "kg"}` : "Đơn giá / tấn"}
                           validateFirst
                           rules={vndUnitPriceRules}
                           extra={
                             internalTransfer
-                              ? undefined
+                              ? "Gợi ý theo giá nhập của loại nhôm; kiểm tra và sửa theo giá vốn thực tế trước khi lưu"
                               : "Lấy từ giá bán của loại nhôm; có thể sửa trên phiếu"
                           }
                         >
@@ -1408,7 +1550,7 @@ function EditorModal({
           )}
         </Form.List>
         <div style={{ textAlign: "center", fontSize: 16, marginTop: 16 }}>
-          Tổng thanh toán: <b>{formatMoney(subtotal)}</b>
+        Tổng thanh toán: <b>{formatMoney(Math.max(0, subtotal - (document?.discountAmount ?? 0)))}</b>
         </div>
       </Form>
     </Modal>
@@ -1594,6 +1736,12 @@ function DetailModal({
                 Xác nhận
               </AppActionButton>
             </>
+          ) : null}
+          {canWrite && confirmed && !doc.internal && doc.confirmedAt &&
+            dayjs().isBefore(dayjs(doc.confirmedAt).add(24, "hour")) ? (
+            <AppActionButton tone="edit" icon={<EditOutlined />} onClick={() => onEdit(doc)}>
+              Sửa phiếu (24 giờ)
+            </AppActionButton>
           ) : null}
           {canWrite && confirmed && remaining > 0 && !doc.internal ? (
             <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => setPaying(true)}>
@@ -1935,7 +2083,7 @@ function SaleInvoiceModal({ doc, onClose }: { doc: StockDocument; onClose: () =>
   );
 }
 
-function PaymentModal({
+export function PaymentModal({
   label,
   remaining,
   kind,
@@ -1956,8 +2104,20 @@ function PaymentModal({
     paidBy?: string;
   }) => Promise<void>;
 }) {
-  const session = useSession();
+  const workingYear = useWorkingYear(useShop());
   const [form] = Form.useForm<{ amount: number; paymentMethod: string; paymentDate: Dayjs; note?: string; collectedBy?: string; paidBy?: string }>();
+  const [paymentPeriod, setPaymentPeriod] = useState<YearPeriod | null>(null);
+  useEffect(() => {
+    let active = true;
+    getYearPeriod(workingYear.year).then((value) => {
+      if (!active) return;
+      const shown = visiblePeriod(value, workingYear.month);
+      setPaymentPeriod(shown);
+      if (shown?.started && (dayjs().isBefore(dayjs(shown.periodFrom), "day") || dayjs().isAfter(dayjs(shown.periodTo), "day")))
+        form.setFieldValue("paymentDate", dayjs(shown.periodFrom));
+    }).catch((error) => { if (active) message.error(toApiError(error).message); });
+    return () => { active = false; };
+  }, [form, workingYear.year, workingYear.month]);
   const key = useMemo(() => crypto.randomUUID(), []);
   const amountWatch = Form.useWatch("amount", form);
   const enteredAmount = Number(amountWatch ?? 0);
@@ -1985,7 +2145,6 @@ function PaymentModal({
           amount: remaining,
           paymentMethod: "CASH",
           paymentDate: dayjs(),
-          collectedBy: kind === "SALE" ? session?.username ?? "" : undefined,
         }}
         onFinish={(values) =>
           Modal.confirm({
@@ -2029,9 +2188,15 @@ function PaymentModal({
         <Form.Item
           name="paymentDate"
           label="Thời gian thanh toán"
-          rules={[{ required: true, message: "Chọn thời gian thanh toán" }]}
+          rules={[{ required: true, message: "Chọn thời gian thanh toán" }, {
+            validator: (_, value: Dayjs | null) => value && paymentPeriod?.started &&
+              (value.isBefore(dayjs(paymentPeriod.periodFrom), "day") || value.isAfter(dayjs(paymentPeriod.periodTo), "day"))
+              ? Promise.reject(new Error("Ngày thanh toán phải nằm trong tháng/kỳ đang chọn")) : Promise.resolve(),
+          }]}
         >
-          <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: "100%" }} />
+          <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: "100%" }}
+            minDate={paymentPeriod?.started ? dayjs(paymentPeriod.periodFrom) : undefined}
+            maxDate={paymentPeriod?.started ? dayjs(paymentPeriod.periodTo) : undefined} />
         </Form.Item>
         <Form.Item
           name="amount"
@@ -2063,15 +2228,24 @@ function PaymentModal({
         <Form.Item label={remainingLabel}>
           <Input value={formatMoney(remainingAfter)} readOnly />
         </Form.Item>
-        {kind === "PURCHASE" && <Form.Item name="paidBy" label="Người trả tiền" rules={requiredNameRules("Nhập người trả tiền", 80)}><Input maxLength={80} /></Form.Item>}
-          <Form.Item
-            name="collectedBy"
-            label={kind === "PURCHASE" ? "Người nhận tiền" : "Người thu tiền"}
-            rules={requiredNameRules("Nhập người thu tiền", 80)}
-            extra="Tên này in trên hóa đơn nợ, mỗi lần thu một người"
-          >
+        {kind === "PURCHASE" && <Form.Item name="paidBy" label="Người trả tiền" rules={requiredNameRules("Nhập người trả tiền", 80)}>
+          <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
             <Input maxLength={80} />
-          </Form.Item>
+          </AutoComplete>
+        </Form.Item>}
+        <Form.Item
+          name="collectedBy"
+          label={kind === "PURCHASE" ? "Người nhận tiền" : "Người thu tiền"}
+          rules={requiredNameRules(kind === "PURCHASE" ? "Nhập người nhận tiền" : "Nhập người thu tiền", 80)}
+          extra={kind === "SALE" ? "Chọn Hải, Thuấn hoặc nhập tên khác; tên này sẽ in trên hóa đơn nợ" : undefined}
+        >
+          {kind === "SALE" ? (
+            <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]}
+              placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
+              <Input maxLength={80} />
+            </AutoComplete>
+          ) : <Input maxLength={80} />}
+        </Form.Item>
         <Form.Item
           name="paymentMethod"
           label="Hình thức thanh toán"
@@ -2108,7 +2282,16 @@ function ReverseModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (r
       <p style={{ marginTop: 0 }}>
         Phiếu gốc không bị sửa. Hệ thống tạo phiếu đảo để loại phiếu gốc khỏi báo cáo; biến động kho cũ sẽ được hoàn nếu có. Mỗi phiếu chỉ đảo một lần.
       </p>
-      <Form form={form} layout="vertical" onFinish={({ reason }) => onSubmit(reason)}>
+      <Form form={form} layout="vertical" onFinish={({ reason }) => {
+        Modal.confirm({
+          title: "Xác nhận đảo phiếu?",
+          content: "Hệ thống sẽ tạo phiếu đảo và hoàn biến động kho (nếu có). Thao tác này chỉ thực hiện được một lần.",
+          okText: "Xác nhận đảo phiếu",
+          cancelText: "Quay lại",
+          okButtonProps: { style: appButtonStyle("reverse") },
+          onOk: () => onSubmit(reason),
+        });
+      }}>
         <Form.Item name="reason" label="Lý do" rules={[{ required: true, message: "Nhập lý do đảo phiếu" }]}>
           <Input.TextArea rows={3} />
         </Form.Item>

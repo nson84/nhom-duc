@@ -6,6 +6,8 @@ Bảng khách, hóa đơn và nhắc nợ cuộn ngang bên trong bảng khi c�
 
 ### `/khach-mua` — Khách mua (công nợ nhẹ)
 
+Phiếu xuất nội bộ Phân phối → Xưởng vẫn cộng kg đã giao cho khách/nơi nhận nội bộ, nhưng không cộng giá chuyển vào tiền hàng phải thu, tiền đã thu hoặc nợ khách. Danh sách và chi tiết gắn nhãn Nội bộ; giá trị chuyển vẫn xem được trong chi tiết phiếu, tách khỏi công nợ khách.
+
 | | |
 |--|--|
 | File | `features/customers/CustomersPage.tsx`, `CustomerDetailPage.tsx`, `debt-print.ts` |
@@ -13,10 +15,13 @@ Bảng khách, hóa đơn và nhắc nợ cuộn ngang bên trong bảng khi c�
 | API | `/customers`, reminders, `stock-documents/{id}/customer`, payments; settings (đọc TK ngân hàng khi in QR) |
 
 **Chức năng**
-- Bốn ô tổng kg đã giao, tiền hàng phải thu, tiền đã thu thực tế và nợ còn lại cộng theo danh sách khách và khoảng ngày bán đang lọc; bảng khách hiện tiền hàng, tiền thu, kg giao và nợ. Tiền thu tính từ các hóa đơn thuộc khoảng ngày bán đã lọc, kể cả lần thanh toán sau khoảng đó.
+- Bốn ô tổng kg đã giao, tiền hàng phải thu, tiền đã thu từ các hóa đơn đã lọc tính đến nay và nợ còn lại cộng theo danh sách khách và khoảng ngày bán đang lọc; bảng khách hiện tiền hàng, tiền thu, kg giao và nợ. Tiền thu tính từ các hóa đơn thuộc khoảng ngày bán đã lọc, kể cả lần thanh toán sau khoảng đó.
+- Tổng kg đã giao ở danh sách khách và chi tiết từng khách hiển thị thêm số kg theo từng loại, cùng phạm vi khách/ngày đang xem.
+- Danh sách và chi tiết khách mặc định theo kỳ năm đang chọn ở Tổng quan; nếu đã chọn tháng thì chỉ lấy các phiếu trong phần giao của tháng và kỳ năm. Tổng tiền thu gắn với các phiếu đang lọc, kể cả lần thanh toán ghi sau ngày bán.
+- Ở chi tiết khách có bộ lọc khoảng ngày lập phiếu và trạng thái thanh toán. **In hóa đơn đã lọc** xuất đúng các phiếu đang lọc, mới nhất trước; mỗi phiếu in dòng hàng, kg, từng lần trả có ngày giờ, tổng tiền/đã trả/còn nợ. Cuối bản in cộng lại các phiếu được lọc. Phiếu nội bộ vẫn cộng kg nhưng giá chuyển không cộng tiền hàng và nợ khách.
 - Danh sách khách theo shop (Admin: gộp + cột cửa hàng); badge còn nợ; banner nhắc đến hạn
-- Chi tiết: kg đã giao / tiền hàng phải thu / đã thu thực tế / còn nợ; bảng hóa đơn mặc định hiện tất cả, có thể lọc còn nợ hoặc trạng thái thanh toán. Bấm một dòng để xem chi tiết: sản phẩm, loại nhôm, số lượng, đơn giá, thành tiền, người xuất, người nhận, nhãn thanh toán. Thống kê năm Xưởng mặc định chọn năm của phiếu mua gần nhất. Lịch nhắc nợ
-- **Trả nợ** từng phiếu: trả hết hoặc một phần, nhập **người thu tiền** → **popup xác nhận** (số tiền, hình thức, người thu, còn phải thu sau lần này) rồi mới ghi `sales_payments`
+- Chi tiết: kg đã giao / tiền hàng phải thu / đã thu từ các hóa đơn đã lọc theo ngày bán (tính đến nay) / còn nợ; bảng hóa đơn mặc định hiện tất cả, có thể lọc còn nợ hoặc trạng thái thanh toán. Bấm một dòng để xem chi tiết: sản phẩm, loại nhôm, số lượng, đơn giá, thành tiền, người xuất, người nhận, nhãn thanh toán. Thống kê năm Xưởng mặc định chọn năm của phiếu mua gần nhất. Lịch nhắc nợ
+- **Trả nợ** từng phiếu: trả hết hoặc một phần, chọn **Hải**, **Thuấn** hoặc nhập tên người thu khác (không tự điền tên tài khoản) → **popup xác nhận** (số tiền, hình thức, người thu, còn phải thu sau lần này) rồi mới ghi `sales_payments`
 - **In danh sách nợ** (nút trên chi tiết khách): xem trước PDF; mỗi hóa đơn còn nợ (cũ → mới) in sản phẩm, loại nhôm, số lượng, đơn giá, thành tiền, người xuất, người nhận, và **nhãn thanh toán** (chưa thanh toán / một phần / đã thanh toán, kèm tiền mặt hoặc chuyển khoản). Dòng đã thu là bảng thẳng cột: ngày giờ, số tiền, hình thức thanh toán, người thu (tên nhập lúc ghi thu). Không in số phiếu. Cuối trang là tổng còn nợ và bằng chữ
   - Tùy chọn **Gắn mã QR VietQR** (số tiền = tổng còn nợ; nội dung dạng `TenKhach tra 7500000 18h05 05-11-2026`, không dấu, ≤50 ký tự)
   - Cần khai báo TK nhận ở `/cai-dat`; quét bằng app ngân hàng điền sẵn số tiền + nội dung
@@ -44,3 +49,7 @@ File in: `features/customers/debt-print.ts`, QR: `utils/vietqr.ts`.
 Chi tiết khách xưởng có thống kê năm và dòng phiếu theo kg; phiếu đã lập và xác nhận được xem là đã giao.
 
 Chi tiết khách ẩn ghi chú hồ sơ. Nút Lịch nhắc nợ mở bảng lịch trong hộp thoại.
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

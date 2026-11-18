@@ -45,32 +45,32 @@ export type DailyRevenueRow = {
   day: string;
   saleCount: number;
   revenue: number;
-  cogs: number;
-  grossProfit: number;
+  cogs: number | null;
+  grossProfit: number | null;
   cashCollected: number;
   operatingExpense: number;
-  standardCogs: number;
-  standardGrossProfit: number;
+  standardCogs: number | null;
+  standardGrossProfit: number | null;
   /** Giá vốn thực tế − giá vốn chuẩn. Dương: nhập đắt hơn giá chuẩn. */
-  priceVariance: number;
+  priceVariance: number | null;
 };
 
 export type ProfitReport = {
   from: string;
   to: string;
   revenue: number;
-  cogs: number;
-  grossProfit: number;
+  cogs: number | null;
+  grossProfit: number | null;
   operatingExpenses: number;
-  netProfit: number;
+  netProfit: number | null;
   cashCollected: number;
   uncollectedRevenue: number;
   purchaseStockValue: number;
   purchasePaymentOutflow: number;
-  standardCogs: number;
-  standardGrossProfit: number;
-  standardNetProfit: number;
-  priceVariance: number;
+  standardCogs: number | null;
+  standardGrossProfit: number | null;
+  standardNetProfit: number | null;
+  priceVariance: number | null;
   /** False khi còn dòng bán chưa xác định được giá chuẩn (thiếu lịch sử giá nhập). */
   standardCostComplete: boolean;
   dailyRows: DailyRevenueRow[];
@@ -85,6 +85,7 @@ export type InvoiceGrossMargin = {
   estimatedMaterialCost: number | null;
   estimatedGrossProfit: number | null;
   costComplete: boolean;
+  internal: boolean;
 };
 
 export type ProductSalesRow = {
@@ -95,11 +96,11 @@ export type ProductSalesRow = {
   baseUnitName: string;
   quantityBaseSold: number;
   revenue: number;
-  cogs: number;
-  grossProfit: number;
-  standardCogs: number;
-  standardGrossProfit: number;
-  priceVariance: number;
+  cogs: number | null;
+  grossProfit: number | null;
+  standardCogs: number | null;
+  standardGrossProfit: number | null;
+  priceVariance: number | null;
 };
 
 /** Soát chênh lệch giữa giá nhập chuẩn và giá nhập thực tế đã ghi trên phiếu nhập. */
@@ -206,8 +207,8 @@ export async function getInventoryReport(params: {
   return (await api.get<Envelope<InventoryReportRow[]>>("/api/v1/reports/inventory", { params })).data.data;
 }
 
-export async function getPayrollReport(year?: number, scope?: "all"): Promise<PayrollReportRow[]> {
-  return (await api.get<Envelope<PayrollReportRow[]>>("/api/v1/reports/payroll", { params: { year, scope } })).data.data;
+export async function getPayrollReport(year?: number, scope?: "all", from?: string, to?: string): Promise<PayrollReportRow[]> {
+  return (await api.get<Envelope<PayrollReportRow[]>>("/api/v1/reports/payroll", { params: { year, scope, from, to } })).data.data;
 }
 
 export async function getPriceVarianceReport(params: {

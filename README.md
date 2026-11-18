@@ -38,9 +38,11 @@ Hai cửa sổ PowerShell:
 
 Mở `http://127.0.0.1:5173`.
 
+Khi sửa Java, Spring Boot DevTools tự khởi động lại backend sau khi class được biên dịch. Giữ cửa sổ backend đang chạy, rồi ở cửa sổ PowerShell khác chạy `cd backend; .\mvnw.cmd -q -DskipTests compile`. Không cần đóng/mở lại backend hay chạy toàn bộ test. Lần đầu thêm DevTools cần khởi động backend lại một lần; từ đó thay đổi mã Java chỉ cần biên dịch. Giao diện Vite tự cập nhật khi lưu file frontend.
+
 Ảnh sản phẩm lưu trong thư mục `image` ở gốc dự án khi chạy bằng `dev-backend.ps1`. Sao lưu thư mục này cùng database để giữ ảnh khi chuyển máy. Có thể đặt `ALUMINUM_IMAGE_DIR` để dùng thư mục khác.
 
-Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. `AdminBootstrap` tạo ba tài khoản `admin`, `phanphoi`, `xuong` nếu chưa tồn tại, với mật khẩu ban đầu `1234567` và yêu cầu đổi mật khẩu. Tài khoản đã có giữ nguyên mật khẩu và trạng thái khi backend khởi động lại. Form đăng nhập tự điền `1234567` khi chọn tài khoản; nếu tài khoản đã đổi mật khẩu, hãy nhập mật khẩu hiện tại. Các biến cấu hình khác được khai báo trong `application.yml`:
+Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. Khi chạy bằng script dev, tài khoản mới `admin`, `phanphoi`, `xuong` dùng mật khẩu thử nghiệm `1234567` và phải đổi ngay. Bản đóng gói tạo mật khẩu ngẫu nhiên riêng cho từng tài khoản mới; đọc tệp `first-run-credentials-*.txt` trong `%APPDATA%\AluminumManager`, đăng nhập, đổi mật khẩu rồi xóa tệp. Nếu đã có tài khoản, backend giữ nguyên mật khẩu và trạng thái. Form production không tự điền mật khẩu. Các biến cấu hình khác được khai báo trong `application.yml`:
 
 - `ALUMINUM_JWT_SECRET` (ít nhất 32 byte)
 - `ALUMINUM_DB_USERNAME`
@@ -55,7 +57,7 @@ cd backend
 .\mvnw.cmd test
 ```
 
-Các phép thử này khóa quy tắc bán 10 cây × 3,5 kg, giá vốn bình quân, từ chối tồn âm, mã phiếu, tháng 2 nhuận và tăng ca chưa duyệt.
+Các phép thử kiểm tra quy đổi khối lượng, phép tính kho, từ chối tồn âm, mã phiếu, tháng 2 nhuận và tăng ca chưa duyệt. Các phép thử toán học về bình quân không xác định công thức lãi quyết toán Phân phối.
 
 ## Quyết toán nhôm xưởng theo năm
 
@@ -74,13 +76,13 @@ Lệnh đầu tạo thử rồi hoàn tác; lệnh sau ghi dữ liệu trong m�
 
 ### In sổ cuối năm
 
-Mở **Sổ cuối năm**, chọn năm và bấm **Tạo bản xem trước**. Admin có thể chọn **Cả hai sổ** để in chung một quyển; tài khoản vận hành chỉ in sổ của mình. Bản in gồm từng khách và phiếu bán/thu tiền, nợ chi tiết, sổ thu, sổ chi, phiếu nhập/nợ nhà cung cấp, công thợ Xưởng và tồn kho. Bấm **In / Lưu thành PDF**, chọn máy in PDF trong hộp thoại, rồi in/photocopy bản PDF. Số liệu chưa chốt có nhãn tạm tính.
+Mở **Sổ cuối năm** bằng tài khoản Xưởng hoặc Phân phối, chọn năm và bấm **Tạo bản xem trước**. Mỗi tài khoản vận hành chỉ in sổ của mình; Admin không truy cập màn này. Bản in gồm từng khách và phiếu bán/thu tiền, nợ chi tiết, sổ thu, sổ chi, phiếu nhập/nợ nhà cung cấp, công thợ Xưởng và tồn kho. Bấm **In / Lưu thành PDF**, chọn máy in PDF trong hộp thoại, rồi in/photocopy bản PDF. Số liệu chưa chốt có nhãn tạm tính.
 
 Khi chốt năm Xưởng, ứng dụng lưu bản số dư nhôm, nợ khách, nợ nhà cung cấp và lãi tại thời điểm chốt. Phân phối chọn tên năm, đặt ngày bắt đầu và ngày chốt trên Tổng quan rồi bấm **Chốt năm** để có bản số dư tương tự. Sau đó chỉ cần chọn tên năm trên Tổng quan, Báo cáo hoặc Thu chi: ứng dụng hiện ngày bắt đầu/kết thúc đã lưu và lọc đúng kỳ. Kỳ kế tiếp bắt đầu sau ngày chốt; Sổ cuối năm cũng lấy mốc này. Bản chốt dùng để đối chiếu; tồn kho và công nợ tiếp tục theo phiếu gốc sang năm sau. Thu hoặc trả nợ cũ chỉ thay đổi dòng tiền và công nợ, không tính lãi lần hai.
 
 Xưởng ghi phiếu nhập nhôm, phiếu bán thành phẩm đã giao và từng lần bán phế liệu. Phiếu bán xưởng mới không trừ tồn theo ngày. Vào **Quyết toán xưởng** để kiểm kê nhôm nguyên liệu, phế liệu chưa bán, hàng đang làm và thành phẩm chưa bán vào cuối năm. Báo cáo tính hao hụt ước tính và lãi quản trị theo giá trị tồn đầu/cuối năm; trang này cũng có công nợ khách theo tháng/năm. Phân phối tiếp tục quản lý tồn liên tục.
 
-Nguyên liệu cuối năm được cân theo **từng loại nhôm**. Giá trị của mỗi loại lấy từ phiếu nhập xưởng đã xác nhận gần nhất, thiếu số kg thì lấy tiếp phiếu trước; chi tiết phân bổ được lưu khi chốt. Trên phiếu bán xưởng có thể chọn một phiếu nhập làm **giá nhôm tham chiếu** để lọc các phiếu bán theo giá/kg; giá này chỉ dùng để đối chiếu, không trừ kho hay cộng thêm giá vốn vào lãi năm. Admin mở **Tổng hợp hai bên** để xem doanh thu, tiền thu, nợ và lãi quản trị của phân phối cùng xưởng, đã loại giao dịch chuyển nội bộ khỏi doanh thu. Phân phối do chủ quản lý, không có nhân viên/chấm công/lương. Cả hai sổ chọn một trong năm khoản chi tại **Thu chi → Lập phiếu chi**: tiền điện, ăn mỗi ngày, nước và bánh kẹo giữa giờ, vật tư máy móc, sửa chữa hoặc thay thế bảo dưỡng. Chi trả phiếu nhập được ghi trên phiếu nhập.
+Nguyên liệu cuối năm được cân theo **từng loại nhôm**. Giá trị của mỗi loại lấy từ phiếu nhập xưởng đã xác nhận gần nhất, thiếu số kg thì lấy tiếp phiếu trước; chi tiết phân bổ được lưu khi chốt. Trên phiếu bán xưởng có thể chọn một phiếu nhập làm **giá nhôm tham chiếu** để lọc các phiếu bán theo giá/kg; giá này chỉ dùng để đối chiếu, không trừ kho hay cộng thêm giá vốn vào lãi năm. Admin chỉ dùng Sao lưu và Cài đặt. Phân phối do chủ quản lý, không có nhân viên/chấm công/lương. Cả hai sổ chọn một trong năm khoản chi tại **Thu chi → Lập phiếu chi**: tiền điện, ăn mỗi ngày, nước và bánh kẹo giữa giờ, vật tư máy móc, sửa chữa hoặc thay thế bảo dưỡng. Chi trả phiếu nhập được ghi trên phiếu nhập.
 
 ## Giá nhập thay đổi theo ngày
 Chuông nhắc kiểm tra giá bán lưu trong trình duyệt. Khi mở ứng dụng, các nhắc thuộc loại nhôm không còn trong database được gỡ tự động; nếu reset dữ liệu khi app đang mở, tải lại trang để đồng bộ.
@@ -88,12 +90,13 @@ Giá nhập không còn là một ô bị ghi đè. Mỗi loại nhôm có một
 
 Khi lập phiếu nhập với đơn giá khác giá hiện tại, popup hiện giá cũ/mới và ngày bắt đầu áp dụng trước khi lưu. Có thể chỉ lưu phiếu hoặc đồng thời cập nhật giá chuẩn; lịch sử giữ cả mốc cũ nếu đổi nhiều lần trong cùng ngày.
 
-Hai lớp số được giữ tách biệt:
+Các nguồn giá được sử dụng theo nghiệp vụ:
 
-- **Phân phối: giá vốn thực tế** — bình quân gia quyền từ các lần nhập thật. Mỗi phiếu bán lưu giá vốn tại lúc xác nhận.
-- **Giá vốn chuẩn phân phối** — lấy theo giá nhập tham khảo có hiệu lực đúng **ngày phiếu**, lưu snapshot trên dòng phiếu. Phiếu bán xưởng có trường giá nhập tham chiếu riêng, không dùng làm giá vốn hằng ngày.
+- **Phân phối** quản lý khối lượng tồn liên tục. Giá trị tồn cuối kỳ được phân bổ từ các phiếu nhập mới nhất trở về trước theo số cân thực tế khi quyết toán.
+- **Giá nhập chuẩn Phân phối** lấy theo lịch sử có hiệu lực đúng ngày phiếu, lưu trên dòng phiếu để tính lãi gộp ước tính. Phiếu bán Xưởng có giá nhôm tham chiếu riêng.
+- Dự án hiện không có thuật toán FIFO. Phép tính bình quân còn trong luồng kho Xưởng phục vụ dữ liệu kho hiện có. Lãi quyết toán dùng công thức theo kỳ và kiểm kê cuối kỳ của từng sổ.
 
-Báo cáo **Chênh lệch giá nhập** cho biết nhập thực tế đắt hay rẻ hơn giá chuẩn; trong tab Doanh thu & Lợi nhuận có thêm *Lãi gộp theo giá nhập chuẩn* và *Chênh lệch giá nhập (thực tế − chuẩn)*.
+Báo cáo **Chênh lệch giá nhập** đối chiếu giá nhập thực tế với giá chuẩn. Lãi gộp hóa đơn theo giá nhập chuẩn là số ước tính. Các đường báo cáo cũ đọc snapshot giá vốn còn cần đối chiếu trước khi dùng để quyết toán.
 
 Chạy thử luồng này khi backend đang chạy:
 
@@ -139,3 +142,6 @@ npm run tauri dev
 ```
 
 Tauri kiểm tra cổng 8080. Nếu backend chưa chạy và có file JAR, Tauri tự khởi động Java rồi dừng tiến trình đó khi đóng cửa sổ. Nhật ký nằm ở `%APPDATA%\AluminumManager\backend.log`.
+### Sao lưu Cloudflare R2
+
+Admin vào **Sao lưu** để cất khóa phục hồi ở nơi riêng, cấu hình R2 và kiểm tra kết nối. Backup mới có đuôi `.ndbak`, được nén và mã hóa trước khi đồng bộ. Nếu mất máy, nhập khóa phục hồi và cấu hình R2 trên máy mới, tải bản cloud rồi dùng **Dựng DB thử** để xác minh. Chức năng thay database đang dùng vẫn khóa cho đến khi quy trình chuyển và quay lại được kiểm thử trên máy khác. Xem [hướng dẫn khôi phục](docs/backup-recovery-guide.md).

@@ -143,6 +143,7 @@ export type MonthlyAttendanceBoard = {
 };
 
 export type PayrollDetail = {
+  advances: { id: number; date: string; amount: number; note: string | null }[];
   id: number;
   employeeId: number;
   employeeCode: string;
@@ -288,6 +289,11 @@ export async function adjustPayrollDetail(
   input: { allowances: number; advanceAmount: number },
 ): Promise<PayrollPeriod> {
   return (await api.put<Envelope<PayrollPeriod>>(`/api/v1/payroll/periods/${periodId}/details/${detailId}`, input)).data.data;
+}
+
+export async function addPayrollAdvance(periodId: number, detailId: number,
+  input: { date: string; amount: number; note?: string; idempotencyKey: string }): Promise<PayrollPeriod> {
+  return (await api.post<Envelope<PayrollPeriod>>(`/api/v1/payroll/periods/${periodId}/details/${detailId}/advances`, input)).data.data;
 }
 
 export async function closePayrollPeriod(periodId: number): Promise<PayrollPeriod> {

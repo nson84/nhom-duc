@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
+@org.springframework.scheduling.annotation.EnableAsync
 public class AluminumManagerApplication {
 
 	public static void main(String[] args) {

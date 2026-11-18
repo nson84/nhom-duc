@@ -214,6 +214,12 @@ public class AttendanceController {
 		return ApiResponse.ok(service.adjustPayrollDetail(id, detailId, request), "Đã lưu phụ cấp / khấu trừ");
 	}
 
+	@PostMapping("/payroll/periods/{id}/details/{detailId}/advances")
+	public ApiResponse<PayrollPeriodDto> advance(@PathVariable long id, @PathVariable long detailId,
+			@Valid @RequestBody AttendanceDtos.PayrollAdvanceRequest request) {
+		return ApiResponse.ok(service.addPayrollAdvance(id, detailId, request), "Đã ghi ứng lương");
+	}
+
 	@PostMapping("/payroll/periods/{id}/close")
 	public ApiResponse<PayrollPeriodDto> close(@PathVariable long id) {
 		return ApiResponse.ok(service.closePeriod(id), "Đã chốt kỳ công");

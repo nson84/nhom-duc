@@ -269,9 +269,15 @@ public final class AttendanceDtos {
 			BigDecimal advanceAmount,
 			BigDecimal overtimeHours,
 			BigDecimal holidayBonusPay,
-			BigDecimal holidayBonusReceived
+			BigDecimal holidayBonusReceived,
+			List<PayrollAdvanceDto> advances
 	) {
 	}
+
+	public record PayrollAdvanceDto(long id, LocalDate date, BigDecimal amount, String note) {}
+	public record PayrollAdvanceRequest(@NotNull LocalDate date,
+			@NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal amount,
+			@Size(max = 500) String note, @NotBlank @Size(max = 80) String idempotencyKey) {}
 
 	public record PayrollPeriodDto(
 			Long id,

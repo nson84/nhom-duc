@@ -1,6 +1,7 @@
 package com.aluminum.manager.inventory;
 
 import com.aluminum.manager.catalog.CatalogService;
+import com.aluminum.manager.dashboard.YearEndBalanceService;
 import com.aluminum.manager.catalog.PurchasePriceService;
 import com.aluminum.manager.catalog.PurchasePriceService.ResolvedPrice;
 import com.aluminum.manager.common.BusinessException;
@@ -48,6 +49,7 @@ public class StockDocumentService {
 	private final PurchasePriceService purchasePrices;
 	private final Clock clock;
 	private final ShopAccess shops;
+	private final YearEndBalanceService yearPeriods;
 
 	public StockDocumentService(
 			JdbcTemplate jdbc,
@@ -55,13 +57,23 @@ public class StockDocumentService {
 			AuditService audit,
 			PurchasePriceService purchasePrices,
 			Clock clock,
-			ShopAccess shops) {
+			ShopAccess shops,
+			YearEndBalanceService yearPeriods) {
 		this.jdbc = jdbc;
 		this.sequences = sequences;
 		this.audit = audit;
 		this.purchasePrices = purchasePrices;
 		this.clock = clock;
 		this.shops = shops;
+		this.yearPeriods = yearPeriods;
+	}
+
+	private YearEndBalanceService.Period workingPeriod() {
+		return yearPeriods.selectedWorkingPeriod();
+	}
+
+	private void requireWorkingDate(LocalDateTime date) {
+		yearPeriods.requireWorkingDate(date);
 	}
 
 	// ---------- Doc queries ----------
@@ -73,6 +85,12 @@ public class StockDocumentService {
 	 */
 	@Transactional(readOnly = true)
 	public List<DocumentSummary> list(String type, String filter, LocalDate from, LocalDate to, String query) {
+		YearEndBalanceService.Period working = workingPeriod();
+		if (working != null) {
+			if (!working.started()) return List.of();
+			from = working.periodFrom();
+			to = working.periodTo();
+		}
 		String bucket = filter == null || filter.isBlank() ? "all" : filter.trim().toLowerCase();
 		if ("trash".equals(bucket)) {
 			purgeExpiredTrash();
@@ -222,6 +240,16 @@ public class StockDocumentService {
 		return dto;
 	}
 
+	public DocumentDto getForView(long id) {
+		DocumentDto dto = get(id);
+		YearEndBalanceService.Period working = workingPeriod();
+		if (working != null && (!working.started() || dto.documentDate().toLocalDate().isBefore(working.periodFrom())
+				|| dto.documentDate().toLocalDate().isAfter(working.periodTo()))) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Phiếu không thuộc năm đang khóa", null);
+		}
+		return dto;
+	}
+
 	private DocumentDto loadDocument(long id) {
 		List<DocumentDto> rows = jdbc.query("""
 				SELECT d.*, p.document_code AS pair_code
@@ -274,6 +302,8 @@ public class StockDocumentService {
 
 	@Transactional
 	public DocumentDto createDraft(DocumentRequest request) {
+		requireWorkingDate(request.documentDate());
+		assertYearNotClosed(request.documentDate());
 		requireSupported(request.documentType());
 		requirePurchaseReceivedBy(request);
 		if (!shops.isDistribution()) assertFactoryYearOpen(request.documentDate());
@@ -310,6 +340,10 @@ public class StockDocumentService {
 	@Transactional
 	public DocumentDto updateDraft(long id, DocumentRequest request) {
 		DocRow doc = lock(id);
+		requireWorkingDate(doc.date());
+		requireWorkingDate(request.documentDate());
+		assertYearNotClosed(doc.date());
+		assertYearNotClosed(request.documentDate());
 		StockConfirmationPolicy.requireDraft(doc.status());
 		if (!shops.isDistribution()) {
 			assertFactoryYearOpen(doc.date());
@@ -343,8 +377,89 @@ public class StockDocumentService {
 	}
 
 	@Transactional
+	public DocumentDto editConfirmed(long id, DocumentRequest request) {
+		DocRow doc = lock(id);
+		requireWorkingDate(doc.date());
+		requireWorkingDate(request.documentDate());
+		if (!"CONFIRMED".equals(doc.status()) || !Set.of("PURCHASE", "SALE").contains(doc.type())
+				|| !doc.type().equals(request.documentType())) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ sửa phiếu nhập hoặc bán đã xác nhận", null);
+		}
+		LocalDateTime now = LocalDateTime.now(clock);
+		LocalDateTime confirmedAt = jdbc.queryForObject(
+				"SELECT confirmed_at FROM stock_documents WHERE id = ?", LocalDateTime.class, id);
+		StockEditPolicy.requireWithin24Hours(confirmedAt, now);
+		Boolean internal = jdbc.queryForObject("SELECT is_internal FROM stock_documents WHERE id = ?", Boolean.class, id);
+		if (Boolean.TRUE.equals(internal) || Boolean.TRUE.equals(request.internal())) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Phiếu chuyển nội bộ cần đảo cả cặp phiếu trước khi lập lại", null);
+		}
+		if (!shops.isDistribution()) {
+			assertFactoryYearOpen(doc.date());
+			assertFactoryYearOpen(request.documentDate());
+		}
+		assertYearNotClosed(doc.date());
+		assertYearNotClosed(request.documentDate());
+		BigDecimal paidAmount = paid(id, doc.type());
+		BigDecimal newTotal = totals(buildLines(request), request.discountAmount()).total();
+		if (paidAmount.compareTo(newTotal) > 0) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Tổng tiền sửa không được thấp hơn số tiền đã thanh toán", null);
+		}
+		List<StoredItem> oldItems = storedItems(id);
+		oldItems.sort(Comparator.comparingLong(StoredItem::productId)
+				.thenComparingLong(StoredItem::categoryId).thenComparingLong(StoredItem::id));
+		for (StoredItem item : oldItems) {
+			List<BigDecimal> deltas = jdbc.queryForList(
+					"SELECT quantity_delta_base FROM stock_movements WHERE document_item_id = ?", BigDecimal.class, item.id());
+			for (BigDecimal delta : deltas) {
+				Balance balance = lockBalance(item.productId(), item.categoryId());
+				BigDecimal quantity = InventoryMath.applyDelta(balance.quantity(), delta.negate());
+				BigDecimal cost = balance.cost();
+				if (!shops.isDistribution() && "PURCHASE".equals(doc.type())) {
+					BigDecimal oldCost = jdbc.queryForObject(
+							"SELECT cost_per_base_snapshot FROM stock_document_items WHERE id = ?", BigDecimal.class, item.id());
+					cost = InventoryMath.averageAfterRemoval(balance.quantity(), balance.cost(), delta, oldCost);
+				}
+				jdbc.update("UPDATE stock_balances SET quantity_base = ?, average_cost_per_base = ? WHERE product_id = ? AND category_id = ?",
+						quantity, cost, item.productId(), item.categoryId());
+			}
+		}
+		jdbc.update("DELETE FROM stock_movements WHERE document_id = ?", id);
+		jdbc.update("UPDATE stock_documents SET status = 'DRAFT' WHERE id = ?", id);
+		updateDraft(id, request);
+		confirm(id);
+		jdbc.update("UPDATE stock_documents SET confirmed_at = ?, payment_status = ? WHERE id = ?",
+				Timestamp.valueOf(confirmedAt), newTotal.signum() == 0 || paidAmount.compareTo(newTotal) == 0 ? "PAID"
+						: paidAmount.signum() > 0 ? "PARTIAL" : "UNPAID", id);
+		audit.record(CurrentAdmin.get().id(), "EDIT_CONFIRMED_" + doc.type(), "stock_documents",
+				String.valueOf(id), "Sửa phiếu " + doc.code() + " trong 24 giờ sau xác nhận");
+		return get(id);
+	}
+
+	private void assertYearNotClosed(LocalDateTime date) {
+		Integer closed = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM year_end_balances
+				WHERE shop_id = ? AND period_from <= ? AND period_to >= ?
+				""", Integer.class, shops.currentId(), date.toLocalDate(), date.toLocalDate());
+		if (closed != null && closed > 0) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày phiếu thuộc kỳ đã chốt", null);
+		}
+		if (shops.isDistribution()) {
+			Integer stockClosed = jdbc.queryForObject("""
+					SELECT COUNT(*) FROM distribution_period_closings
+					WHERE shop_id = ? AND period_from <= ? AND period_to >= ?
+					""", Integer.class, shops.currentId(), date.toLocalDate(), date.toLocalDate());
+			if (stockClosed != null && stockClosed > 0) {
+				throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày phiếu thuộc kỳ đã chốt kho", null);
+			}
+		}
+	}
+
+	@Transactional
 	public DocumentDto cancelDraft(long id) {
 		DocRow doc = lock(id);
+		requireWorkingDate(doc.date());
 		StockConfirmationPolicy.requireDraft(doc.status());
 		jdbc.update("UPDATE stock_documents SET status = 'CANCELLED', cancelled_at = ? WHERE id = ?",
 				Timestamp.valueOf(LocalDateTime.now(clock)), id);
@@ -358,6 +473,8 @@ public class StockDocumentService {
 	@Transactional
 	public DocumentDto confirm(long id) {
 		DocRow doc = lock(id);
+		requireWorkingDate(doc.date());
+		assertYearNotClosed(doc.date());
 		StockConfirmationPolicy.requireDraft(doc.status());
 		if (!shops.isDistribution()) assertFactoryYearOpen(doc.date());
 		List<StoredItem> items = storedItems(id);
@@ -411,7 +528,20 @@ public class StockDocumentService {
 			if (shops.isDistribution()) {
 				boolean incoming = "PURCHASE".equals(doc.type()) || "ADJUSTMENT_IN".equals(doc.type());
 				delta = incoming ? item.quantityBase() : item.quantityBase().negate();
-				newQuantity = InventoryMath.applyDelta(balance.quantity(), delta);
+				try {
+					newQuantity = InventoryMath.applyDelta(balance.quantity(), delta);
+				} catch (BusinessException exception) {
+					if ("SALE".equals(doc.type()) && exception.getCode() == ErrorCode.INSUFFICIENT_STOCK) {
+						String productName = jdbc.queryForObject(
+								"SELECT CONCAT(product_code_snapshot, ' - ', product_name_snapshot, ' (loại ', category_name_snapshot, ')') FROM stock_document_items WHERE id = ?",
+								String.class, item.id());
+						throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK,
+								"Không đủ hàng để bán hóa đơn này: " + productName + ". Tồn kho hiện còn "
+										+ balance.quantity().stripTrailingZeros().toPlainString() + " kg; phiếu cần "
+										+ item.quantityBase().stripTrailingZeros().toPlainString() + " kg.", exception.getDetails());
+					}
+					throw exception;
+				}
 				newCost = BigDecimal.ZERO;
 				costPerBase = "PURCHASE".equals(doc.type())
 						? item.lineTotal().divide(item.quantityBase(), InventoryMath.COST_SCALE, InventoryMath.ROUNDING)
@@ -528,6 +658,12 @@ public class StockDocumentService {
 
 	private long reverseOne(long id, String reason) {
 		DocRow original = lockAny(id);
+		Integer monthOpen = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM shop_month_periods m JOIN stock_documents d ON d.shop_id = m.shop_id
+				WHERE d.id = ? AND m.month_start = ? AND m.closed_at IS NULL
+				""", Integer.class, id, original.date().toLocalDate().withDayOfMonth(1));
+		if (monthOpen == null || monthOpen == 0)
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Tháng của phiếu chưa mở hoặc đã khóa; không thể đảo phiếu", null);
 		String originalShop = jdbc.queryForObject("""
 				SELECT s.code FROM stock_documents d JOIN shops s ON s.id = d.shop_id WHERE d.id = ?
 				""", String.class, id);
@@ -661,6 +797,7 @@ public class StockDocumentService {
 					"Số tiền phải là bội 500 đ (VD: 1.000 hoặc 1.500)", null);
 		}
 		LocalDateTime when = request.paymentDate() == null ? LocalDateTime.now(clock) : request.paymentDate();
+		yearPeriods.requireWorkingDate(when);
 		if (!shops.isDistribution()) assertFactoryYearOpen(when);
 		String methodVi = localizePaymentMethod(request.paymentMethod());
 		String userNote = blank(request.note());
@@ -756,11 +893,12 @@ public class StockDocumentService {
 	}
 
 	@Transactional
-	public InventoryCountResult applyPhysicalCount(List<InventoryCountItemRequest> items) {
+	public InventoryCountResult applyPhysicalCount(List<InventoryCountItemRequest> items, LocalDateTime countDate) {
 		if (!shops.isDistribution()) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ Phân phối dùng kiểm kê hao hụt tồn kho", null);
 		}
 		Set<String> seen = new java.util.HashSet<>();
+		yearPeriods.requireWorkingDate(countDate);
 		List<String> codes = new ArrayList<>();
 		BigDecimal shortage = BigDecimal.ZERO;
 		BigDecimal surplus = BigDecimal.ZERO;
@@ -797,7 +935,7 @@ public class StockDocumentService {
 			long unitId = unitIdValue;
 			BigDecimal quantityTon = delta.abs().divide(BigDecimal.valueOf(1000), 6, InventoryMath.ROUNDING);
 			String type = delta.signum() < 0 ? "ADJUSTMENT_OUT" : "ADJUSTMENT_IN";
-			DocumentRequest request = new DocumentRequest(type, LocalDateTime.now(clock), null, null,
+			DocumentRequest request = new DocumentRequest(type, countDate, null, null,
 					null, null, "Kiểm kê tồn kho Phân phối", BigDecimal.ZERO, null, null, null,
 					List.of(new ItemRequest(item.productId(), item.categoryId(), unitId, quantityTon,
 							BigDecimal.ZERO, BigDecimal.ZERO, "kg", null, null, null, null)), false);

@@ -206,8 +206,10 @@ public class FactoryService {
 				(rs, i) -> countDto(rs), year);
 		if (!rows.isEmpty()) return rows.get(0);
 		YearCountDto prior = priorCount(year);
-		LocalDate from = prior == null ? LocalDate.of(year, 1, 1) : prior.periodTo().plusDays(1);
-		return new YearCountDto(year, from, from.plusYears(1).minusDays(1),
+		var period = yearEndBalances.period(year);
+		if (!period.started()) throw invalid("Hãy lưu ngày bắt đầu kỳ trên Tổng quan trước khi quyết toán Xưởng");
+		return new YearCountDto(year, period.periodFrom(),
+				period.plannedEnd() != null ? period.plannedEnd() : period.periodTo(),
 				prior == null ? ZERO : closingKg(prior), prior == null ? ZERO : closingValue(prior),
 				ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, "MISSING", null, null);
 	}
@@ -367,6 +369,8 @@ public class FactoryService {
 	@Transactional
 	public YearCountDto saveYearCount(int year, YearCountRequest request) {
 		requireFactoryYear(year);
+		if (!yearEndBalances.period(year).endSaved())
+			throw invalid("Hãy lưu ngày kết thúc trên Tổng quan trước khi kiểm kê cuối năm");
 		YearCountDto existing = yearCount(year);
 		if ("CLOSED".equals(existing.status())) throw invalid("Năm đã chốt, không sửa kiểm kê");
 		YearCountDto prior = priorCount(year);
@@ -378,6 +382,7 @@ public class FactoryService {
 			throw invalid("Tên năm chốt không khớp ngày đầu kỳ");
 		if (prior != null && !periodFrom.equals(prior.periodTo().plusDays(1)))
 			throw invalid("Kỳ mới phải bắt đầu ngay sau ngày chốt năm trước");
+		yearEndBalances.saveDraftPeriod(year, periodFrom, periodTo);
 		BigDecimal openingKg = prior == null ? request.openingKg() : closingKg(prior);
 		BigDecimal openingValue = prior == null ? request.openingValue() : closingValue(prior);
 		Integer rawRows = jdbc.queryForObject("SELECT COUNT(*) FROM factory_raw_counts WHERE year_number = ?", Integer.class, year);
@@ -759,6 +764,7 @@ public class FactoryService {
 	}
 
 	private void ensureOpen(LocalDateTime date) {
+		yearEndBalances.requireWorkingDate(date);
 		Integer closed = jdbc.queryForObject("""
 				SELECT COUNT(*) FROM factory_year_counts
 				WHERE status = 'CLOSED' AND period_from <= ? AND period_to >= ?

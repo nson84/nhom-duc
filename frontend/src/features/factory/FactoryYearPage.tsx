@@ -3,7 +3,7 @@ import { useSession } from "../auth/auth-store";
 import { Alert, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Tag, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { AppActionButton } from "../../components/AppButtons";
 import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import { toApiError } from "../../services/error-handler";
@@ -11,6 +11,9 @@ import { formatMoney } from "../../utils/money";
 import { qtyInputNumberProps, vndInputNumberProps } from "../../utils/vnd-input";
 import { useCanWrite } from "../auth/auth-store";
 import { YearEndBalanceCard } from "../dashboard/YearEndBalanceCard";
+import { useShop } from "../shop/shop-store";
+import { useWorkingYear } from "../dashboard/working-year";
+import { DeliveredByCategory } from "../stock/DeliveredByCategory";
 import { listCategories, type Category } from "../products/products-api";
 import {
   createScrapSale,
@@ -51,9 +54,15 @@ type PaymentForm = {
 };
 
 export function FactoryYearPage() {
+  const workingYear = useWorkingYear(useShop());
+  const location = useLocation();
   const session = useSession();
   const canWrite = useCanWrite();
-  const [year, setYear] = useState(dayjs().subtract(1, "year").year());
+  const [year, setYear] = useState(() => {
+    const requested = Number(new URLSearchParams(location.search).get("year"));
+    return Number.isInteger(requested) && requested >= 2000 && requested <= 2100
+      ? requested : workingYear.year;
+  });
   const [periodFrom, setPeriodFrom] = useState<Dayjs>(dayjs().startOf("year"));
   const [periodTo, setPeriodTo] = useState<Dayjs>(dayjs().endOf("year"));
   const [report, setReport] = useState<YearReport | null>(null);
@@ -76,6 +85,15 @@ export function FactoryYearPage() {
   const [scrapForm] = Form.useForm<ScrapForm>();
   const scrapUnit = Form.useWatch("unit", scrapForm) ?? "kg";
   const [paymentForm] = Form.useForm<PaymentForm>();
+
+  useEffect(() => { setYear(workingYear.year); setSettlementMonth(workingYear.month); }, [workingYear.year, workingYear.month]);
+
+  const visibleSaleRows = workingYear.month
+    ? (saleCosts?.rows ?? []).filter((row) => dayjs(row.documentDate).format("YYYY-MM") === workingYear.month)
+    : (saleCosts?.rows ?? []);
+  const visibleScrapSales = workingYear.month
+    ? sales.filter((sale) => dayjs(sale.saleDate).format("YYYY-MM") === workingYear.month)
+    : sales;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,6 +128,12 @@ export function FactoryYearPage() {
   }, [year, settlementMonth, saleCategoryId, countForm]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!loading && location.hash === "#kiem-ke-cuoi-nam") {
+      document.getElementById("kiem-ke-cuoi-nam")?.scrollIntoView({ block: "start" });
+    }
+  }, [loading, location.hash]);
 
   const closed = count?.status === "CLOSED";
   const canEdit = canWrite && !closed && year <= dayjs().year();
@@ -153,9 +177,10 @@ export function FactoryYearPage() {
 
   function confirmClose() {
     Modal.confirm({
-      title: `Chốt kỳ ${year} đến ${periodTo.format("DD/MM/YYYY")}?`,
-      content: `Kỳ từ ${periodFrom.format("DD/MM/YYYY")} đến ${periodTo.format("DD/MM/YYYY")} sẽ bị khóa. Tồn và công nợ tiếp tục từ ngày kế tiếp.`,
-      okText: "Chốt năm",
+      title: "Bạn đã kiểm kê tồn kho chưa?",
+      content: `Kỳ ${year}: ${periodFrom.format("DD/MM/YYYY")} – ${periodTo.format("DD/MM/YYYY")}. Hãy kiểm tra số lượng tồn thực tế đã nhập trước khi xác nhận chốt năm.`,
+      okText: "Đã kiểm kê, chốt năm",
+      autoFocusButton: "cancel",
       cancelText: "Quay lại",
       onOk: async () => {
         try {
@@ -268,11 +293,12 @@ export function FactoryYearPage() {
 
       <YearEndBalanceCard year={year} refreshKey={closed ? 1 : 0} />
 
-      <Card title={`Nhập số kg còn trong kho cuối năm ${year}`} loading={loading} extra={<Tag color={closed ? "green" : "orange"}>{closed ? "Đã chốt" : "Chưa chốt"}</Tag>}>
+      <div id="kiem-ke-cuoi-nam" style={{ scrollMarginTop: 16 }}><Card title={`Nhập số kg còn trong kho cuối năm ${year}`} loading={loading} extra={<Tag color={closed ? "green" : "orange"}>{closed ? "Đã chốt" : "Chưa chốt"}</Tag>}>
         <Space wrap style={{ marginBottom: 12 }}>
-          <label>Đầu kỳ <DatePicker value={periodFrom} format="DD/MM/YYYY" disabled={!canEdit} onChange={(value) => value && setPeriodFrom(value)} /></label>
-          <label>Ngày chốt <DatePicker value={periodTo} format="DD/MM/YYYY" disabled={!canEdit} onChange={(value) => value && setPeriodTo(value)} /></label>
+          <label>Đầu kỳ <DatePicker value={periodFrom} format="DD/MM/YYYY" disabled /></label>
+          <label>Ngày chốt <DatePicker value={periodTo} format="DD/MM/YYYY" disabled /></label>
         </Space>
+        <Typography.Paragraph type="secondary">Đổi ngày bắt đầu hoặc kết thúc tại Tổng quan, rồi quay lại kiểm kê.</Typography.Paragraph>
         <Typography.Paragraph type="secondary">Có thể chốt theo lịch Tết âm hoặc ngày cửa hàng chọn. Kỳ sau bắt đầu ngay sau ngày chốt.</Typography.Paragraph>
         <Typography.Paragraph type="secondary">Nhập số nhôm nguyên liệu còn trong kho. Phế liệu chưa bán có thể để trống nếu không còn.</Typography.Paragraph>
         <Typography.Paragraph type="secondary">
@@ -328,13 +354,14 @@ export function FactoryYearPage() {
           <AppActionButton tone="edit" icon={<SaveOutlined />} loading={saving} onClick={() => void saveCount()}>Lưu kiểm kê</AppActionButton>
           {count?.status === "DRAFT" && <AppActionButton tone="confirm" icon={<CheckOutlined />} onClick={confirmClose}>Chốt năm</AppActionButton>}
         </Space>}
-      </Card>
+      </Card></div>
 
       <Card
         title="Quyết toán công nợ theo khách"
         loading={loading}
         extra={<Select
           value={settlementMonth ?? "ALL"}
+          disabled={!!workingYear.month}
           onChange={(value) => setSettlementMonth(value === "ALL" ? undefined : value)}
           style={{ width: 170 }}
           options={[{ value: "ALL", label: "Cả kỳ" }, ...Array.from({ length: periodTo.startOf("month").diff(periodFrom.startOf("month"), "month") + 1 }, (_, i) => {
@@ -383,10 +410,10 @@ export function FactoryYearPage() {
         </>}
       </Card>
 
-      <Card title={`Phiếu bán phế liệu năm ${year}`} loading={loading} extra={canEdit && <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => { setScrapKey(crypto.randomUUID()); scrapForm.setFieldsValue({ saleDate: dayjs().year(year), unit: "kg" }); setScrapOpen(true); }}>Thêm phiếu bán phế liệu</AppActionButton>}>
+      <Card title={`Phiếu bán phế liệu ${workingYear.month ? `tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}` : `năm ${year}`}`} loading={loading} extra={canEdit && <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => { setScrapKey(crypto.randomUUID()); scrapForm.setFieldsValue({ saleDate: workingYear.month ? (dayjs(periodFrom).isAfter(dayjs(`${workingYear.month}-01`)) ? periodFrom : dayjs(`${workingYear.month}-01`)) : dayjs().year(year), unit: "kg" }); setScrapOpen(true); }}>Thêm phiếu bán phế liệu</AppActionButton>}>
         <Typography.Paragraph type="secondary">Bấm vào một dòng để xem chi tiết phiếu và các lần thu tiền.</Typography.Paragraph>
         <PagedTable<ScrapSale>
-          rowKey="id" dataSource={sales} size="middle"
+          rowKey="id" dataSource={visibleScrapSales} size="middle"
           columns={[
             { title: "Thời gian", dataIndex: "saleDate", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
             { title: "Người bán", dataIndex: "sellerName" },
@@ -402,7 +429,7 @@ export function FactoryYearPage() {
               <Tag color={row.status === "CONFIRMED" ? "green" : "default"}>{row.status === "CONFIRMED" ? "Đã bán" : "Đã hủy"}</Tag>
             </Space>
             {canWrite && row.status === "CONFIRMED" ? <Space style={{ marginBottom: 12, marginInlineStart: 12 }}>
-              {row.totalAmount > row.paidAmount && <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => { setPaymentKey(crypto.randomUUID()); paymentForm.setFieldsValue({ paymentDate: dayjs(), amount: row.totalAmount - row.paidAmount, paymentMethod: "CASH" }); setPaying(row); }}>Ghi thu</AppActionButton>}
+              {row.totalAmount > row.paidAmount && <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => { setPaymentKey(crypto.randomUUID()); paymentForm.setFieldsValue({ paymentDate: workingYear.month ? (dayjs().format("YYYY-MM") === workingYear.month ? dayjs() : dayjs(`${workingYear.month}-01`)) : dayjs(), amount: row.totalAmount - row.paidAmount, paymentMethod: "CASH" }); setPaying(row); }}>Ghi thu</AppActionButton>}
               {canEdit && row.paidAmount === 0 && <AppActionButton tone="delete" icon={<CloseOutlined />} onClick={() => confirmVoid(row)}>Hủy</AppActionButton>}
             </Space> : null}
             <Table rowKey="id" size="small" pagination={false} dataSource={row.payments} columns={[
@@ -421,10 +448,14 @@ export function FactoryYearPage() {
             onChange={setSaleCategoryId} />
         </Space>
         <Row gutter={12} style={{ marginBottom: 12 }}>
-          <Col xs={24} md={8}><Statistic title="Kg thành phẩm đã giao" value={showKg(saleCosts?.quantityKg)} /></Col>
-          <Col xs={24} md={8}><Statistic title="Tiền bán trên phiếu" value={showMoney(saleCosts?.salesAmount)} /></Col>
+          <Col xs={24} md={8}><Statistic title="Kg thành phẩm đã giao" value={showKg(workingYear.month ? visibleSaleRows.reduce((sum, row) => sum + row.quantityKg, 0) : saleCosts?.quantityKg)} />
+            {count && <DeliveredByCategory from={workingYear.month ? (dayjs(count.periodFrom).isAfter(dayjs(`${workingYear.month}-01`)) ? count.periodFrom : `${workingYear.month}-01`) : count.periodFrom}
+              to={workingYear.month ? (dayjs(count.periodTo).isBefore(dayjs(`${workingYear.month}-01`).endOf("month")) ? count.periodTo : dayjs(`${workingYear.month}-01`).endOf("month").format("YYYY-MM-DD")) : count.periodTo}
+              categoryId={saleCategoryId} shopKey={`factory-${year}`} />}
+          </Col>
+          <Col xs={24} md={8}><Statistic title="Tiền bán trên phiếu" value={showMoney(workingYear.month ? visibleSaleRows.reduce((sum, row) => sum + row.salesAmount, 0) : saleCosts?.salesAmount)} /></Col>
         </Row>
-        <Table size="small" rowKey="itemId" dataSource={saleCosts?.rows ?? []}
+        <Table size="small" rowKey="itemId" dataSource={visibleSaleRows}
           columns={[
             { title: "Phiếu", dataIndex: "documentCode" },
             { title: "Khách", dataIndex: "customerName" },

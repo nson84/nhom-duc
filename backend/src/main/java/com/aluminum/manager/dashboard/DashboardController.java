@@ -2,6 +2,7 @@ package com.aluminum.manager.dashboard;
 
 import com.aluminum.manager.common.ApiResponse;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,38 @@ public class DashboardController {
 	@GetMapping("/year-period")
 	public ApiResponse<YearEndBalanceService.Period> yearPeriod(@RequestParam int year) {
 		return ApiResponse.ok(yearEndBalances.period(year), null);
+	}
+
+	@GetMapping("/month-close")
+	public ApiResponse<Boolean> monthClosed(@RequestParam String month) {
+		return ApiResponse.ok(yearEndBalances.isMonthClosed(YearMonth.parse(month)), null);
+	}
+
+	@GetMapping("/month-status")
+	public ApiResponse<String> monthStatus(@RequestParam String month) {
+		return ApiResponse.ok(yearEndBalances.monthStatus(YearMonth.parse(month)), null);
+	}
+
+	@PostMapping("/month-open")
+	public ApiResponse<String> openMonth(@RequestParam int year, @RequestParam String month) {
+		return ApiResponse.ok(yearEndBalances.openMonth(year, YearMonth.parse(month)), "Đã mở tháng");
+	}
+
+	@PostMapping("/month-close")
+	public ApiResponse<Boolean> closeMonth(@RequestParam int year, @RequestParam String month) {
+		return ApiResponse.ok(yearEndBalances.closeMonth(year, YearMonth.parse(month)), "Đã chốt tháng");
+	}
+
+	@PostMapping("/year-period")
+	public ApiResponse<YearEndBalanceService.Period> saveYearPeriod(@RequestParam int year,
+			@RequestParam LocalDate from, @RequestParam LocalDate to) {
+		return ApiResponse.ok(yearEndBalances.saveDraftPeriod(year, from, to), "Đã lưu ngày kết thúc dự kiến");
+	}
+
+	@PostMapping("/year-period/start")
+	public ApiResponse<YearEndBalanceService.Period> saveYearStart(@RequestParam int year, @RequestParam LocalDate from,
+			@RequestParam String name) {
+		return ApiResponse.ok(yearEndBalances.saveStart(year, from, name), "Đã bắt đầu kỳ");
 	}
 
 	@GetMapping("/summary")

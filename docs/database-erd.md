@@ -38,3 +38,9 @@ V26 lưu mã phiên đăng nhập đã thu hồi. V27 thêm số tiền lương 
 V31 thêm `year_end_balances` (khóa `shop_id, year_number`) lưu bản chụp kg/giá trị tồn, nợ khách, nợ nhà cung cấp, lãi và thời điểm chốt. Phiếu và thanh toán gốc không bị chuyển hoặc nhân bản; các số dư vẫn được theo dõi liên tục qua năm.
 
 V32 thêm `period_from`, `period_to` vào `year_end_balances` và `factory_year_counts`. Các bản cũ được gán 01/01–31/12 của `year_number` khi nâng cấp; dữ liệu phiếu và thanh toán không đổi. Các bản mới dùng ngày chốt do cửa hàng chọn.
+
+V38–V39 thêm `shop_month_periods` với khóa `(shop_id, month_start)`, `period_year`, `opened_at`, `closed_at` nullable. Một dòng chưa có `closed_at` là tháng đang mở; có `closed_at` là tháng đã khóa. Migration chỉ thêm cấu trúc và đổi tên bảng mới, giữ nguyên phiếu, thanh toán và dữ liệu kho.
+
+## Bổ sung 19/11/2026
+
+V41 thêm payroll_advance_entries: payroll_detail_id, advance_date, amount, note, idempotency_key duy nhất. Không chuyển đổi số ứng tổng cũ thành ngày giả.

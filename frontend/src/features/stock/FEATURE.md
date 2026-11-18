@@ -15,11 +15,19 @@ Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi c�
 **Chức năng**
 - Danh sách: nhãn **Nội bộ** / **Nhà cung cấp** trên số phiếu; lọc mặc định **Chưa thanh toán**; thêm Thanh toán một phần / Đã thanh toán / Nháp / Đảo·Hủy / Thùng rác
 - Tạo/sửa phiếu nháp: NCC, ngày, dòng hàng (**SP + loại nhôm**, ĐVT, SL, đơn giá autofill từ loại)
+- Phiếu bán tự điền **Người nhận** theo tên khách mua khi ô này còn trống hoặc vẫn là giá trị tự điền; người dùng sửa Người nhận riêng thì thay tên khách không ghi đè phần đã sửa.
 - Ngày phiếu có thể chọn lùi về năm 2025 để tự nhập dữ liệu lịch sử; kỳ Xưởng đã chốt sẽ khóa phiếu thuộc khoảng ngày đó.
+- Khi chọn năm ở Tổng quan, danh sách và chi tiết chỉ mở phiếu nằm trong kỳ đã chọn dù chưa bấm Khóa năm. Form không cho chọn ngày trước ngày bắt đầu hoặc sau ngày kết thúc đã lưu; năm đã chốt không nhận phiếu mới.
+- Khi chọn tháng ở Tổng quan, danh sách và form phiếu chỉ dùng ngày trong phần giao của tháng và kỳ năm. Chỉ tháng đã bấm **Mở tháng** mới cho tạo, sửa, xác nhận, hủy hoặc đảo phiếu; lần thu/trả nợ mới được ghi ở tháng đang mở.
 - Khi tạo phiếu nhập mới có đơn giá khác giá nhập chuẩn của loại, trước khi lưu phiếu sẽ hỏi có ghi mốc giá nhập mới từ ngày phiếu không; popup hiện giá cũ và ngày bắt đầu áp dụng, giá mới và ngày hiệu lực. Chọn “Chỉ lưu phiếu” thì giữ giá chuẩn hiện tại và chỉ lưu đơn giá thực tế trên phiếu. Một loại có nhiều đơn giá khác nhau trong cùng phiếu phải cập nhật giá chuẩn thủ công.
 - Đơn vị: Phân phối chỉ **tấn**; Xưởng nhập **tạ** hoặc **tấn**
 - Xác nhận → cập nhật tồn/giá vốn theo `(product, category)`; không sửa dòng sau xác nhận
 - Thanh toán (có **popup xác nhận** trước khi ghi) / đảo phiếu (reversal, mỗi phiếu đảo một lần)
+- Trang Nhập kho hiển thị doanh nghiệp còn nợ nhà cung cấp từ phiếu nhập trong kỳ đang xem, không phụ thuộc ô tìm kiếm hoặc bộ lọc trạng thái; phiếu nội bộ không tạo nợ.
+- Trang Nhập kho hiển thị thêm tồn sổ **hiện tại** theo từng loại nhôm của bên đang xem, độc lập với kỳ và bộ lọc danh sách phiếu; Phân phối dùng tấn, Xưởng dùng kg.
+- Ô tổng khối lượng đã giao trên Tồn kho hiện thêm kg theo từng loại: Phân phối tính tích lũy hiện tại, Xưởng theo kỳ kiểm kê đang chọn.
+- Khi chọn tháng ở Tổng quan, Tồn kho hiện thêm số kg giao trong tháng (phần giao với kỳ năm) theo từng loại. Tồn sổ hiện tại và số lũy kế/kiểm kê năm vẫn giữ nhãn riêng, không được hiểu là tồn cuối tháng lịch sử.
+- Xuất nội bộ Phân phối → Xưởng vẫn lưu phiếu bán và phiếu nhập cặp, trừ tồn Phân phối, cộng khối lượng đã giao; đơn giá gợi ý dùng giá nhập của loại nhôm, cho phép sửa theo giá vốn thực tế trên phiếu. Phiếu nội bộ không cộng doanh thu/lãi bán hàng ở Tổng quan và Báo cáo.
 - In phiếu PDF (xem trước + Lưu PDF); draft session. Bảng chi tiết và bản in không hiện cột mã nhôm.
 - **Nháp / hủy / đảo / thùng rác** — xem mục [Luồng phiếu kho](#luồng-phiếu-kho-nháphủyđảo--thùng-rác) bên dưới
 
@@ -34,6 +42,7 @@ Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi c�
 **Chức năng**
 - Danh sách: nhãn **Nội bộ** / **Khách hàng** trên số phiếu; lọc mặc định **Chưa thanh toán**; Thùng rác cho phiếu **đã hủy / đã đảo**
 - Khách hàng: **dropdown tìm kiếm** sổ khách; gõ tên mới được; sau lưu phiếu nếu chưa gắn khách → hỏi **Lưu khách hàng?**
+- Ô **Người xuất** trên phiếu bán của cả Phân phối và Xưởng gợi ý Hải, Thuấn; vẫn nhập được tên khác.
 - Mỗi dòng: chọn **SP → loại nhôm** → đơn giá autofill từ loại
 - **Cách bán**: chỉ theo cân. Xưởng nhập kg/tạ/tấn thành phẩm đã giao (quy đổi kg nhôm, không gồm phụ kiện); Phân phối bán tấn. Phiếu bán xưởng mới không trừ tồn; Phân phối trừ tồn ngay khi xác nhận phiếu bán (thiếu tồn sẽ báo lỗi). Đơn giá lấy từ loại nhôm và có thể sửa trên phiếu
 - Xưởng phải gắn khách mua trước khi xác nhận để cộng sản lượng và công nợ theo người. Phiếu xác nhận là hàng đã giao, không tạo đơn đặt hàng hoặc số còn phải giao
@@ -43,6 +52,7 @@ Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi c�
 - Snapshot: categoryId/tên loại, billingUnit, dài/rộng, quantityBase
 - Chi tiết phiếu bán ẩn mã nhôm, giá vốn thực tế, giá vốn chuẩn và chênh lệch giá nhập.
 - Ghi thu (có **popup xác nhận**), đảo
+- Người thu tiền khi ghi thu gợi ý **Hải** hoặc **Thuấn**, vẫn cho nhập tên khác và in đúng tên đã chọn; phiếu chi nhập giữ ô Người nhận tiền nhập tự do.
 - **In PDF** trên bán hàng của cả Phân phối và Xưởng là một nút: xem trước hóa đơn rồi in / tải PDF (cùng cách với danh sách nợ). Hóa đơn có người bán, tên khách hàng, sản phẩm, loại nhôm, số lượng, đơn vị, đơn giá, thành tiền, và một VietQR
 - **Nháp / hủy / đảo / thùng rác** — cùng quy tắc với nhập kho (mục luồng bên dưới)
 
@@ -71,11 +81,13 @@ Popup ghi chi và ghi thu bố trí hai ô mỗi hàng trên màn hình rộng v
 
 Áp dụng `/nhap-kho` và `/ban-hang`. Backend: `StockDocumentService.moveToTrash` chỉ chấp nhận phiếu **CANCELLED** hoặc phiếu **CONFIRMED đã có phiếu đảo** (`reversedBy`).
 
+Ô ngày phiếu nhập/bán xác nhận lựa chọn ngay khi bấm ngày trong lịch, không đòi bấm thêm OK trong popup giờ. Người dùng vẫn có thể chỉnh giờ riêng.
+
 | Trạng thái khi mở chi tiết | Nút chính | Ghi chú |
 |----------------------------|-----------|---------|
 | **Nháp** (`DRAFT`) | In PDF, Sửa, **Hủy nháp**, Xác nhận | **Không** có “Chuyển thùng rác”. Muốn dọn → Hủy nháp trước |
 | **Đã hủy** (`CANCELLED`) | In PDF, **Chuyển thùng rác** | Ẩn khỏi danh sách chính |
-| **Đã xác nhận**, chưa đảo | In PDF, Thu/Chi (nếu còn nợ), Đảo phiếu… | Không vào thùng rác |
+| **Đã xác nhận**, chưa đảo | In PDF, Sửa trong 24 giờ (trừ chuyển nội bộ), Thu/Chi (nếu còn nợ), Đảo phiếu… | Không vào thùng rác |
 | **Đã xác nhận + đã đảo** | In PDF, **Chuyển thùng rác** | Chỉ ẩn danh sách; **không** xóa cứng (đã gắn kho / phiếu đảo) |
 | **Trong thùng rác** | In PDF, **Khôi phục** | Lọc danh sách “Thùng rác” |
 
@@ -103,4 +115,6 @@ Phân phối hiển thị tổng giá trị tồn sổ, số kg đã nhập, đ�
 
 Khi kiểm kê Phân phối, người vận hành có thể khai số kg vụn nằm trong phần thiếu so với tồn sổ. Hao hụt thuần bằng phần thiếu trừ vụn. Cả lần cân không lệch tồn cũng lưu dấu vết; các số vụn/hao hụt ở trang Tồn kho là **bản chụp lần kiểm kê gần nhất theo từng SP/loại**, không phải tổng phát sinh trong năm. Chốt kỳ từ chối nếu còn sản phẩm/loại chưa kiểm kê, tồn đã phát sinh giao dịch sau cân hoặc có biến động sau ngày kết thúc kỳ (không thể dùng số cân hiện tại làm tồn quá khứ).
 
-Xưởng: trang Tồn kho có thể chọn năm, hiển thị thêm vụn đã bán và vụn chưa bán theo kiểm kê năm; tồn cuối kỳ và hao hụt theo báo cáo Xưởng, không trừ hàng mỗi lần bán.
+Xưởng: trang Tồn kho mặc định dùng năm làm việc đang chọn, có thể đổi năm để xem báo cáo kiểm kê; đồng thời hiển thị bảng tồn sổ hiện tại theo từng sản phẩm/loại nhôm (bao gồm hàng nhập nội bộ). Bảng tồn sổ không lọc theo năm; hàng giao khách không tự trừ tồn. Vụn đã bán, vụn chưa bán, tồn cuối kỳ và hao hụt lấy từ báo cáo/kiểm kê Xưởng theo năm được chọn.
+
+Kiểm kê Phân phối gửi ngày nghiệp vụ theo tháng đang chọn. Tháng quá khứ dùng cuối ngày cuối khoảng đang xem, tháng hiện tại dùng thời điểm hiện tại. Backend kiểm tra tháng mở trước khi tạo điều chỉnh kho.

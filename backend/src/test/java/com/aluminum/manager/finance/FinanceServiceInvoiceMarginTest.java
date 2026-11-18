@@ -36,4 +36,14 @@ class FinanceServiceInvoiceMarginTest {
 		assertTrue(margin.costComplete());
 		assertEquals(0, new BigDecimal("40000").compareTo(margin.estimatedGrossProfit()));
 	}
+
+	@Test
+	void internalTransferIsListedWithZeroProfitEvenWithoutReferencePrice() {
+		var margin = FinanceService.invoiceMargin(2, "PP-PX-2", DAY, "Xưởng",
+				new BigDecimal("100000"), null, 1, true);
+		assertTrue(margin.internal());
+		assertTrue(margin.costComplete());
+		assertEquals(0, new BigDecimal("100000").compareTo(margin.estimatedMaterialCost()));
+		assertEquals(0, BigDecimal.ZERO.compareTo(margin.estimatedGrossProfit()));
+	}
 }

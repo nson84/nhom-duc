@@ -27,6 +27,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { SHOP_LABELS, useShop } from "../../features/shop/shop-store";
 import { logout } from "../../features/auth/auth-api";
 import { authStore, useSession } from "../../features/auth/auth-store";
+import { MonthlyBookReminder } from "../../features/dashboard/MonthlyBook";
 import { getSettings } from "../../features/settings/settings-api";
 import { listCategories } from "../../features/products/products-api";
 import { themeStore, useThemeMode } from "../../features/theme/theme-store";
@@ -42,11 +43,12 @@ const ALL_ITEMS = [
   { key: "/ban-hang", icon: <ShoppingCartOutlined />, label: "Bán hàng" },
   { key: "/ton-kho", icon: <DatabaseOutlined />, label: "Tồn kho" },
   { key: "/quyet-toan-xuong", icon: <BarChartOutlined />, label: "Quyết toán xưởng" },
-  { key: "/tong-hop-hai-ben", icon: <BarChartOutlined />, label: "Tổng hợp hai bên" },
   { key: "/nhan-vien", icon: <TeamOutlined />, label: "Nhân viên" },
   { key: "/cham-cong", icon: <CalendarOutlined />, label: "Chấm công" },
   { key: "/tien-cong", icon: <DollarOutlined />, label: "Tiền công" },
   { key: "/thu-chi", icon: <AccountBookOutlined />, label: "Thu chi" },
+  { key: "/cong-no", icon: <DollarOutlined />, label: "Công nợ" },
+  { key: "/chot-so-thang", icon: <CalendarOutlined />, label: "Chốt sổ tháng" },
   { key: "/bao-cao", icon: <BarChartOutlined />, label: "Báo cáo" },
   { key: "/so-cuoi-nam", icon: <DatabaseOutlined />, label: "Sổ cuối năm" },
   { key: "/sao-luu", icon: <CloudUploadOutlined />, label: "Sao lưu" },
@@ -57,7 +59,7 @@ const PAYROLL_PATHS = new Set(["/nhan-vien", "/cham-cong", "/tien-cong"]);
 const ADMIN_ONLY_PATHS = new Set(["/sao-luu", "/cai-dat"]);
 
 const ROLE_LABEL: Record<string, string> = {
-  ADMIN: "Admin thống kê",
+  ADMIN: "Admin",
   DISTRIBUTION: "Phân phối",
   MANUFACTURING: "Xưởng",
 };
@@ -128,14 +130,13 @@ export function AppShell() {
 
   const menuItems = useMemo(() => {
     return ALL_ITEMS.filter((item) => {
-      if (role === "ADMIN") return item.key === "/tong-hop-hai-ben" || item.key === "/so-cuoi-nam" || ADMIN_ONLY_PATHS.has(item.key);
+      if (role === "ADMIN") return ADMIN_ONLY_PATHS.has(item.key);
       if (PAYROLL_PATHS.has(item.key) && role !== "MANUFACTURING") {
         return false;
       }
       if (ADMIN_ONLY_PATHS.has(item.key)) {
         return false;
       }
-      if (item.key === "/tong-hop-hai-ben") return false;
       if (item.key === "/quyet-toan-xuong" && shop === "DISTRIBUTION") {
         return false;
       }
@@ -214,7 +215,7 @@ export function AppShell() {
               }}
             />
             <div className="app-header-shop">
-              <Tag color="blue">{role === "ADMIN" ? "Tổng hợp hai bên" : SHOP_LABELS[shop]}</Tag>
+              <Tag color="blue">{role === "ADMIN" ? "Quản trị" : SHOP_LABELS[shop]}</Tag>
             </div>
             <div className="app-header-end">
             {notificationShop && <Dropdown
@@ -277,12 +278,12 @@ export function AppShell() {
                     ),
                   },
                   { type: "divider" },
-                  {
+                  ...(role === "ADMIN" ? [] : [{
                     key: "bank-qr",
                     icon: <QrcodeOutlined />,
                     label: "Tài khoản QR nhận tiền",
                     onClick: () => navigate("/tai-khoan-qr"),
-                  },
+                  }]),
                   ...(role === "ADMIN"
                     ? [
                         {
@@ -328,6 +329,7 @@ export function AppShell() {
         </Header>
         <Content className="app-content">
           <Outlet key={`${role}-${shop}`} />
+          <MonthlyBookReminder />
         </Content>
       </Layout>
     </Layout>

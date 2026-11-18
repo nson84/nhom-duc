@@ -11,6 +11,9 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -32,23 +35,87 @@ public class AnnualBookService {
                            BigDecimal sales, BigDecimal receipts, BigDecimal closingDebt) {}
     public record Sale(long id, Long customerId, String customerName, String code, LocalDateTime date,
                        String seller, String receiver, BigDecimal total, BigDecimal paidAsOf,
-                       BigDecimal openingPaid, String notes) {}
+                       BigDecimal paidNow, BigDecimal openingPaid, String notes) {}
     public record SaleItem(long documentId, String product, String category, BigDecimal quantity,
-                           String unit, BigDecimal unitPrice, BigDecimal amount) {}
+                           String unit, BigDecimal quantityKg, BigDecimal unitPrice, BigDecimal amount) {}
     public record Purchase(long id, String supplier, String code, LocalDateTime date, BigDecimal total,
-                           BigDecimal paidAsOf, String notes) {}
+                           BigDecimal paidAsOf, String notes, boolean internal) {}
     public record Payment(long documentId, LocalDateTime date, BigDecimal amount, String method,
                           String collector, String note) {}
+    public record DebtPayment(LocalDateTime date, BigDecimal amount) {}
+    public record DebtInvoice(long id, String code, String type, String party, LocalDateTime date,
+                              BigDecimal openingDebt, BigDecimal paidInPeriod, BigDecimal remainingDebt,
+                              List<DebtPayment> payments) {}
+    public record Carryover(LocalDate from, LocalDate to, List<DebtInvoice> invoices) {}
+
+    @Transactional(readOnly = true)
+    public Carryover carryover(int year) {
+        var user = CurrentAdmin.get();
+        if (user.role() == UserRole.ADMIN)
+            throw new BusinessException(ErrorCode.FORBIDDEN, "Chỉ cửa hàng được xem công nợ chuyển kỳ", null);
+        long shopId = shops.idOf(user.shopCode());
+        var period = yearPeriods.period(year, user.shopCode());
+        if (!period.started()) throw invalid("Hãy lưu ngày bắt đầu kỳ trước khi xem công nợ");
+        var start = Timestamp.valueOf(period.periodFrom().atStartOfDay());
+        var end = Timestamp.valueOf(period.periodTo().plusDays(1).atStartOfDay());
+        var invoices = new LinkedHashMap<Long, DebtInvoice>();
+        jdbc.query("""
+                WITH old_docs AS (
+                    SELECT d.id, d.document_code, d.document_type, d.document_date, d.total_amount,
+                           COALESCE(c.name, d.counterparty_name) AS party
+                    FROM stock_documents d LEFT JOIN customers c ON c.id = d.customer_id
+                    WHERE d.shop_id = ? AND d.document_date < ? AND d.status = 'CONFIRMED'
+                      AND d.document_type IN ('SALE', 'PURCHASE') AND d.is_internal = 0
+                ), payments AS (
+                    SELECT p.document_id, p.payment_date AS paid_at, p.amount
+                    FROM sales_payments p JOIN old_docs d ON d.id = p.document_id
+                    WHERE d.document_type = 'SALE'
+                    UNION ALL
+                    SELECT f.reference_id, f.transaction_date, f.amount
+                    FROM financial_transactions f JOIN old_docs d ON d.id = f.reference_id
+                    WHERE d.document_type = 'PURCHASE' AND f.reference_type = 'STOCK_DOCUMENT'
+                      AND f.category = 'PURCHASE_PAYMENT' AND f.status = 'CONFIRMED'
+                ), balances AS (
+                    SELECT document_id,
+                           SUM(CASE WHEN paid_at < ? THEN amount ELSE 0 END) AS paid_before,
+                           SUM(CASE WHEN paid_at >= ? AND paid_at < ? THEN amount ELSE 0 END) AS paid_in_period
+                    FROM payments GROUP BY document_id
+                )
+                SELECT d.*, d.total_amount - COALESCE(b.paid_before, 0) AS opening_debt,
+                       COALESCE(b.paid_in_period, 0) AS paid_in_period, p.paid_at, p.amount
+                FROM old_docs d LEFT JOIN balances b ON b.document_id = d.id
+                LEFT JOIN payments p ON p.document_id = d.id AND p.paid_at >= ? AND p.paid_at < ?
+                WHERE d.total_amount > COALESCE(b.paid_before, 0)
+                ORDER BY d.document_date DESC, d.id DESC, p.paid_at
+                """, rs -> {
+            long id = rs.getLong("id");
+            var invoice = invoices.get(id);
+            if (invoice == null) {
+                var opening = rs.getBigDecimal("opening_debt");
+                var paid = rs.getBigDecimal("paid_in_period");
+                invoice = new DebtInvoice(id, rs.getString("document_code"), rs.getString("document_type"),
+                        rs.getString("party"), rs.getTimestamp("document_date").toLocalDateTime(),
+                        opening, paid, opening.subtract(paid).max(BigDecimal.ZERO), new ArrayList<>());
+                invoices.put(id, invoice);
+            }
+            var paidAt = rs.getTimestamp("paid_at");
+            if (paidAt != null) invoice.payments().add(new DebtPayment(paidAt.toLocalDateTime(), rs.getBigDecimal("amount")));
+        }, shopId, start, start, start, end, start, end);
+        return new Carryover(period.periodFrom(), period.periodTo(), List.copyOf(invoices.values()));
+    }
     public record Transaction(String code, LocalDateTime date, String category, BigDecimal amount,
                               String counterparty, String spentBy, String description, String reference) {}
     public record Stock(String product, String category, BigDecimal quantityKg, BigDecimal value) {}
-    public record Wage(int year, int month, String employee, BigDecimal days, BigDecimal basePay,
+    public record Wage(int year, int month, long employeeId, String employee, BigDecimal days, BigDecimal basePay,
                        BigDecimal overtimePay, BigDecimal bonusPay, BigDecimal allowances,
-                       BigDecimal deductions, BigDecimal totalPay) {}
-    public record Book(int year, LocalDate periodFrom, LocalDate periodTo, String shopCode, String shopName, List<Customer> customers,
+                       BigDecimal deductions, BigDecimal advanceAmount, BigDecimal totalPay) {}
+    public record WageEvent(int year, int month, long employeeId, String employee, LocalDate date, String kind,
+                            BigDecimal amount, String note, boolean received) {}
+    public record Book(int year, String periodName, LocalDate periodFrom, LocalDate periodTo, String shopCode, String shopName, List<Customer> customers,
                        List<Sale> sales, List<SaleItem> saleItems, List<Payment> payments,
                        List<Purchase> purchases, List<SaleItem> purchaseItems,
                        List<Transaction> receipts, List<Transaction> expenses, List<Stock> stock, List<Wage> wages,
+                       List<WageEvent> wageEvents,
                        BigDecimal inventoryValue, BigDecimal profit, boolean closed) {}
 
     @Transactional(readOnly = true)
@@ -57,10 +124,11 @@ public class AnnualBookService {
         if (!ShopContext.DISTRIBUTION.equals(code) && !ShopContext.MANUFACTURING.equals(code))
             throw invalid("Cửa hàng không hợp lệ");
         var user = CurrentAdmin.get();
-        if (user.role() != UserRole.ADMIN && !code.equals(user.shopCode()))
+        if (user.role() == UserRole.ADMIN || !code.equals(user.shopCode()))
             throw new BusinessException(ErrorCode.FORBIDDEN, "Không được xem sổ của cửa hàng khác", null);
         long shopId = shops.idOf(code);
         var selectedPeriod = yearPeriods.period(year, code);
+        if (!selectedPeriod.started()) throw invalid("Hãy lưu ngày bắt đầu kỳ trước khi xem Sổ cuối năm");
         LocalDate[] period = {selectedPeriod.periodFrom(), selectedPeriod.periodTo()};
         Timestamp start = Timestamp.valueOf(period[0].atStartOfDay());
         Timestamp end = Timestamp.valueOf(period[1].plusDays(1).atStartOfDay());
@@ -79,7 +147,11 @@ public class AnnualBookService {
                   COALESCE((SELECT SUM(p.amount) FROM sales_payments p JOIN stock_documents d ON d.id = p.document_id
                     WHERE d.customer_id = c.id AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
                       AND d.is_internal = 0 AND d.document_date < ? AND p.payment_date >= ? AND p.payment_date < ?), 0) AS receipts
-                FROM customers c WHERE c.shop_id = ? AND c.created_at < ? ORDER BY c.name
+                FROM customers c WHERE c.shop_id = ? AND EXISTS (
+                    SELECT 1 FROM stock_documents d
+                    WHERE d.customer_id = c.id AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+                      AND d.is_internal = 0 AND d.document_date < ?
+                ) ORDER BY c.name
                 """, (rs, i) -> {
             BigDecimal opening = rs.getBigDecimal("opening_debt");
             BigDecimal sales = rs.getBigDecimal("sales");
@@ -94,6 +166,8 @@ public class AnnualBookService {
                   COALESCE((SELECT SUM(p.amount) FROM sales_payments p
                     WHERE p.document_id = d.id AND p.payment_date < ?), 0) AS paid_as_of,
                   COALESCE((SELECT SUM(p.amount) FROM sales_payments p
+                    WHERE p.document_id = d.id), 0) AS paid_now,
+                  COALESCE((SELECT SUM(p.amount) FROM sales_payments p
                     WHERE p.document_id = d.id AND p.payment_date < ?), 0) AS opening_paid
                 FROM stock_documents d LEFT JOIN customers c ON c.id = d.customer_id
                 WHERE d.shop_id = ? AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
@@ -107,67 +181,68 @@ public class AnnualBookService {
                 rs.getString("customer_name"), rs.getString("document_code"),
                 rs.getTimestamp("document_date").toLocalDateTime(), rs.getString("issued_by"),
                 rs.getString("received_by"), rs.getBigDecimal("total_amount"), rs.getBigDecimal("paid_as_of"),
-                rs.getBigDecimal("opening_paid"), rs.getString("notes")), end, start, shopId, end, start, end, start, end);
+                rs.getBigDecimal("paid_now"), rs.getBigDecimal("opening_paid"), rs.getString("notes")), end, start, shopId, end, start, end, start, end);
 
         List<SaleItem> items = jdbc.query("""
                 SELECT i.document_id, i.product_name_snapshot, COALESCE(i.category_name_snapshot, ''), i.quantity_document,
-                  i.unit_name_snapshot, i.unit_price, i.line_total
+                  i.unit_name_snapshot, i.quantity_base, i.unit_price, i.line_total
                 FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
                 WHERE d.shop_id = ? AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
                   AND d.is_internal = 0 AND d.document_date < ? ORDER BY i.document_id, i.id
                 """, (rs, i) -> new SaleItem(rs.getLong(1), rs.getString(2), rs.getString(3),
-                rs.getBigDecimal(4), rs.getString(5), rs.getBigDecimal(6), rs.getBigDecimal(7)), shopId, end);
+                rs.getBigDecimal(4), rs.getString(5), rs.getBigDecimal(6), rs.getBigDecimal(7), rs.getBigDecimal(8)), shopId, end);
 
         List<Payment> payments = jdbc.query("""
                 SELECT p.document_id, p.payment_date, p.amount, p.payment_method, p.collected_by_name, p.note
                 FROM sales_payments p JOIN stock_documents d ON d.id = p.document_id
                 WHERE d.shop_id = ? AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
-                  AND d.is_internal = 0 AND d.document_date < ? AND p.payment_date < ?
+                  AND d.is_internal = 0 AND d.document_date < ?
                 ORDER BY p.document_id, p.payment_date, p.id
                 """, (rs, i) -> new Payment(rs.getLong(1), rs.getTimestamp(2).toLocalDateTime(),
-                rs.getBigDecimal(3), rs.getString(4), rs.getString(5), rs.getString(6)), shopId, end, end);
+                rs.getBigDecimal(3), rs.getString(4), rs.getString(5), rs.getString(6)), shopId, end);
 
         List<Purchase> purchases = jdbc.query("""
-                SELECT d.id, d.counterparty_name, d.document_code, d.document_date, d.total_amount, d.notes,
+                SELECT d.id, d.counterparty_name, d.document_code, d.document_date, d.total_amount, d.notes, d.is_internal,
                   COALESCE((SELECT SUM(f.amount) FROM financial_transactions f
                     WHERE f.reference_type = 'STOCK_DOCUMENT' AND f.reference_id = d.id
                       AND f.category = 'PURCHASE_PAYMENT' AND f.status = 'CONFIRMED'
                       AND f.transaction_date < ?), 0) AS paid_as_of
                 FROM stock_documents d
                 WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
-                  AND d.is_internal = 0 AND d.document_date < ?
-                  AND (d.document_date >= ? OR d.total_amount > COALESCE((SELECT SUM(f.amount)
+                  AND d.document_date < ?
+                  AND (d.document_date >= ? OR (d.is_internal = 0 AND d.total_amount > COALESCE((SELECT SUM(f.amount)
                     FROM financial_transactions f WHERE f.reference_type = 'STOCK_DOCUMENT'
                       AND f.reference_id = d.id AND f.category = 'PURCHASE_PAYMENT'
-                      AND f.status = 'CONFIRMED' AND f.transaction_date < ?), 0)
+                      AND f.status = 'CONFIRMED' AND f.transaction_date < ?), 0))
                     OR EXISTS (SELECT 1 FROM financial_transactions f
                       WHERE f.reference_type = 'STOCK_DOCUMENT' AND f.reference_id = d.id
                         AND f.category = 'PURCHASE_PAYMENT' AND f.status = 'CONFIRMED'
                         AND f.transaction_date >= ? AND f.transaction_date < ?))
                 ORDER BY d.counterparty_name, d.document_date, d.id
                 """, (rs, i) -> new Purchase(rs.getLong(1), rs.getString(2), rs.getString(3),
-                rs.getTimestamp(4).toLocalDateTime(), rs.getBigDecimal(5), rs.getBigDecimal(7),
-                rs.getString(6)), end, shopId, end, start, end, start, end);
+                rs.getTimestamp(4).toLocalDateTime(), rs.getBigDecimal(5), rs.getBigDecimal(8),
+                rs.getString(6), rs.getBoolean(7)), end, shopId, end, start, end, start, end);
 
         List<SaleItem> purchaseItems = jdbc.query("""
                 SELECT i.document_id, i.product_name_snapshot, COALESCE(i.category_name_snapshot, ''),
-                  i.quantity_document, i.unit_name_snapshot, i.unit_price, i.line_total
+                  i.quantity_document, i.unit_name_snapshot, i.quantity_base, i.unit_price, i.line_total
                 FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
                 WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
-                  AND d.is_internal = 0 AND d.document_date < ? ORDER BY i.document_id, i.id
+                  AND d.document_date < ? ORDER BY i.document_id, i.id
                 """, (rs, i) -> new SaleItem(rs.getLong(1), rs.getString(2), rs.getString(3),
-                rs.getBigDecimal(4), rs.getString(5), rs.getBigDecimal(6), rs.getBigDecimal(7)), shopId, end);
+                rs.getBigDecimal(4), rs.getString(5), rs.getBigDecimal(6), rs.getBigDecimal(7), rs.getBigDecimal(8)), shopId, end);
 
         List<Transaction> receipts = transactions(shopId, start, end, "INCOME");
         List<Transaction> expenses = transactions(shopId, start, end, "EXPENSE");
         List<Stock> stock = ShopContext.DISTRIBUTION.equals(code) ? distributionStock(shopId, end) : factoryStock(year);
         List<Wage> wages = ShopContext.MANUFACTURING.equals(code) ? wages(shopId, period[0], period[1]) : List.of();
+        List<WageEvent> wageEvents = ShopContext.MANUFACTURING.equals(code) ? wageEvents(shopId, period[0], period[1]) : List.of();
         var closing = jdbc.query("""
                 SELECT inventory_value, profit FROM year_end_balances WHERE shop_id = ? AND year_number = ?
                 """, (rs, i) -> new BigDecimal[]{rs.getBigDecimal(1), rs.getBigDecimal(2)}, shopId, year)
                 .stream().findFirst().orElse(null);
-        return new Book(year, period[0], period[1], code, shops.shopName(code), customers, sales, items, payments, purchases, purchaseItems,
-                receipts, expenses, stock, wages, closing == null ? null : closing[0],
+        return new Book(year, selectedPeriod.periodName(), period[0], period[1], code, shops.shopName(code), customers, sales, items, payments, purchases, purchaseItems,
+                receipts, expenses, stock, wages, wageEvents, closing == null ? null : closing[0],
                 closing == null ? null : closing[1], closing != null);
     }
 
@@ -218,17 +293,53 @@ public class AnnualBookService {
 
     private List<Wage> wages(long shopId, LocalDate from, LocalDate to) {
         return jdbc.query("""
-                SELECT pp.period_year, pp.period_month, e.full_name, pd.credited_days, pd.base_pay, pd.overtime_pay,
-                  pd.bonus_pay, pd.allowances, pd.deductions, pd.total_pay
+                SELECT pp.period_year, pp.period_month, e.id, e.full_name, pd.credited_days, pd.base_pay, pd.overtime_pay,
+                  pd.bonus_pay, pd.allowances, pd.deductions, pd.advance_amount, pd.total_pay
                 FROM payroll_details pd JOIN payroll_periods pp ON pp.id = pd.payroll_period_id
                 JOIN employees e ON e.id = pd.employee_id
                 WHERE e.shop_id = ?
                   AND LAST_DAY(MAKEDATE(pp.period_year, 1) + INTERVAL (pp.period_month - 1) MONTH) >= ?
                   AND LAST_DAY(MAKEDATE(pp.period_year, 1) + INTERVAL (pp.period_month - 1) MONTH) <= ?
                 ORDER BY pp.period_year, pp.period_month, e.full_name
-                """, (rs, i) -> new Wage(rs.getInt(1), rs.getInt(2), rs.getString(3), rs.getBigDecimal(4),
-                rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getBigDecimal(7),
-                rs.getBigDecimal(8), rs.getBigDecimal(9), rs.getBigDecimal(10)), shopId, from, to);
+                """, (rs, i) -> new Wage(rs.getInt(1), rs.getInt(2), rs.getLong(3), rs.getString(4), rs.getBigDecimal(5),
+                rs.getBigDecimal(6), rs.getBigDecimal(7), rs.getBigDecimal(8),
+                rs.getBigDecimal(9), rs.getBigDecimal(10), rs.getBigDecimal(11), rs.getBigDecimal(12)), shopId, from, to);
+    }
+
+    private List<WageEvent> wageEvents(long shopId, LocalDate from, LocalDate to) {
+        LocalDate first = from.withDayOfMonth(1);
+        LocalDate last = to.withDayOfMonth(to.lengthOfMonth());
+        List<WageEvent> events = new ArrayList<>(jdbc.query("""
+                SELECT e.id, e.full_name, a.work_date, a.bonus_amount, a.bonus_notes
+                FROM attendance_records a JOIN employees e ON e.id = a.employee_id
+                WHERE e.shop_id = ? AND a.bonus_amount > 0 AND a.work_date BETWEEN ? AND ?
+                """, (rs, i) -> {
+            LocalDate date = rs.getDate(3).toLocalDate();
+            return new WageEvent(date.getYear(), date.getMonthValue(), rs.getLong(1), rs.getString(2), date,
+                    "Thưởng công", rs.getBigDecimal(4), rs.getString(5), false);
+        }, shopId, first, last));
+        events.addAll(jdbc.query("""
+                SELECT e.id, e.full_name, h.holiday_date, h.name, h.bonus_amount, h.notes, b.received
+                FROM holiday_employee_bonuses b JOIN holidays h ON h.id = b.holiday_id
+                JOIN employees e ON e.id = b.employee_id
+                WHERE e.shop_id = ? AND h.bonus_amount > 0 AND h.holiday_date BETWEEN ? AND ?
+                """, (rs, i) -> {
+            LocalDate date = rs.getDate(3).toLocalDate();
+            return new WageEvent(date.getYear(), date.getMonthValue(), rs.getLong(1), rs.getString(2), date,
+                    "Thưởng lễ: " + rs.getString(4), rs.getBigDecimal(5), rs.getString(6), rs.getBoolean(7));
+        }, shopId, first, last));
+        events.addAll(jdbc.query("""
+                SELECT e.id, e.full_name, a.advance_date, a.amount, a.note
+                FROM payroll_advance_entries a JOIN payroll_details pd ON pd.id = a.payroll_detail_id
+                JOIN employees e ON e.id = pd.employee_id
+                WHERE e.shop_id = ? AND a.advance_date BETWEEN ? AND ?
+                """, (rs, i) -> {
+            LocalDate date = rs.getDate(3).toLocalDate();
+            return new WageEvent(date.getYear(), date.getMonthValue(), rs.getLong(1), rs.getString(2), date,
+                    "Ứng lương", rs.getBigDecimal(4), rs.getString(5), true);
+        }, shopId, first, last));
+        events.sort(Comparator.comparing(WageEvent::date).thenComparing(WageEvent::employee));
+        return events;
     }
 
     private static BusinessException invalid(String message) {

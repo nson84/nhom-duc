@@ -8,9 +8,10 @@ Các bảng kiểm kê, phân bổ, công nợ và phế liệu cuộn ngang tro
 
 Màn hình mặc định mở năm vừa kết thúc để xem lại lãi và kiểm kê; có thể chọn năm khác.
 
-- Xưởng thao tác; Admin có thể xem khi chọn sổ xưởng. Tổng hợp nhôm nhập, kg nhôm thành phẩm đã bán, kg phế liệu đã bán nhiều lần trong năm
+- Xưởng thao tác; Admin không truy cập. Tổng hợp nhôm nhập, kg nhôm thành phẩm đã bán, kg phế liệu đã bán nhiều lần trong năm
 - Form bán phế liệu chỉ nhập thời gian, khối lượng, đơn vị và đơn giá theo đơn vị đã chọn. Người bán lấy từ tài khoản đang đăng nhập. Có thể ghi thu một phần hoặc đủ sau khi lưu phiếu.
 - Bảng phế liệu chỉ hiện thời gian, người bán, khối lượng, đơn giá và thành tiền. Bấm dòng để xem chi tiết và thao tác.
+- Ô kg thành phẩm đã giao trong danh sách phiếu bán hiển thị thêm số kg theo từng loại nhôm trong kỳ và bộ lọc loại đang chọn.
 - Mục **Nhập số kg còn trong kho cuối năm** tự liệt kê các loại nhôm và có nút **Lưu tồn nguyên liệu**. Dòng không còn hàng dùng 0. Tồn đầu năm lấy từ số chốt cuối năm trước, mặc định 0 nếu chưa có số dư đã lưu.
 - Biểu mẫu kiểm kê cuối năm ghi nhôm nguyên liệu và phế liệu chưa bán. Có thể để trống phế liệu, khi lưu sẽ tính là 0. Khi lưu kiểm kê, hàng đang làm và thành phẩm chưa bán được tính là 0. Số đã chốt cuối năm chuyển làm đầu năm sau.
 - Khi chốt, lưu bản số dư năm gồm tồn nhôm, nợ khách, nợ nhà cung cấp và lãi; thẻ dưới báo cáo năm hiển thị bản đã chốt.
@@ -21,6 +22,9 @@ Màn hình mặc định mở năm vừa kết thúc để xem lại lãi và ki
 - Năm đã chốt khóa việc sửa phiếu thuộc năm đó; cho phép thu nợ của năm cũ vào kỳ mới
 - Có thể chốt năm hiện tại ngay khi đã lưu kiểm kê và đáp ứng điều kiện chốt.
 - Chọn ngày đầu kỳ và ngày chốt khi kiểm kê; kỳ có thể đi qua 31/12 và năm nhuận âm. Kỳ sau bắt đầu ngày kế tiếp. Năm trên bộ chọn là tên kỳ, không buộc trùng năm dương lịch của ngày đầu kỳ.
+- Nút Chốt năm trên Tổng quan dẫn đến phần kiểm kê của đúng năm đang chọn qua tham số `year`; chốt chỉ hoàn tất sau khi lưu kiểm kê và xác nhận tại trang này.
+- Hộp thoại chốt năm Xưởng hỏi đã kiểm kê tồn kho chưa và hiển thị khoảng ngày của kỳ. Chọn **Đã kiểm kê, chốt năm** để tiếp tục hoặc **Quay lại** để kiểm tra.
+- Ngày kỳ đã lưu trên Tổng quan được nạp vào kiểm kê Xưởng, kể cả khi chưa từng lập kiểm kê; báo cáo Xưởng dùng cùng mốc. Ngày trong kiểm kê chỉ đọc, muốn đổi phải lưu lại ở Tổng quan. Cần lưu ngày kết thúc trước khi lưu kiểm kê.
 
 ## Bổ sung theo code hiện tại
 

@@ -20,4 +20,10 @@ Mỗi nhân viên đã nhận có một phiếu chi gắn với ngày lễ. Bỏ
 
 Kỳ tiền công trừ tiền ứng vào thực lĩnh và lưu số giờ tăng ca đã duyệt cùng thưởng lễ đã nhận để xem bảng kê sau khi chốt. Các khoản khấu trừ cũ được lưu riêng.
 
+Các lệnh sửa chấm công dùng kiểm tra ngày thuộc kỳ năm và tháng đã mở, chưa khóa. Kỳ công chỉ tạo/tính/sửa/chốt trong tháng đang mở; phải chốt kỳ công trước khi khóa tháng ở Tổng quan. Khi tháng đã khóa không cho mở lại kỳ công.
+
 [attendance](../../../../../../../../frontend/src/features/attendance/FEATURE.md)
+
+## Cập nhật rà soát 19/11/2026
+
+Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.

@@ -40,10 +40,36 @@ export type YearEndBalance = {
   closedAt: string;
 };
 
-export type YearPeriod = { year: number; periodFrom: string; periodTo: string; closed: boolean };
+export type YearPeriod = { year: number; periodName: string; periodFrom: string; periodTo: string; closed: boolean; started: boolean; endSaved: boolean; plannedEnd: string | null };
 
 export async function getYearPeriod(year: number): Promise<YearPeriod> {
   return (await api.get<Envelope<YearPeriod>>("/api/v1/dashboard/year-period", { params: { year } })).data.data;
+}
+
+export async function getMonthClosed(month: string): Promise<boolean> {
+  return (await api.get<Envelope<boolean>>("/api/v1/dashboard/month-close", { params: { month } })).data.data;
+}
+
+export type MonthStatus = "NOT_OPEN" | "OPEN" | "CLOSED";
+
+export async function getMonthStatus(month: string): Promise<MonthStatus> {
+  return (await api.get<Envelope<MonthStatus>>("/api/v1/dashboard/month-status", { params: { month } })).data.data;
+}
+
+export async function openMonth(year: number, month: string): Promise<MonthStatus> {
+  return (await api.post<Envelope<MonthStatus>>("/api/v1/dashboard/month-open", null, { params: { year, month } })).data.data;
+}
+
+export async function closeMonth(year: number, month: string): Promise<boolean> {
+  return (await api.post<Envelope<boolean>>("/api/v1/dashboard/month-close", null, { params: { year, month } })).data.data;
+}
+
+export async function saveYearPeriod(year: number, from: string, to: string): Promise<YearPeriod> {
+  return (await api.post<Envelope<YearPeriod>>("/api/v1/dashboard/year-period", null, { params: { year, from, to } })).data.data;
+}
+
+export async function saveYearStart(year: number, from: string, name: string): Promise<YearPeriod> {
+  return (await api.post<Envelope<YearPeriod>>("/api/v1/dashboard/year-period/start", null, { params: { year, from, name } })).data.data;
 }
 
 export async function getYearEndBalance(year: number): Promise<YearEndBalance | null> {
