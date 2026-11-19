@@ -2,7 +2,7 @@
 
 ## Phạm vi và kết luận
 
-Mốc audit gốc: `2f228143cf5105184610b32f3f49c21446823f46`. Mã đã merge vào main qua PR #3: `82f19139d8487e57de7a7a2cd83c1b864fff23dd`; đầu nhánh local trước lần rà soát này: `e1f5ca35ccf14b84738b6f300a33bf7bae0c0475`. Các sửa dưới đây đang ở working tree, chưa commit/push/merge.
+Mốc audit gốc: `2f228143cf5105184610b32f3f49c21446823f46`. Mã đã merge vào main qua PR #3: `82f19139d8487e57de7a7a2cd83c1b864fff23dd`; đầu nhánh local trước lần rà soát này: `e1f5ca35ccf14b84738b6f300a33bf7bae0c0475`. Cập nhật lịch sử: các sửa được mô tả trong báo cáo này đã nằm trong main tại `b290e3cf2ee54d834c08a35267950d0fb86228bb` (bao gồm commit `53c1174` và `5dd5389`), không còn là thay đổi chưa commit. Lượt audit tiếp theo tại b290e3c ban đầu chỉ sửa workspace; sau kiểm thử người dùng đã yêu cầu đẩy lên main; xem `audit-b290-20261119.md`.
 
 Đã xử lý thêm các lỗi tái hiện được bằng test. **Chưa nghiệm thu toàn bộ checklist phát hành**: khôi phục chuyển database/rollback, máy Windows sạch và kiểm thử UI/PDF thực tế còn chưa được chứng minh. Không mở lại restore production để che khoảng trống này.
 

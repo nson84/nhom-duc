@@ -324,7 +324,10 @@ public class BackupService {
 				try (ResultSet colRs = stmt.executeQuery("SHOW COLUMNS FROM `" + table + "`")) {
 					while (colRs.next()) {
 						String extra = colRs.getString("Extra");
-						if (extra == null || !extra.toUpperCase().contains("GENERATED")) {
+						// DEFAULT_GENERATED is a writable default (e.g. historical timestamps).
+						// Only computed columns must be omitted from INSERT statements.
+						String generation = extra == null ? "" : extra.toUpperCase(java.util.Locale.ROOT);
+						if (!generation.contains("STORED GENERATED") && !generation.contains("VIRTUAL GENERATED")) {
 							writableCols.add(colRs.getString("Field"));
 						}
 					}

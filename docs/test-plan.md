@@ -111,3 +111,13 @@ Kết quả lượt chuyển tồn:74 unit test,18 integration test MySQL riêng
 Regression monthlyCountNeedsOnlyRawKgAndAnnualScrapCanStillBeRecordedLater: chỉ gửi kg nguyên liệu, openingValue/scrapKg/scrapValue null; lưu thành công, profit chưa đủ dữ liệu để null; không tạo bản chốt năm hoặc giả bằng chứng kiểm kê năm.
 
 Nếu đã nhập kg vụn nhưng chưa có giá trị, endingValue và profit tháng để null; kg vẫn lưu và chuyển theo loại, không biến giá trị vụn chưa biết thành0 ở tháng sau. Đã kiểm tra74 unit test,6 ca MySQL liên quan và build frontend. Không kiểm thử UI trực quan trong lượt này.
+
+## Audit tại b290e3c — bộ hồi quy bổ sung
+
+Lệnh backend đầy đủ: `mvnw.cmd '-Dtest=*Test,*MysqlIT' package` với ALUMINUM_TEST_DB_URL/USERNAME/PASSWORD của server thử riêng, APPDATA riêng. Chạy trong bản sao để không kích hoạt DevTools backend đang làm việc. BackupBusinessMysqlIT so SQL/ảnh/timestamps và18 bảng chính của hai sổ; kiểm tra thiếu ảnh và giới hạn FK tác giả kỳ công. CloudBackupServiceTest có ca mất mạng/retry dùng S3 mock.
+
+StockLifecycleMysqlIT bổ sung7 ca: thu đủ/retry, nhiều dòng, từ chối5 thao tác trong tháng khóa, chuyển tồn tháng12→tháng1 với đổi tên/ngừng dùng/cô lập shop, lương+OT+ứng+trả+khóa, race khóa tháng/ghi phiếu, hóa đơn30/10 thu30/10 và10/11. V43 khớp CHECK với thực lĩnh đã trừ ứng trong code. Không được bỏ CHECK để cho test qua hoặc sửa tiền lịch sử.
+
+Xem audit-b290-20261119.md để biết kết quả cuối, các log tái hiện và phạm vi NOT_TESTED. Smoke responsive3 trang không thay thế UI/PDF nhiều dòng hoặc bộ cài NSIS. Recovery end-to-end vẫn NOT_VERIFIED, restore production vẫn503.
+
+Kết quả cuối audit b290e3c:75 unit +27 MySQL integration =102 test,0 lỗi,0 skip; package JAR và frontend build đạt. Flyway43 chỉ chạy trên DB thử. Không đổi định nghĩa thu/nợ: ca30/10→10/11 xác nhận doanh thu152m tháng10, tiền thực nhận50m tháng10 và102m tháng11, đã thu từ hóa đơn tháng10 đến nay152m, nợ snapshot102m giữ nguyên, hiện tạiPAID. Không coi kết quả này là nghiệm thu PDF/NSIS hoặc recovery toàn bộ.

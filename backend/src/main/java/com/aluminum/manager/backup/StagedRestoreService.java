@@ -91,6 +91,13 @@ public class StagedRestoreService {
 				}
 			}
 			verifyForeignKeys(connection);
+			try (var rows = stmt.executeQuery("SELECT image_path FROM products WHERE image_path LIKE 'product-image:%'")) {
+				while (rows.next()) {
+					String name = rows.getString(1).substring("product-image:".length());
+					if (!name.matches("[a-f0-9-]{36}\\.[a-zA-Z0-9.+-]+") || !Files.isRegularFile(imageDirectory.resolve(name)))
+						throw new IOException("Thiếu ảnh sản phẩm trong bản sao lưu: " + name);
+				}
+			}
 		} catch (Exception e) {
 			throw new IOException("Khôi phục thử trên database riêng thất bại: " + database, e);
 		}

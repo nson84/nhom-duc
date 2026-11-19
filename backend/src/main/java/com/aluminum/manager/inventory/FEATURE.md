@@ -31,3 +31,5 @@ API tồn kho còn trả tổng tiền phiếu nhập đã xác nhận, chưa đ
 Kiểm kê Phân phối gửi ngày nghiệp vụ theo tháng đang chọn. Tháng quá khứ dùng cuối ngày cuối khoảng đang xem, tháng hiện tại dùng thời điểm hiện tại. Backend kiểm tra tháng mở trước khi tạo điều chỉnh kho.
 
 Rà soát 19/11: sửa phiếu nhập Phân phối sau khi đã bán một phần cho phép tổng nhập mới hợp lệ; dựng lại phiếu rồi kiểm tra tồn cuối trong cùng transaction, rollback nếu thiếu hàng. Test MySQL bảo vệ số đã thu, hạn sửa gốc, hai request thu đồng thời và đảo cặp nội bộ. Xem docs/audit-followup-20261119.md.
+
+Audit b290e3c bổ sung ca MySQL: thanh toán đủ rồi retry không nhân đôi dòng tiền/biến động; phiếu hai loại đổi thứ tự, tăng lượng và rollback khi đổi sang loại không đủ tồn; tháng khóa từ chối tạo/sửa/xác nhận/hủy/đảo. Không đổi nghiệp vụ hoặc công thức kho.

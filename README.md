@@ -151,3 +151,7 @@ Admin vào **Sao lưu** để cất khóa phục hồi ở nơi riêng, cấu h�
 Xem [báo cáo đối chiếu và giới hạn nghiệm thu](docs/audit-followup-20261119.md). Đã chạy 74 unit test, 14 integration test trên MySQL riêng cổng 13307 và npm ci/build frontend. Chưa nghiệm thu chuyển DB/rollback, Windows sạch và UI/PDF trực quan. Không có migration mới trong lượt audit bổ sung.
 
 Tồn đầu kỳ hiện theo từng loại tại Tồn kho/Chốt sổ tháng/Quyết toán Xưởng: dùng nguyên kg từ bản chốt liền trước, không tạo phiếu nhập và không cộng trùng tháng/năm. V42 lưu chi tiết nguyên liệu chốt năm; kiểm thử bằng MySQL riêng.
+
+### Audit tiếp theo tại b290e3c
+
+[Báo cáo audit mới](docs/audit-b290-20261119.md) ghi lỗi đã tái hiện, sửa trong workspace và giới hạn nghiệm thu. Bổ sung V43 để CHECK tiền công khớp công thức Java đã trừ ứng; không cập nhật tiền lịch sử và chưa áp dụng vào DB nghiệp vụ. Giữ restore production khóa, recovery end-to-end NOT_VERIFIED vì còn liên kết tác giả kỳ công và chưa diễn tập chuyển/rollback máy mới. Sau audit, người dùng yêu cầu đẩy các sửa đã kiểm thử trực tiếp lên main.

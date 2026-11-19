@@ -27,6 +27,48 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 class CloudBackupServiceTest {
 	@TempDir Path directory;
 
+	@Test void networkFailureRemainsRetryableAndNeverReportsAnUpload() throws Exception {
+		byte[] key = new byte[32]; java.util.Arrays.fill(key, (byte) 3);
+		Path archive = directory.resolve("aluminum-manual-20261115-120000-002.ndbak");
+		EncryptedBackupCodec codec = new EncryptedBackupCodec();
+		codec.encrypt("-- ALUMINUM_MANAGER_BACKUP_V2\n-- ALUMINUM_MANAGER_BACKUP_END\n".getBytes(), key, archive);
+		String checksum = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(archive)));
+		JdbcTemplate jdbc = mock(JdbcTemplate.class);
+		when(jdbc.query(anyString(), any(RowMapper.class))).thenAnswer(inv -> {
+			RowMapper<?> mapper = inv.getArgument(1);
+			var rs = mock(java.sql.ResultSet.class);
+			when(rs.getString(1)).thenReturn(archive.toString());
+			when(rs.getString(2)).thenReturn(checksum);
+			return List.of(mapper.mapRow(rs, 0));
+		});
+		S3Client s3 = mock(S3Client.class);
+		Set<String> stored = new HashSet<>();
+		when(s3.headObject(any(HeadObjectRequest.class))).thenAnswer(inv -> {
+			HeadObjectRequest request = inv.getArgument(0);
+			if (!stored.contains(request.key())) throw S3Exception.builder().statusCode(404).build();
+			return HeadObjectResponse.builder().contentLength(Files.size(archive)).metadata(Map.of("sha256", checksum)).build();
+		});
+		when(s3.listObjectsV2(any(software.amazon.awssdk.services.s3.model.ListObjectsV2Request.class)))
+				.thenReturn(software.amazon.awssdk.services.s3.model.ListObjectsV2Response.builder().build());
+		when(s3.putObject(any(PutObjectRequest.class), any(software.amazon.awssdk.core.sync.RequestBody.class)))
+				.thenThrow(software.amazon.awssdk.core.exception.SdkClientException.create("Test network disconnect"))
+				.thenAnswer(inv -> { stored.add(((PutObjectRequest) inv.getArgument(0)).key()); return PutObjectResponse.builder().build(); });
+		R2CloudService cloud = new R2CloudService(mock(SecretProtector.class), directory.resolve("unused")) {
+			@Override public Settings settings() { return new Settings("https://example", "bucket", "id", true); }
+			@Override <T> T withClient(Function<S3Client, T> action) { return action.apply(s3); }
+		};
+		RecoveryKeyService recovery = mock(RecoveryKeyService.class);
+		when(recovery.key()).thenReturn(key);
+		CloudBackupService service = new CloudBackupService(jdbc, cloud, codec, recovery);
+		assertEquals(0, service.syncPending());
+		assertNotNull(service.status().lastError());
+		assertEquals(1, service.status().pending());
+		assertTrue(Files.isRegularFile(archive), "Network failure must retain the local archive");
+		assertEquals(1, service.syncPending());
+		assertNull(service.status().lastError());
+		assertEquals(2, stored.size());
+	}
+
 	@Test void uploadsEncryptedArchiveAndManifestOnlyOnce() throws Exception {
 		byte[] key = new byte[32]; java.util.Arrays.fill(key, (byte) 3);
 		Path archive = directory.resolve("aluminum-manual-20261115-120000-001.ndbak");

@@ -41,7 +41,8 @@ public class YearEndBalanceService {
     }
 
     public void requireWorkingDate(LocalDateTime date) {
-        String monthStatus = monthStatus(YearMonth.from(date));
+        // Keep the validated month open until this business transaction commits.
+        String monthStatus = monthStatus(YearMonth.from(date), true);
         if (!"OPEN".equals(monthStatus))
             throw invalid("Tháng " + YearMonth.from(date) + ("CLOSED".equals(monthStatus)
                     ? " đã khóa" : " chưa mở") + "; không thể ghi phiếu");
@@ -80,7 +81,12 @@ public class YearEndBalanceService {
     }
 
     public String monthStatus(YearMonth month) {
-        return jdbc.query("SELECT closed_at FROM shop_month_periods WHERE shop_id = ? AND month_start = ?",
+        return monthStatus(month, false);
+    }
+
+    private String monthStatus(YearMonth month, boolean lockForWriteValidation) {
+        return jdbc.query("SELECT closed_at FROM shop_month_periods WHERE shop_id = ? AND month_start = ?"
+                        + (lockForWriteValidation ? " FOR SHARE" : ""),
                 (rs, i) -> rs.getTimestamp(1) == null ? "OPEN" : "CLOSED", shops.currentId(), month.atDay(1))
                 .stream().findFirst().orElse("NOT_OPEN");
     }
@@ -115,6 +121,9 @@ public class YearEndBalanceService {
 
     @Transactional
     public boolean closeMonth(int year, YearMonth month) {
+        // Lock before reading drafts: a writer already past validation must finish first.
+        jdbc.query("SELECT shop_id FROM shop_month_periods WHERE shop_id = ? AND month_start = ? FOR UPDATE",
+                (rs, i) -> rs.getLong(1), shops.currentId(), month.atDay(1));
         Period selected = period(year);
         if (!selected.started() || selected.closed()) throw invalid("Kỳ năm chưa bắt đầu hoặc đã chốt");
         if (!"OPEN".equals(monthStatus(month))) throw invalid("Chỉ khóa được tháng đã mở và chưa khóa");
@@ -123,11 +132,12 @@ public class YearEndBalanceService {
         if (first.isAfter(last)) throw invalid("Tháng này nằm ngoài kỳ năm đang chọn");
         if (last.isAfter(LocalDate.now()) || (!selected.endSaved() && last.isBefore(month.atEndOfMonth())))
             throw invalid("Chỉ chốt tháng sau khi hết tháng hoặc đã lưu ngày kết thúc kỳ");
-        Integer drafts = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM stock_documents WHERE shop_id = ? AND status = 'DRAFT'
+        var drafts = jdbc.query("""
+                SELECT id FROM stock_documents WHERE shop_id = ? AND status = 'DRAFT'
                   AND document_date >= ? AND document_date < ?
-                """, Integer.class, shops.currentId(), first.atStartOfDay(), last.plusDays(1).atStartOfDay());
-        if (drafts != null && drafts > 0) throw invalid("Còn phiếu nháp trong tháng; hãy xác nhận hoặc hủy trước khi chốt");
+                LIMIT 1 FOR SHARE
+                """, (rs, i) -> rs.getLong(1), shops.currentId(), first.atStartOfDay(), last.plusDays(1).atStartOfDay());
+        if (!drafts.isEmpty()) throw invalid("Còn phiếu nháp trong tháng; hãy xác nhận hoặc hủy trước khi chốt");
         if (ShopContext.MANUFACTURING.equals(ShopContext.code())) {
             Integer payrollClosed = jdbc.queryForObject("SELECT COUNT(*) FROM payroll_periods WHERE period_year = ? AND period_month = ? AND status = 'CLOSED'",
                     Integer.class, month.getYear(), month.getMonthValue());

@@ -31,3 +31,7 @@ Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn 
 Tệp khóa/cấu hình dùng ACL chỉ chủ sở hữu trên Windows và quyền POSIX 0600 trên Linux; filesystem không hỗ trợ cả hai bị từ chối. Có test kiểm tra quyền thực tế trên từng nền tảng.
 
 Rà soát 19/11: quyền POSIX tệp0600/thư mục0700; staging kiểm tra khóa ngoại thực tế sau import, vì SET FOREIGN_KEY_CHECKS=1 không kiểm tra lại dòng cũ. SQL dump giới hạn 32 Mi ký tự và kiểm tra dung lượng ảnh trước đọc; vẫn dùng RAM, chưa streaming đầy đủ. Test giới hạn bộ đệm và staging SQL/ảnh/FK. Restore production vẫn khóa.
+
+Audit tại HEAD b290e3c: bộ tạo dump giữ cột DEFAULT_GENERATED (đặc biệt created_at/updated_at), chỉ bỏ cột tính toán STORED/VIRTUAL GENERATED. Staging đối chiếu mọi đường dẫn product-image trong bảng products với ảnh đã xác minh và dựng ở thư mục staging; thiếu ảnh phải trả lỗi. BackupBusinessMysqlIT bảo vệ dữ liệu hai sổ, quan hệ dòng hàng/thanh toán/nhân sự, ảnh và thời điểm lịch sử bằng database thử riêng.
+
+Phục hồi đầy đủ vẫn NOT_VERIFIED: tài khoản local không nằm trong archive nhưng kỳ công đã chốt có thể tham chiếu closed_by_admin_id/reopened_by_admin_id. Không tự xóa tham chiếu hoặc chép tài khoản để vượt kiểm tra FK. Cần quyết định chính sách giữ thông tin tác giả và diễn tập chuyển/rollback trước khi nghiệm thu recovery.

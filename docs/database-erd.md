@@ -48,3 +48,7 @@ V41 thêm payroll_advance_entries: payroll_detail_id, advance_date, amount, note
 ## V42 — chi tiết tồn cuối năm theo loại
 
 year_end_inventory_categories: khóa (shop_id, year_number, category_id), category_name snapshot, raw_kg>=0; FK về year_end_balances và product_categories. Dòng lưu trong cùng giao dịch chốt năm, không cập nhật khi đọc đầu kỳ sau. Không chuyển/xóa dòng năm cũ hay tạo phiếu nhập chuyển tồn.
+
+## V43 — ràng buộc thực lĩnh gồm tiền ứng
+
+Chỉ thay CHECK chk_payroll_total để khớp công thức AttendanceService đã có: max(0, base_pay + overtime_pay + bonus_pay + allowances - deductions - advance_amount). Không UPDATE dữ liệu. Một ALTER nguyên tử; nếu bản ghi lịch sử không khớp thì nâng cấp thất bại và giữ ràng buộc cũ. Phải kiểm tra trên bản sao trước nâng cấp thật; audit chỉ áp dụng trên server test13307.

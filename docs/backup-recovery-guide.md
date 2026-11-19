@@ -13,3 +13,7 @@ Bản đóng gói hiện đưa backend JAR vào tài nguyên Tauri nhưng vẫn 
 ## Kiểm tra staging trước khi dùng
 
 Staging kiểm tra số dòng, nội dung ảnh và khóa ngoại sau nhập. Nếu thiếu bản ghi cha, thao tác dựng phải báo lỗi; không bỏ ràng buộc để cho qua. Bộ tạo backup hiện giới hạn 32 Mi ký tự SQL để chặn tăng RAM không kiểm soát; dữ liệu lớn hơn cần phương án dump chuyên dụng. Xem audit-followup-20261119.md cho diễn tập chuyển/rollback còn chưa hỗ trợ.
+
+## Giới hạn xác nhận tại b290e3c
+
+Recovery end-to-end vẫn **NOT_VERIFIED**. Archive có kỳ công tham chiếu người chốt có thể bị từ chối vì tài khoản local không nằm trong backup. Không bỏ kiểm tra FK hoặc tự gán lại người chốt. Test mới đối chiếu hai sổ, dòng hàng, biến động kho, thanh toán, nhân sự, tiền công và bytes ảnh; giữ created_at/updated_at lịch sử, từ chối ảnh bị thiếu. Xem [báo cáo audit và quy trình rollback trên máy thử](audit-b290-20261119.md). Không coi nút “Kiểm tra” giải mã thành công là đã chứng minh khôi phục hoạt động trên máy mới.

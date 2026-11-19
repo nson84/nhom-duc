@@ -411,4 +411,190 @@ class StockLifecycleMysqlIT {
                 "SELECT quantity_base FROM stock_balances WHERE product_id = ? AND category_id = ?",
                 BigDecimal.class, product, category)));
     }
+
+    @Test
+    void fullPaymentRetryDoesNotCreateCashOrMovementsTwice() {
+        confirm("PURCHASE", "10", "75000000");
+        var sale = confirm("SALE", "2", "76000000");
+        var first = new StockDtos.PaymentRequest(new BigDecimal("50000000"), "CASH", day,
+                "Partial", UUID.randomUUID().toString(), "Hải", "Customer");
+        var rest = new StockDtos.PaymentRequest(new BigDecimal("102000000"), "CASH", day,
+                "Balance", UUID.randomUUID().toString(), "Thuấn", "Customer");
+        transaction(() -> service.addPayment(sale.id(), first));
+        transaction(() -> service.addPayment(sale.id(), rest));
+        transaction(() -> service.addPayment(sale.id(), rest));
+        assertEquals("PAID", service.get(sale.id()).paymentStatus());
+        assertEquals(0, new BigDecimal("152000000").compareTo(service.get(sale.id()).paidAmount()));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM sales_payments WHERE document_id = ?", Integer.class, sale.id()));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM stock_movements", Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions WHERE reference_id = ? AND category = 'SALE_RECEIPT'", Integer.class, sale.id()));
+    }
+
+    @Test
+    void decemberCarryoverKeepsSnapshotNamesInactiveCategoriesAndShopIsolation() {
+        confirm("PURCHASE", "1", "75000000");
+        long second = addSecondCategoryWithReceipt();
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var input = new MonthlyBookController.Input(2025, "2025-12", List.of(
+                new MonthlyBookController.Count(category, "Original name", new BigDecimal("200"), null, null, null),
+                new MonthlyBookController.Count(second, "Second name", new BigDecimal("400"), null, null, null)), null);
+        transaction(() -> book.close(input));
+        jdbc.update("UPDATE product_categories SET name = 'Renamed inactive', is_active = 0 WHERE id = ?", category);
+        var carryover = new InventoryCarryoverService(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper());
+        var opening = carryover.get(2025, "2026-01");
+        assertTrue(opening.available());
+        assertEquals("MONTH", opening.source());
+        assertEquals(0, new BigDecimal("600").compareTo(opening.totalRawKg()));
+        assertTrue(opening.rows().stream().anyMatch(r -> r.categoryId() == category && r.category().equals("Test aluminium")), "Snapshot uses the saved catalogue name, not the client-supplied label");
+        assertFalse(carryover.get(2025, "2026-02").available(), "No adjacent close means no inferred opening");
+        ShopContext.set(ShopContext.MANUFACTURING);
+        try { assertFalse(carryover.get(2025, "2026-01").available(), "Never reuse another shop's snapshot"); }
+        finally { ShopContext.set(ShopContext.DISTRIBUTION); }
+    }
+
+    @Test
+    void multilineSaleCanReorderChangeQuantityAndRejectUnavailableCategoryAtomically() {
+        confirm("PURCHASE", "10", "75000000");
+        long second = addSecondCategoryWithReceipt();
+        long otherProduct = jdbc.queryForObject("SELECT id FROM products WHERE product_code = 'TEST-SECOND'", Long.class);
+        long otherUnit = jdbc.queryForObject("SELECT id FROM product_units WHERE product_id = ? AND unit_name = 'tấn'", Long.class, otherProduct);
+        var a = request("SALE", "2", "76000000").items().get(0);
+        var b = new StockDtos.ItemRequest(otherProduct, second, otherUnit, new BigDecimal("0.1"), new BigDecimal("71000000"), BigDecimal.ZERO, "kg", null, null, null, null);
+        var input = new StockDtos.DocumentRequest("SALE", day, "Customer", customer, "Hải", "Customer", "Two lines", BigDecimal.ZERO, "CASH", null, UUID.randomUUID().toString(), List.of(a, b), false);
+        var sale = transaction(() -> service.confirm(service.createDraft(input).id()));
+        var larger = request("SALE", "3", "76000000").items().get(0);
+        var reordered = new StockDtos.DocumentRequest("SALE", day, "Customer", customer, "Hải", "Customer", "Reordered", BigDecimal.ZERO, "CASH", null, UUID.randomUUID().toString(), List.of(b, larger), false);
+        transaction(() -> service.editConfirmed(sale.id(), reordered));
+        assertEquals(0, new BigDecimal("7000").compareTo(jdbc.queryForObject("SELECT quantity_base FROM stock_balances WHERE product_id = ? AND category_id = ?", BigDecimal.class, product, category)));
+        assertEquals(0, new BigDecimal("300").compareTo(jdbc.queryForObject("SELECT quantity_base FROM stock_balances WHERE product_id = ? AND category_id = ?", BigDecimal.class, otherProduct, second)));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM stock_movements WHERE document_id = ?", Integer.class, sale.id()));
+        var before = jdbc.queryForList("SELECT * FROM stock_balances ORDER BY product_id, category_id");
+        var unavailable = new StockDtos.ItemRequest(product, second, unit, new BigDecimal("3"), new BigDecimal("76000000"), BigDecimal.ZERO, "kg", null, null, null, null);
+        var changed = new StockDtos.DocumentRequest("SALE", day, "Customer", customer, "Hải", "Customer", "Unavailable", BigDecimal.ZERO, "CASH", null, UUID.randomUUID().toString(), List.of(unavailable, b), false);
+        assertThrows(BusinessException.class, () -> transaction(() -> service.editConfirmed(sale.id(), changed)));
+        assertEquals(before, jdbc.queryForList("SELECT * FROM stock_balances ORDER BY product_id, category_id"));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM stock_movements WHERE document_id = ?", Integer.class, sale.id()));
+    }
+
+    @Test
+    void lockedMonthRejectsCreateEditCancelConfirmAndReverseWithoutChangingData() {
+        confirm("PURCHASE", "10", "75000000");
+        var sale = confirm("SALE", "2", "76000000");
+        var draft = transaction(() -> service.createDraft(request("SALE", "1", "76000000")));
+        var before = jdbc.queryForList("SELECT * FROM stock_documents ORDER BY id");
+        var stock = jdbc.queryForList("SELECT * FROM stock_balances ORDER BY product_id, category_id");
+        jdbc.update("UPDATE shop_month_periods SET closed_at = NOW(3) WHERE shop_id = ?", shops.currentId());
+        assertThrows(BusinessException.class, () -> transaction(() -> service.createDraft(request("SALE", "1", "76000000"))));
+        assertThrows(BusinessException.class, () -> transaction(() -> service.editConfirmed(sale.id(), request("SALE", "1", "76000000"))));
+        assertThrows(BusinessException.class, () -> transaction(() -> service.cancelDraft(draft.id())));
+        assertThrows(BusinessException.class, () -> transaction(() -> service.confirm(draft.id())));
+        assertThrows(BusinessException.class, () -> transaction(() -> service.reverse(sale.id(), "Locked month")));
+        assertEquals(before, jdbc.queryForList("SELECT * FROM stock_documents ORDER BY id"));
+        assertEquals(stock, jdbc.queryForList("SELECT * FROM stock_balances ORDER BY product_id, category_id"));
+    }
+
+    @Test
+    void factoryPayrollCountsApprovedOvertimeAndAdvanceOnceThenLocks() {
+        useFixtureShop(ShopContext.MANUFACTURING);
+        jdbc.update("INSERT INTO admin_users (id, username, password_hash) VALUES (1, 'test', 'not-a-login-hash')");
+        jdbc.update("INSERT INTO employees (id, shop_id, employee_code, full_name) VALUES (101, ?, 'TEST-EMP', 'Thợ thử')", shops.currentId());
+        jdbc.update("INSERT INTO employee_pay_rates (employee_id, effective_from, daily_rate) VALUES (101, '2025-02-01', 400000)");
+        jdbc.update("INSERT INTO attendance_records (id, employee_id, work_date, attendance_status, credited_days, daily_rate_snapshot) VALUES (101, 101, '2025-02-18', 'PRESENT', 1, 400000)");
+        jdbc.update("INSERT INTO overtime_records (attendance_id, overtime_type, overtime_hours, hourly_rate_snapshot, amount, is_approved) VALUES (101, 'WEEKDAY', 2, 25000, 50000, 1), (101, 'WEEKDAY', 1, 25000, 25000, 0)");
+        var attendance = new com.aluminum.manager.attendance.AttendanceService(jdbc, mock(AuditService.class), new DocumentSequenceService(jdbc), clock, shops, periods);
+        var payroll = transaction(() -> attendance.createOrGetPeriod(new com.aluminum.manager.attendance.AttendanceDtos.PayrollPeriodRequest(2025, 2, "Test")));
+        long periodId = payroll.id();
+        var calculated = transaction(() -> attendance.calculatePayroll(periodId));
+        assertEquals(0, new BigDecimal("450000").compareTo(calculated.grandTotalPay()));
+        assertEquals(0, new BigDecimal("50000").compareTo(calculated.totalOvertimePay()));
+        long detail = calculated.details().get(0).id();
+        var advance = new com.aluminum.manager.attendance.AttendanceDtos.PayrollAdvanceRequest(day.toLocalDate(), new BigDecimal("50000"), "Ứng thử", UUID.randomUUID().toString());
+        transaction(() -> attendance.addPayrollAdvance(periodId, detail, advance));
+        transaction(() -> attendance.addPayrollAdvance(periodId, detail, advance));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM payroll_advance_entries", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions WHERE reference_type = 'PAYROLL_ADVANCE'", Integer.class));
+        assertThrows(BusinessException.class, () -> transaction(() -> attendance.addPayrollAdvance(periodId, detail,
+                new com.aluminum.manager.attendance.AttendanceDtos.PayrollAdvanceRequest(day.toLocalDate(), new BigDecimal("500000"), "Too much", UUID.randomUUID().toString()))));
+        var closed = transaction(() -> attendance.closePeriod(periodId));
+        assertEquals("CLOSED", closed.status());
+        assertEquals(0, new BigDecimal("400000").compareTo(closed.grandTotalPay()));
+        assertThrows(BusinessException.class, () -> transaction(() -> attendance.calculatePayroll(periodId)));
+        assertThrows(BusinessException.class, () -> transaction(() -> attendance.addPayrollAdvance(periodId, detail, advance)));
+        var payout = new com.aluminum.manager.attendance.AttendanceDtos.PayPayrollRequest(new BigDecimal("400000"), "Trả phần còn lại", UUID.randomUUID().toString());
+        transaction(() -> attendance.payPeriod(periodId, payout));
+        transaction(() -> attendance.payPeriod(periodId, payout));
+        assertEquals(0, new BigDecimal("400000").compareTo(attendance.getPayrollPeriod(periodId).paidAmount()));
+        assertEquals(0, new BigDecimal("450000").compareTo(jdbc.queryForObject("SELECT SUM(amount) FROM financial_transactions WHERE category = 'PAYROLL' AND status = 'CONFIRMED'", BigDecimal.class)));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        assertEquals(0, new BigDecimal("450000").compareTo(book.get(2025, "2025-02").data().expenses()), "Advance and payout must not be added again to accrued payroll cost");
+    }
+
+    @Test
+    void monthCannotCloseBetweenWriteValidationAndDraftInsert() throws Exception {
+        var checked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var guarded = org.mockito.Mockito.spy(periods);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            invocation.callRealMethod();
+            checked.countDown();
+            assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            return null;
+        }).when(guarded).requireWorkingDate(org.mockito.ArgumentMatchers.any());
+        var writer = new StockDocumentService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class),
+                new PurchasePriceService(jdbc, clock), clock, shops, guarded);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var writing = executor.submit(() -> withDistributionContext(() -> transaction(() -> writer.createDraft(request("PURCHASE", "1", "75000000")))));
+            assertTrue(checked.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var closing = executor.submit(() -> withDistributionContext(() -> transaction(() -> periods.closeMonth(2025, java.time.YearMonth.of(2025, 2)))));
+            // A close must wait for the in-flight writer; otherwise both can commit using stale validation.
+            assertThrows(java.util.concurrent.TimeoutException.class, () -> closing.get(500, java.util.concurrent.TimeUnit.MILLISECONDS));
+            release.countDown();
+            writing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            var failed = assertThrows(java.util.concurrent.ExecutionException.class, () -> closing.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertInstanceOf(BusinessException.class, failed.getCause());
+            assertEquals("OPEN", periods.monthStatus(java.time.YearMonth.of(2025, 2)));
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void octoberInvoiceNovemberCollectionKeepsCashDatesAndClosedDebtDistinct() {
+        clock = Clock.fixed(Instant.parse("2025-11-11T10:00:00Z"), ZoneOffset.UTC);
+        service = new StockDocumentService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), new PurchasePriceService(jdbc, clock), clock, shops, periods);
+        confirm("PURCHASE", "10", "75000000");
+        transaction(() -> periods.closeMonth(2025, java.time.YearMonth.of(2025, 2)));
+        for (int month = 3; month < 10; month++) {
+            var next = java.time.YearMonth.of(2025, month);
+            transaction(() -> periods.openMonth(2025, next));
+            transaction(() -> periods.closeMonth(2025, next));
+        }
+        transaction(() -> periods.openMonth(2025, java.time.YearMonth.of(2025, 10)));
+        var october = LocalDateTime.of(2025, 10, 30, 10, 0);
+        var base = request("SALE", "2", "76000000");
+        var input = new StockDtos.DocumentRequest(base.documentType(), october, base.counterpartyName(), customer, "Hải", "Customer", null, BigDecimal.ZERO, "CASH", null, UUID.randomUUID().toString(), base.items(), false);
+        var sale = transaction(() -> service.confirm(service.createDraft(input).id()));
+        transaction(() -> service.addPayment(sale.id(), new StockDtos.PaymentRequest(new BigDecimal("50000000"), "CASH", october, null, UUID.randomUUID().toString(), "Hải", "Customer")));
+        transaction(() -> periods.closeMonth(2025, java.time.YearMonth.of(2025, 10)));
+        jdbc.update("INSERT INTO year_period_drafts (shop_id, year_number, period_from, period_to) VALUES (?, 2025, '2025-02-18', '2025-10-31')", shops.currentId());
+        transactions.executeWithoutResult(status -> periods.save(2025, day.toLocalDate(), java.time.LocalDate.of(2025, 10, 31), new BigDecimal("8000"), new BigDecimal("600000000"), BigDecimal.ZERO));
+        jdbc.update("INSERT INTO year_period_starts (shop_id, year_number, period_from, period_name) VALUES (?, 2026, '2025-11-01', 'Next')", shops.currentId());
+        transaction(() -> periods.openMonth(2026, java.time.YearMonth.of(2025, 11)));
+        transaction(() -> service.addPayment(sale.id(), new StockDtos.PaymentRequest(new BigDecimal("102000000"), "CASH", LocalDateTime.of(2025, 11, 10, 10, 0), null, UUID.randomUUID().toString(), "Thuấn", "Customer")));
+        var finance = new FinanceService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), clock, shops, periods);
+        var report = finance.profitReport(java.time.LocalDate.of(2025, 10, 1), java.time.LocalDate.of(2025, 10, 31));
+        assertEquals(0, new BigDecimal("152000000").compareTo(report.revenue()));
+        assertEquals(0, new BigDecimal("152000000").compareTo(report.cashCollected()), "This metric collects payments from invoices in the selected period, through today");
+        assertEquals(0, new BigDecimal("50000000").compareTo(jdbc.queryForObject("SELECT SUM(amount) FROM financial_transactions WHERE category = 'SALE_RECEIPT' AND transaction_date >= '2025-10-01' AND transaction_date < '2025-11-01'", BigDecimal.class)));
+        assertEquals(0, new BigDecimal("102000000").compareTo(jdbc.queryForObject("SELECT SUM(amount) FROM financial_transactions WHERE category = 'SALE_RECEIPT' AND transaction_date >= '2025-11-01' AND transaction_date < '2025-12-01'", BigDecimal.class)));
+        assertEquals(0, new BigDecimal("102000000").compareTo(periods.get(2025).customerDebt()));
+        assertEquals("PAID", service.get(sale.id()).paymentStatus());
+    }
+
+    private <T> T withDistributionContext(Supplier<T> action) {
+        ShopContext.set(ShopContext.DISTRIBUTION);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedAdmin(1L, "test", false, UserRole.DISTRIBUTION, ShopContext.DISTRIBUTION), null, List.of()));
+        try { return action.get(); }
+        finally { ShopContext.clear(); SecurityContextHolder.clearContext(); }
+    }
 }

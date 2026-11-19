@@ -27,3 +27,7 @@ Các lệnh sửa chấm công dùng kiểm tra ngày thuộc kỳ năm và thá
 ## Cập nhật rà soát 19/11/2026
 
 Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
+
+Audit b290e3c bổ sung ca lifecycle Xưởng trong StockLifecycleMysqlIT: chỉ cộng tăng ca đã duyệt, ứng có ngày ghi một khoản chi dù retry, từ chối ứng vượt thực lĩnh, tính lại lúc chốt giữ tiền ứng và khóa thay đổi sau chốt. Không đổi cách tính công theo tháng.
+
+V43 đồng bộ CHECK chk_payroll_total với công thức thực lĩnh hiện có (trừ advance_amount và chặn dưới tại0). Không cập nhật số tiền lịch sử. Nếu dữ liệu cũ không khớp, ALTER thất bại thay vì sửa số tiền để vượt kiểm tra; cần đối chiếu riêng trước nâng cấp database thật.

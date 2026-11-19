@@ -48,3 +48,9 @@ Lãi chốt Phân phối không coi giá chuyển nội bộ là doanh thu và l
 Tồn nguyên liệu cuối kỳ được giữ nguyên kg từng loại khi xem kỳ kế tiếp. Ví dụ 200kg loại1 và400kg loại2 thì đầu kỳ sau là đúng hai dòng tổng600kg, không nhập mới, không tự chia đều và không cộng trùng khi chốt cả tháng/năm. Chỉ nhận nguồn chốt kết thúc ngay trước ngày đầu kỳ; nếu tháng trước chưa chốt thì báo chưa có số chốt, giữ dữ liệu kho liên tục.
 
 Chốt tháng không yêu cầu nhập tiền. Chỉ nhập kg nguyên liệu; vụn tùy chọn. Bỏ trống vụn tháng không chốt giá trị vụn năm hoặc ngăn kiểm kê năm. Số tiền chưa đủ căn cứ không được tự coi là0 để báo lãi.
+
+## Audit tại b290e3c
+
+Không đổi các định nghĩa nghiệp vụ. Ghi chứng từ và khóa tháng phải đồng bộ bằng transaction để không ghi sau bước khóa. Backup phải giữ thời điểm lịch sử, từ chối sản phẩm thiếu ảnh staging và FK không hợp lệ. Recovery end-to-end vẫn NOT_VERIFIED; restore trực tiếp database hoạt động tiếp tục khóa.
+
+V43 chỉ sửa CHECK tiền công để khớp công thức Java đã trừ tiền ứng; không sửa công thức tính công hoặc số tiền lịch sử. Không áp dụng migration này vào database thật trong audit. Nếu dữ liệu cũ không thỏa ràng buộc mới, dừng nâng cấp và đối chiếu; không tự sửa số liệu. Bằng chứng/giới hạn xem audit-b290-20261119.md.
