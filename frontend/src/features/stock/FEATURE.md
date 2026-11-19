@@ -118,3 +118,9 @@ Khi kiểm kê Phân phối, người vận hành có thể khai số kg vụn n
 Xưởng: trang Tồn kho mặc định dùng năm làm việc đang chọn, có thể đổi năm để xem báo cáo kiểm kê; đồng thời hiển thị bảng tồn sổ hiện tại theo từng sản phẩm/loại nhôm (bao gồm hàng nhập nội bộ). Bảng tồn sổ không lọc theo năm; hàng giao khách không tự trừ tồn. Vụn đã bán, vụn chưa bán, tồn cuối kỳ và hao hụt lấy từ báo cáo/kiểm kê Xưởng theo năm được chọn.
 
 Kiểm kê Phân phối gửi ngày nghiệp vụ theo tháng đang chọn. Tháng quá khứ dùng cuối ngày cuối khoảng đang xem, tháng hiện tại dùng thời điểm hiện tại. Backend kiểm tra tháng mở trước khi tạo điều chỉnh kho.
+
+## Tồn cuối chuyển sang đầu kỳ theo từng loại
+
+GET /api/v1/dashboard/opening-inventory?year=...&month=... trả nguyên liệu đầu kỳ theo từng loại, ngày bắt đầu và ngày chốt nguồn. Bỏ month để xem đầu kỳ năm. Tồn đầu kỳ là bản đọc của lần chốt kết thúc ngay ngày trước đó; không tạo phiếu nhập, không ghi stock movement và không cộng kho lại khi reload. Nếu cùng ngày có bản chốt tháng và năm, lấy bản năm một lần. Bản tháng còn giữ vụn theo loại; vụn năm vẫn theo tổng kiểm kê hiện có, không tự chia vào loại.
+
+V42 thêm year_end_inventory_categories, lưu kg và tên từng loại nguyên liệu trong cùng transaction chốt năm. Bản chốt cũ chỉ dùng chi tiết/historical movements khi tổng khớp; thiếu dữ liệu phải hiện thông báo cần đối chiếu, không tự chia tổng kg hoặc coi thiếu dữ liệu là 0. Không tự chạy migration vào database thật để test.

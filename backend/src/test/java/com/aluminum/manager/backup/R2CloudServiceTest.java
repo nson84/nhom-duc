@@ -49,4 +49,15 @@ class R2CloudServiceTest {
 			assertEquals(Files.getOwner(file), acl.get(0).principal());
 		}
 	}
+
+	@Test void privateDirectoryRemainsTraversableByItsOwner() throws Exception {
+		Path folder = Files.createDirectory(directory.resolve("staging"));
+		R2CloudService.setOwnerOnly(folder);
+		var posix = Files.getFileAttributeView(folder, java.nio.file.attribute.PosixFileAttributeView.class);
+		if (posix != null) {
+			assertEquals(java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"), posix.readAttributes().permissions());
+		}
+		Path image = Files.writeString(folder.resolve("image.txt"), "test image");
+		assertEquals("test image", Files.readString(image));
+	}
 }

@@ -20,3 +20,9 @@ Ngày bắt đầu và kết thúc dự kiến lưu riêng ở Tổng quan. Ki�
 Chi phí nhân sự trong quyết toán năm tính thưởng lễ đã cấp một lần, gồm cả đã trả trực tiếp và chờ trả cuối tháng.
 
 [factory](../../../../../../../../frontend/src/features/factory/FEATURE.md), [admin](../../../../../../../../frontend/src/features/admin/FEATURE.md)
+
+## Tồn cuối chuyển sang đầu kỳ theo từng loại
+
+GET /api/v1/dashboard/opening-inventory?year=...&month=... trả nguyên liệu đầu kỳ theo từng loại, ngày bắt đầu và ngày chốt nguồn. Bỏ month để xem đầu kỳ năm. Tồn đầu kỳ là bản đọc của lần chốt kết thúc ngay ngày trước đó; không tạo phiếu nhập, không ghi stock movement và không cộng kho lại khi reload. Nếu cùng ngày có bản chốt tháng và năm, lấy bản năm một lần. Bản tháng còn giữ vụn theo loại; vụn năm vẫn theo tổng kiểm kê hiện có, không tự chia vào loại.
+
+V42 thêm year_end_inventory_categories, lưu kg và tên từng loại nguyên liệu trong cùng transaction chốt năm. Bản chốt cũ chỉ dùng chi tiết/historical movements khi tổng khớp; thiếu dữ liệu phải hiện thông báo cần đối chiếu, không tự chia tổng kg hoặc coi thiếu dữ liệu là 0. Không tự chạy migration vào database thật để test.

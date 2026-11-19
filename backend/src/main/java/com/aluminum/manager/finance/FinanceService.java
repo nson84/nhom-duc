@@ -310,7 +310,7 @@ public class FinanceService {
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
-				  AND i.standard_cost_total_snapshot IS NULL
+				  AND (i.standard_cost_total_snapshot IS NULL OR i.standard_cost_total_snapshot <= 0)
 				"""), Integer.class, start, end);
 		boolean standardComplete = missingStandard == null || missingStandard == 0;
 		BigDecimal standardGrossProfit = standardComplete ? revenue.subtract(standardCogs).setScale(MONEY_SCALE, ROUNDING) : null;
@@ -376,7 +376,8 @@ public class FinanceService {
 
 		jdbc.query(shops.apply("""
 				SELECT DATE(d.document_date) AS day, CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END AS cogs,
-				       COALESCE(SUM(i.standard_cost_total_snapshot), 0) AS standard_cogs
+				       COALESCE(SUM(i.standard_cost_total_snapshot), 0) AS standard_cogs,
+				       SUM(CASE WHEN i.standard_cost_total_snapshot IS NULL OR i.standard_cost_total_snapshot <= 0 THEN 1 ELSE 0 END) AS missing_standard
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
@@ -530,7 +531,7 @@ public class FinanceService {
 				       COALESCE(SUM(i.line_total), 0) AS revenue,
 				       CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END AS cogs,
 				       COALESCE(SUM(i.standard_cost_total_snapshot), 0) AS standard_cogs,
-				       SUM(CASE WHEN i.standard_cost_total_snapshot IS NULL THEN 1 ELSE 0 END) AS missing_standard
+				       SUM(CASE WHEN i.standard_cost_total_snapshot IS NULL OR i.standard_cost_total_snapshot <= 0 THEN 1 ELSE 0 END) AS missing_standard
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				JOIN products p ON p.id = i.product_id

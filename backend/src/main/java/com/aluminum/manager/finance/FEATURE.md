@@ -8,7 +8,7 @@
 
 `FinanceService` ghi thu/chi, báo cáo và xuất CSV; thanh toán bán/nhập gắn chứng từ gốc. Phân phối không được tạo chi lương, vẫn ghi chi phí hoạt động.
 
-Sổ thu chi theo kỳ gắn khoản `SALE_RECEIPT` và `PURCHASE_PAYMENT` với ngày phiếu kho gốc, kể cả khi ngày thanh toán thực tế ở kỳ sau; khoản thủ công vẫn theo ngày giao dịch. Ngày thực thu/chi không bị sửa và vẫn hiển thị trên từng dòng để đối chiếu. Các KPI Tổng quan/Báo cáo theo phiếu dùng cùng quy tắc gắn kỳ; bản chụp công nợ khi chốt năm vẫn theo mốc chốt.
+Sổ Thu chi lọc theo ngày thực thu/chi trong financial_transactions.transaction_date, kể cả thu/trả nợ của phiếu kỳ cũ. Tổng quan/Báo cáo theo phiếu có chỉ tiêu đã thu từ các hóa đơn lập trong kỳ, có thể gồm lần trả sau kỳ; không đồng nghĩa tiền nhận trong kỳ. Bản chụp công nợ khi chốt năm vẫn theo mốc chốt.
 
 Khi giao diện chọn tháng, khoảng ngày lọc Thu chi/Báo cáo là phần giao của tháng và kỳ năm. Phiếu chi thủ công và việc hủy giao dịch kiểm tra ngày gốc không thuộc tháng đã chốt; thanh toán nợ cũ có thể ghi vào tháng mới đang mở.
 
@@ -40,3 +40,5 @@ Giao dịch Thu chi Xưởng chỉ bị khóa khi ngày giao dịch thuộc kho�
 ## Cập nhật rà soát 19/11/2026
 
 Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
+
+Báo cáo ngày trả đủ cột missing_standard; giá tham khảo NULL hoặc 0 không tạo lãi tham khảo ở tổng kỳ/ngày/sản phẩm. Test bằng dữ liệu MySQL thử, không chỉ mock JDBC.

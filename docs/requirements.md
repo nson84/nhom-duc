@@ -38,3 +38,13 @@ Phân phối không có lương. Lãi kỳ chỉ hiện sau khi chốt. Tồn đ
 ## Bổ sung 19/11/2026
 
 Tiền công, phụ cấp và khấu trừ giữ theo từng tháng theo xác nhận người dùng. Ứng lương mới cần ngày thực chi. Không dùng FIFO. Thiếu giá vốn phải hiển thị thiếu dữ liệu, không coi là 0.
+
+## Ràng buộc audit bổ sung 19/11
+
+Lãi chốt Phân phối không coi giá chuyển nội bộ là doanh thu và loại giá chuyển ra khỏi chi phí hàng của Phân phối. Giá tham khảo0/thiếu không tạo lãi giả. Sửa phiếu nhập kiểm tra tồn cuối trong transaction. Staging phải kiểm tra FK sau import và không thay DB thật. Không có migration bổ sung. Giới hạn nghiệm thu ghi tại audit-followup-20261119.md.
+
+## Giữ tồn giữa tháng/năm
+
+Tồn nguyên liệu cuối kỳ được giữ nguyên kg từng loại khi xem kỳ kế tiếp. Ví dụ 200kg loại1 và400kg loại2 thì đầu kỳ sau là đúng hai dòng tổng600kg, không nhập mới, không tự chia đều và không cộng trùng khi chốt cả tháng/năm. Chỉ nhận nguồn chốt kết thúc ngay trước ngày đầu kỳ; nếu tháng trước chưa chốt thì báo chưa có số chốt, giữ dữ liệu kho liên tục.
+
+Chốt tháng không yêu cầu nhập tiền. Chỉ nhập kg nguyên liệu; vụn tùy chọn. Bỏ trống vụn tháng không chốt giá trị vụn năm hoặc ngăn kiểm kê năm. Số tiền chưa đủ căn cứ không được tự coi là0 để báo lãi.

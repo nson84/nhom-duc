@@ -195,8 +195,13 @@ public class DashboardService {
 				  AND document_date >= ? AND document_date < ?
 				""", range);
 		DashboardSummary summary = summary(from, to);
+		BigDecimal internalOut = money("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM stock_documents
+				WHERE document_type = 'SALE' AND is_internal = 1 AND status = 'CONFIRMED'
+				  AND document_date >= ? AND document_date < ?
+				""", range);
 		BigDecimal profit = summary.revenue().subtract(opening.value()).subtract(purchases)
-				.add(ending.value()).subtract(summary.operatingExpenses());
+				.add(internalOut).add(ending.value()).subtract(summary.operatingExpenses());
 		jdbc.update("""
 				INSERT INTO distribution_period_closings(shop_id, period_from, period_to, quantity_kg, inventory_value, profit)
 				VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE quantity_kg = VALUES(quantity_kg),

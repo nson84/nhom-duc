@@ -9,3 +9,7 @@
 Ứng dụng chưa tự đổi database hoạt động sang database thử; thao tác restore trực tiếp vẫn trả 503. Không xóa database cũ hoặc backup cuối cùng. Việc chuyển database và rollback cần được hoàn thiện, thử trên máy Windows khác trước khi xem là khôi phục hoàn chỉnh.
 
 Bản đóng gói hiện đưa backend JAR vào tài nguyên Tauri nhưng vẫn cần Java 17 và MySQL 8 được cài trên máy. Chưa xác minh bộ cài NSIS vì môi trường phát triển hiện không có Cargo.
+
+## Kiểm tra staging trước khi dùng
+
+Staging kiểm tra số dòng, nội dung ảnh và khóa ngoại sau nhập. Nếu thiếu bản ghi cha, thao tác dựng phải báo lỗi; không bỏ ràng buộc để cho qua. Bộ tạo backup hiện giới hạn 32 Mi ký tự SQL để chặn tăng RAM không kiểm soát; dữ liệu lớn hơn cần phương án dump chuyên dụng. Xem audit-followup-20261119.md cho diễn tập chuyển/rollback còn chưa hỗ trợ.

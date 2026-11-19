@@ -28,8 +28,22 @@ Bản chụp lưu ngày bắt đầu/kết thúc kỳ do cửa hàng chọn. N�
 
 Phân phối chỉ được chốt kỳ khi đã cân đủ từng SP/loại có biến động kho và lần cân mới nhất còn khớp tồn. Kiểm tra `distribution_inventory_count_evidence`: số cân, ngày cân, cả thời điểm tạo lẫn ngày nghiệp vụ của biến động sau kiểm kê, và các biến động sau ngày chốt. Không dùng tồn hiện tại để giả làm tồn quá khứ khi đã có giao dịch sau ngày chốt. Cần đối chiếu riêng dữ liệu lịch sử trước khi chốt.
 
-Chốt sổ tháng tùy chọn tại /chot-so-thang, độc lập với Khóa tháng. Kiểm kê nguyên liệu và vụn theo loại, ô trống tính là 0 sau xác nhận. Bản lưu bất biến gồm doanh thu ngoài, giá trị nhập và chi hoạt động/lương theo ngày chi. Đây chưa phải tính lãi quyết toán tháng. Popup ngày cuối tháng theo ngày máy, rộng 60vw, nhắc sau 3 giờ hoặc bỏ qua tháng hiện tại. Trạng thái nhắc lưu trên trình duyệt theo cửa hàng/tháng.
+Chốt sổ tháng tùy chọn tại /chot-so-thang độc lập với Khóa tháng. Bản chụp gồm kiểm kê nguyên liệu/vụn, tồn đầu/cuối, doanh thu ngoài, nhập, chuyển nội bộ ra, chi hoạt động và tiền công theo tháng để tính lãi quản trị tháng. Ô trống kiểm kê tính là 0 sau xác nhận. Snapshot đã lưu không đổi theo giao dịch mới; muốn ngăn ghi thêm phải Khóa tháng. Chưa có thao tác ghi đè/mở lại snapshot. Popup ngày cuối tháng theo ngày máy, rộng 60vw; trạng thái nhắc lưu theo cửa hàng/tháng.
 
 ## Cập nhật rà soát 19/11/2026
 
 Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
+
+Lãi chốt Phân phối loại giá chuyển nội bộ ra khỏi chi phí hàng do Phân phối chịu, không cộng thành doanh thu. Có test MySQL đối chiếu nhập 10t, chuyển 2t, bán ngoài 2t, tồn 6t.
+
+## Tồn cuối chuyển sang đầu kỳ theo từng loại
+
+GET /api/v1/dashboard/opening-inventory?year=...&month=... trả nguyên liệu đầu kỳ theo từng loại, ngày bắt đầu và ngày chốt nguồn. Bỏ month để xem đầu kỳ năm. Tồn đầu kỳ là bản đọc của lần chốt kết thúc ngay ngày trước đó; không tạo phiếu nhập, không ghi stock movement và không cộng kho lại khi reload. Nếu cùng ngày có bản chốt tháng và năm, lấy bản năm một lần. Bản tháng còn giữ vụn theo loại; vụn năm vẫn theo tổng kiểm kê hiện có, không tự chia vào loại.
+
+V42 thêm year_end_inventory_categories, lưu kg và tên từng loại nguyên liệu trong cùng transaction chốt năm. Bản chốt cũ chỉ dùng chi tiết/historical movements khi tổng khớp; thiếu dữ liệu phải hiện thông báo cần đối chiếu, không tự chia tổng kg hoặc coi thiếu dữ liệu là 0. Không tự chạy migration vào database thật để test.
+
+## Chốt tháng chỉ nhập khối lượng
+
+Form chỉ nhập kg nguyên liệu còn tồn; kg vụn là tùy chọn, bỏ trống thì tháng đó tạm ghi0. Không nhập giá trị vụn hoặc tiền tồn đầu tháng. Tồn đầu tháng hiển thị dạng text, server lấy từ bản chốt liền trước và không dùng số tiền do client tự nhập. Thiếu giá trị tồn đầu hoặc có vụn chưa định giá thì vẫn lưu kiểm kê nhưng chưa hiển thị lãi tháng đầy đủ. Các thẻ tiền có border, padding20px và lưới responsive. Kiểm kê năm độc lập, được nhập lại vụn thực tế khi chốt năm; không cộng dồn snapshot tháng vào tồn năm.
+
+Nếu đã nhập kg vụn nhưng chưa có giá trị, endingValue và profit tháng để null; kg vẫn lưu và chuyển theo loại, không biến giá trị vụn chưa biết thành0 ở tháng sau. Đã kiểm tra74 unit test,6 ca MySQL liên quan và build frontend. Không kiểm thử UI trực quan trong lượt này.

@@ -97,3 +97,17 @@ Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và b
 ## Bổ sung 19/11/2026
 
 Chạy frontend npm run build và backend mvnw.cmd test. MySQL riêng: sao chép scripts/test-mysql-env.local.example.ps1 thành scripts/test-mysql-env.local.ps1, điền cục bộ rồi chạy scripts/test-mysql.ps1. Chưa coi các ca tích hợp đã đạt khi chưa cấu hình và chạy. Xem audit-progress-20261119.md.
+
+## Audit bổ sung 19/11 — đã thực thi trên MySQL riêng
+
+StockLifecycleMysqlIT có 12 ca: sửa và rollback, thanh toán lặp/đồng thời, Xưởng giữ tồn, đảo đơn/cặp nội bộ, lãi chuyển nội bộ, giá tham khảo0, nợ kỳ sau và snapshot tháng. StagedRestoreMysqlIT có 2 ca SQL/ảnh và từ chối FK mồ côi. 74 unit test và 14 integration test đạt. Chưa chạy UI/PDF/NSIS. Xem audit-followup-20261119.md để không nhầm coverage hiện tại là toàn bộ checklist.
+
+## Chuyển tồn theo loại
+
+StockLifecycleMysqlIT thêm4 ca theo hai sổ: chốt200kg+400kg và đọc đầu tháng/năm kế tiếp; tổng600kg, từng loại giữ nguyên, reload không tăng phiếu, bản năm được ưu tiên khi cùng chốt tháng. Bỏ qua một tháng chưa chốt phải báo không có nguồn liền trước. FlywayV42 chỉ chạy trên server thử13307.
+
+Kết quả lượt chuyển tồn:74 unit test,18 integration test MySQL riêng,0 lỗi; frontend build đạt. Flyway42 migrate thành công trên DB thử. Chưa áp dụng V42 vào database thật, chưa kiểm thử UI trực quan.
+
+Regression monthlyCountNeedsOnlyRawKgAndAnnualScrapCanStillBeRecordedLater: chỉ gửi kg nguyên liệu, openingValue/scrapKg/scrapValue null; lưu thành công, profit chưa đủ dữ liệu để null; không tạo bản chốt năm hoặc giả bằng chứng kiểm kê năm.
+
+Nếu đã nhập kg vụn nhưng chưa có giá trị, endingValue và profit tháng để null; kg vẫn lưu và chuyển theo loại, không biến giá trị vụn chưa biết thành0 ở tháng sau. Đã kiểm tra74 unit test,6 ca MySQL liên quan và build frontend. Không kiểm thử UI trực quan trong lượt này.

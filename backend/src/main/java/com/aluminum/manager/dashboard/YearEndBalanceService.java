@@ -339,6 +339,23 @@ public class YearEndBalanceService {
                   supplier_debt = VALUES(supplier_debt), profit = VALUES(profit),
                   period_from = VALUES(period_from), period_to = VALUES(period_to), closed_at = NOW(3)
                 """, shops.currentId(), year, from, to, inventoryKg, inventoryValue, customerDebt, supplierDebt, profit);
+        if (shops.isDistribution()) {
+            jdbc.update("""
+                    INSERT INTO year_end_inventory_categories (shop_id, year_number, category_id, category_name, raw_kg)
+                    SELECT ?, ?, c.id, c.name, SUM(m.quantity_delta_base)
+                    FROM stock_movements m JOIN products p ON p.id = m.product_id
+                    JOIN product_categories c ON c.id = m.category_id
+                    WHERE p.shop_id = ? AND m.movement_at < ?
+                    GROUP BY c.id, c.name
+                    """, shops.currentId(), year, shops.currentId(), cutoff);
+        } else {
+            jdbc.update("""
+                    INSERT INTO year_end_inventory_categories (shop_id, year_number, category_id, category_name, raw_kg)
+                    SELECT ?, ?, c.id, c.name, r.quantity_kg
+                    FROM factory_raw_counts r JOIN product_categories c ON c.id = r.category_id
+                    WHERE r.year_number = ? AND c.shop_id = ?
+                    """, shops.currentId(), year, year, shops.currentId());
+        }
     }
 
     private static BusinessException invalid(String message) {

@@ -126,3 +126,9 @@ GET /api/v1/dashboard/monthly-book?year=...&month=YYYY-MM đọc số liệu ho�
 ## Bổ sung 19/11/2026
 
 POST /api/v1/payroll/periods/{id}/details/{detailId}/advances: ghi ứng lương có date, amount, note, idempotencyKey. Chỉ kỳ lương và tháng đang mở; ngày ứng phải thuộc tháng lương và kỳ làm việc. Khoản ứng ghi chi PAYROLL_ADVANCE, trừ tiền còn lĩnh.
+
+## Tồn đầu kỳ theo loại
+
+GET /api/v1/dashboard/opening-inventory?year=2026&month=2026-03 (month tùy chọn). Chỉ role vận hành, theo shop hiện tại. Trả from, sourceTo, source MONTH/YEAR, available, rows(categoryId, category, rawKg, scrapKg), totalRawKg, totalScrapKg, message. Không có nguồn chốt liền trước thì available=false; không tự chia tổng tồn. scrapKg/totalScrapKg của nguồn YEAR là null vì kiểm kê vụn năm chưa tách loại. Endpoint chỉ đọc, không tạo phiếu hoặc biến động kho.
+
+POST /dashboard/monthly-book: rawKg phải có; scrapKg có thể null/không gửi và được tạm ghi0. openingValue không bắt buộc, backend tự lấy nguồn đã lưu; frontend không gửi tiền. Thiếu giá trị đầu kỳ vẫn chốt kg được, profit=null. Định giá vụn và kiểm kê khi chốt năm vẫn thực hiện riêng.

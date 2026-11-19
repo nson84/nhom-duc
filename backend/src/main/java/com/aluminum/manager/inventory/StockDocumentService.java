@@ -407,6 +407,7 @@ public class StockDocumentService {
 					"Tổng tiền sửa không được thấp hơn số tiền đã thanh toán", null);
 		}
 		List<StoredItem> oldItems = storedItems(id);
+		var deferredPurchaseRemovals = new java.util.LinkedHashMap<StoredItem, BigDecimal>();
 		oldItems.sort(Comparator.comparingLong(StoredItem::productId)
 				.thenComparingLong(StoredItem::categoryId).thenComparingLong(StoredItem::id));
 		for (StoredItem item : oldItems) {
@@ -414,7 +415,17 @@ public class StockDocumentService {
 					"SELECT quantity_delta_base FROM stock_movements WHERE document_item_id = ?", BigDecimal.class, item.id());
 			for (BigDecimal delta : deltas) {
 				Balance balance = lockBalance(item.productId(), item.categoryId());
-				BigDecimal quantity = InventoryMath.applyDelta(balance.quantity(), delta.negate());
+				BigDecimal quantity;
+				if (shops.isDistribution() && "PURCHASE".equals(doc.type())) {
+					quantity = balance.quantity().subtract(delta);
+					if (quantity.signum() < 0) {
+						// Rebuild the receipt before removing stock already delivered; the final check stays in this transaction.
+						deferredPurchaseRemovals.merge(item, quantity.negate(), BigDecimal::add);
+						quantity = BigDecimal.ZERO;
+					}
+				} else {
+					quantity = InventoryMath.applyDelta(balance.quantity(), delta.negate());
+				}
 				BigDecimal cost = balance.cost();
 				if (!shops.isDistribution() && "PURCHASE".equals(doc.type())) {
 					BigDecimal oldCost = jdbc.queryForObject(
@@ -429,6 +440,13 @@ public class StockDocumentService {
 		jdbc.update("UPDATE stock_documents SET status = 'DRAFT' WHERE id = ?", id);
 		updateDraft(id, request);
 		confirm(id);
+		for (var deferred : deferredPurchaseRemovals.entrySet()) {
+			StoredItem item = deferred.getKey();
+			Balance balance = lockBalance(item.productId(), item.categoryId());
+			BigDecimal quantity = InventoryMath.applyDelta(balance.quantity(), deferred.getValue().negate());
+			jdbc.update("UPDATE stock_balances SET quantity_base = ? WHERE product_id = ? AND category_id = ?",
+					quantity, item.productId(), item.categoryId());
+		}
 		jdbc.update("UPDATE stock_documents SET confirmed_at = ?, payment_status = ? WHERE id = ?",
 				Timestamp.valueOf(confirmedAt), newTotal.signum() == 0 || paidAmount.compareTo(newTotal) == 0 ? "PAID"
 						: paidAmount.signum() > 0 ? "PARTIAL" : "UNPAID", id);

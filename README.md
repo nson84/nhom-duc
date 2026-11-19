@@ -145,3 +145,9 @@ Tauri kiểm tra cổng 8080. Nếu backend chưa chạy và có file JAR, Tauri
 ### Sao lưu Cloudflare R2
 
 Admin vào **Sao lưu** để cất khóa phục hồi ở nơi riêng, cấu hình R2 và kiểm tra kết nối. Backup mới có đuôi `.ndbak`, được nén và mã hóa trước khi đồng bộ. Nếu mất máy, nhập khóa phục hồi và cấu hình R2 trên máy mới, tải bản cloud rồi dùng **Dựng DB thử** để xác minh. Chức năng thay database đang dùng vẫn khóa cho đến khi quy trình chuyển và quay lại được kiểm thử trên máy khác. Xem [hướng dẫn khôi phục](docs/backup-recovery-guide.md).
+
+## Kết quả audit bổ sung 19/11/2026
+
+Xem [báo cáo đối chiếu và giới hạn nghiệm thu](docs/audit-followup-20261119.md). Đã chạy 74 unit test, 14 integration test trên MySQL riêng cổng 13307 và npm ci/build frontend. Chưa nghiệm thu chuyển DB/rollback, Windows sạch và UI/PDF trực quan. Không có migration mới trong lượt audit bổ sung.
+
+Tồn đầu kỳ hiện theo từng loại tại Tồn kho/Chốt sổ tháng/Quyết toán Xưởng: dùng nguyên kg từ bản chốt liền trước, không tạo phiếu nhập và không cộng trùng tháng/năm. V42 lưu chi tiết nguyên liệu chốt năm; kiểm thử bằng MySQL riêng.
