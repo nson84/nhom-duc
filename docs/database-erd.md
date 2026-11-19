@@ -44,3 +44,7 @@ V38–V39 thêm `shop_month_periods` với khóa `(shop_id, month_start)`, `peri
 ## Bổ sung 19/11/2026
 
 V41 thêm payroll_advance_entries: payroll_detail_id, advance_date, amount, note, idempotency_key duy nhất. Không chuyển đổi số ứng tổng cũ thành ngày giả.
+
+## V42 — chi tiết tồn cuối năm theo loại
+
+year_end_inventory_categories: khóa (shop_id, year_number, category_id), category_name snapshot, raw_kg>=0; FK về year_end_balances và product_categories. Dòng lưu trong cùng giao dịch chốt năm, không cập nhật khi đọc đầu kỳ sau. Không chuyển/xóa dòng năm cũ hay tạo phiếu nhập chuyển tồn.

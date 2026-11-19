@@ -67,3 +67,5 @@ Router nằm tại `frontend/src/app/router.tsx`, menu và bộ chọn sổ tạ
 Các tài liệu xuyên chức năng: [API](api-specification.md), [cơ sở dữ liệu](database-erd.md), [kiểm thử](test-plan.md), [hướng dẫn chạy](../README.md).
 
 Mục Chốt sổ tháng (/chot-so-thang) thuộc dashboard cho Xưởng và Phân phối.
+
+Tồn đầu kỳ theo từng loại: OpeningInventory dùng chung ở Tồn kho, Chốt sổ tháng và Quyết toán Xưởng; API InventoryCarryoverController/Service thuộc dashboard. Tự xem nguồn chốt liền trước, không có thao tác nhập lại hàng.

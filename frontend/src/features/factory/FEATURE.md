@@ -31,3 +31,9 @@ Màn hình mặc định mở năm vừa kết thúc để xem lại lãi và ki
 Bảng **Phiếu bán thành phẩm** hiển thị số lượng, đơn giá bán và thành tiền theo dữ liệu trên phiếu. Đơn giá dùng đúng đơn vị đã chọn trên dòng bán, chẳng hạn đồng mỗi tấn.
 
 Nguyên liệu kiểm kê theo từng loại. Phân bổ kg vào các phiếu nhập xưởng đã xác nhận, chưa đảo, mới nhất trước; thiếu lấy tiếp phiếu cũ. Nếu lịch sử nhập không đủ thì từ chối tính, hiện chưa có màn nhập lớp tồn đầu kỳ theo loại. Phân bổ được lưu và tính lại khi chốt. Phiếu bán theo giá nhập tham chiếu lọc theo loại/giá; dòng cũ chưa gắn có thể gắn khi năm còn mở. Giá trị tham chiếu không được trừ thêm vào lãi năm. Công nợ kỳ được tính theo dữ liệu tại thời điểm xem, không phải bản chụp bất biến.
+
+## Tồn cuối chuyển sang đầu kỳ theo từng loại
+
+GET /api/v1/dashboard/opening-inventory?year=...&month=... trả nguyên liệu đầu kỳ theo từng loại, ngày bắt đầu và ngày chốt nguồn. Bỏ month để xem đầu kỳ năm. Tồn đầu kỳ là bản đọc của lần chốt kết thúc ngay ngày trước đó; không tạo phiếu nhập, không ghi stock movement và không cộng kho lại khi reload. Nếu cùng ngày có bản chốt tháng và năm, lấy bản năm một lần. Bản tháng còn giữ vụn theo loại; vụn năm vẫn theo tổng kiểm kê hiện có, không tự chia vào loại.
+
+V42 thêm year_end_inventory_categories, lưu kg và tên từng loại nguyên liệu trong cùng transaction chốt năm. Bản chốt cũ chỉ dùng chi tiết/historical movements khi tổng khớp; thiếu dữ liệu phải hiện thông báo cần đối chiếu, không tự chia tổng kg hoặc coi thiếu dữ liệu là 0. Không tự chạy migration vào database thật để test.

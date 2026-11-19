@@ -14,6 +14,7 @@ import { YearEndBalanceCard } from "../dashboard/YearEndBalanceCard";
 import { useShop } from "../shop/shop-store";
 import { useWorkingYear } from "../dashboard/working-year";
 import { DeliveredByCategory } from "../stock/DeliveredByCategory";
+import { OpeningInventory } from "../stock/OpeningInventory";
 import { listCategories, type Category } from "../products/products-api";
 import {
   createScrapSale,
@@ -293,6 +294,7 @@ export function FactoryYearPage() {
 
       <YearEndBalanceCard year={year} refreshKey={closed ? 1 : 0} />
 
+      <OpeningInventory year={year} />
       <div id="kiem-ke-cuoi-nam" style={{ scrollMarginTop: 16 }}><Card title={`Nhập số kg còn trong kho cuối năm ${year}`} loading={loading} extra={<Tag color={closed ? "green" : "orange"}>{closed ? "Đã chốt" : "Chưa chốt"}</Tag>}>
         <Space wrap style={{ marginBottom: 12 }}>
           <label>Đầu kỳ <DatePicker value={periodFrom} format="DD/MM/YYYY" disabled /></label>

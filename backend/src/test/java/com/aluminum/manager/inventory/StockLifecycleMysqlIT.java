@@ -11,6 +11,7 @@ import com.aluminum.manager.dashboard.YearEndBalanceService;
 import com.aluminum.manager.dashboard.DashboardService;
 import com.aluminum.manager.dashboard.MonthlyBookController;
 import com.aluminum.manager.dashboard.MonthlyInventoryValuation;
+import com.aluminum.manager.dashboard.InventoryCarryoverService;
 import com.aluminum.manager.finance.FinanceService;
 import com.aluminum.manager.security.AuthenticatedAdmin;
 import com.aluminum.manager.shop.ShopAccess;
@@ -102,6 +103,108 @@ class StockLifecycleMysqlIT {
 
     private StockDtos.DocumentDto confirm(String type, String tons, String price) {
         return transaction(() -> service.confirm(service.createDraft(request(type, tons, price)).id()));
+    }
+
+    @Test
+    void monthlyCountNeedsOnlyRawKgAndAnnualScrapCanStillBeRecordedLater() {
+        confirm("PURCHASE", "1", "75000000");
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var input = new MonthlyBookController.Input(2025, "2025-02", List.of(
+                new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("600"), null, null, null)), null);
+        var saved = transaction(() -> book.close(input)).data();
+        assertTrue(saved.closed());
+        assertEquals(0, new BigDecimal("600").compareTo(saved.counts().get(0).rawKg()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(saved.counts().get(0).scrapKg()));
+        assertNull(saved.profit(), "Do not invent profit when opening valuation is unknown");
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM year_end_balances", Integer.class), "Monthly close must not close or lock annual inventory");
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM distribution_inventory_count_evidence", Integer.class), "Monthly snapshot must not claim annual count evidence");
+        var scrapInput = new MonthlyBookController.Input(2025, "2025-03", List.of(
+                new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("600"), new BigDecimal("10"), null, null)), null);
+        var unvalued = transaction(() -> book.close(scrapInput)).data();
+        assertEquals(0, new BigDecimal("10").compareTo(unvalued.counts().get(0).scrapKg()));
+        assertNull(unvalued.endingValue(), "Do not carry unknown scrap value into next month as zero");
+        assertNull(unvalued.profit());
+        assertNull(book.get(2025, "2025-04").data().openingValue());
+    }
+
+    private long addSecondCategoryWithReceipt() {
+        long originalProduct = product, originalCategory = category, originalUnit = unit;
+        try {
+            jdbc.update("INSERT INTO product_categories (shop_id, name) VALUES (?, 'Second aluminium')", shops.currentId());
+            category = jdbc.queryForObject("SELECT id FROM product_categories WHERE shop_id = ? AND name = 'Second aluminium'", Long.class, shops.currentId());
+            jdbc.update("INSERT INTO products (shop_id, product_code, name, category_id, base_unit_name) VALUES (?, 'TEST-SECOND', 'Second aluminium', ?, 'kg')", shops.currentId(), category);
+            product = jdbc.queryForObject("SELECT id FROM products WHERE shop_id = ? AND product_code = 'TEST-SECOND'", Long.class, shops.currentId());
+            jdbc.update("INSERT INTO product_units (product_id, unit_name, factor_to_base) VALUES (?, 'tấn', 1000)", product);
+            unit = jdbc.queryForObject("SELECT id FROM product_units WHERE product_id = ? AND unit_name = 'tấn'", Long.class, product);
+            confirm("PURCHASE", "0.4", "70000000");
+            return category;
+        } finally { product = originalProduct; category = originalCategory; unit = originalUnit; }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {ShopContext.DISTRIBUTION, ShopContext.MANUFACTURING})
+    void carriesSixHundredKgByCategoryIntoNextMonthWithoutCreatingReceipts(String shop) {
+        useFixtureShop(shop);
+        confirm("PURCHASE", "0.2", "75000000");
+        long second = addSecondCategoryWithReceipt();
+        if (!shops.isDistribution()) jdbc.update("INSERT INTO payroll_periods (period_year, period_month, status) VALUES (2025, 2, 'CLOSED')");
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var counts = List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("200"), BigDecimal.ZERO, BigDecimal.ZERO, null),
+                new MonthlyBookController.Count(second, "Second aluminium", new BigDecimal("400"), BigDecimal.ZERO, BigDecimal.ZERO, null));
+        transaction(() -> book.close(new MonthlyBookController.Input(2025, "2025-02", counts, BigDecimal.ZERO)));
+        int documents = jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents", Integer.class);
+        var carry = new InventoryCarryoverService(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper());
+        for (int i = 0; i < 2; i++) {
+            var opening = carry.get(2025, "2025-03");
+            assertTrue(opening.available());
+            assertEquals(0, new BigDecimal("600").compareTo(opening.totalRawKg()));
+            assertEquals(0, new BigDecimal("200").compareTo(opening.rows().stream().filter(r -> r.categoryId() == category).findFirst().orElseThrow().rawKg()));
+            assertEquals(0, new BigDecimal("400").compareTo(opening.rows().stream().filter(r -> r.categoryId() == second).findFirst().orElseThrow().rawKg()));
+        }
+        assertEquals(documents, jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents", Integer.class));
+        assertFalse(carry.get(2025, "2025-04").available(), "Do not silently reuse February counts as April opening when March was not closed");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {ShopContext.DISTRIBUTION, ShopContext.MANUFACTURING})
+    void carriesSixHundredKgByCategoryIntoNextFiscalYear(String shop) {
+        useFixtureShop(shop);
+        confirm("PURCHASE", "0.2", "75000000");
+        long second = addSecondCategoryWithReceipt();
+        if (!shops.isDistribution()) {
+            jdbc.update("INSERT INTO factory_raw_counts (year_number, category_id, quantity_kg, value_amount) VALUES (2025, ?, 200, 15000000), (2025, ?, 400, 28000000)", category, second);
+            jdbc.update("INSERT INTO payroll_periods (period_year, period_month, status) VALUES (2025, 2, 'CLOSED')");
+        }
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var counts = List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("200"), BigDecimal.ZERO, BigDecimal.ZERO, null),
+                new MonthlyBookController.Count(second, "Second aluminium", new BigDecimal("400"), BigDecimal.ZERO, BigDecimal.ZERO, null));
+        transaction(() -> book.close(new MonthlyBookController.Input(2025, "2025-02", counts, BigDecimal.ZERO)));
+        jdbc.update("INSERT INTO year_period_drafts (shop_id, year_number, period_from, period_to) VALUES (?, 2025, '2025-02-18', '2025-02-28')", shops.currentId());
+        transactions.executeWithoutResult(status -> periods.save(2025, day.toLocalDate(), java.time.LocalDate.of(2025, 2, 28), new BigDecimal("600"), new BigDecimal("43000000"), BigDecimal.ZERO));
+        jdbc.update("INSERT INTO year_period_starts (shop_id, year_number, period_from, period_name) VALUES (?, 2026, '2025-03-01', 'Next fiscal year')", shops.currentId());
+        var carry = new InventoryCarryoverService(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper());
+        var opening = carry.get(2026, null);
+        assertTrue(opening.available());
+        assertEquals("YEAR", opening.source());
+        assertEquals(2, opening.rows().size());
+        assertEquals(0, new BigDecimal("600").compareTo(opening.totalRawKg()));
+        assertEquals(0, new BigDecimal("200").compareTo(opening.rows().stream().filter(r -> r.categoryId() == category).findFirst().orElseThrow().rawKg()));
+        assertEquals(0, new BigDecimal("400").compareTo(opening.rows().stream().filter(r -> r.categoryId() == second).findFirst().orElseThrow().rawKg()));
+        assertEquals(0, new BigDecimal("43000000").compareTo(book.get(2026, "2025-03").data().openingValue()));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents", Integer.class), "Annual and monthly closes must not create duplicate opening receipts");
+    }
+
+    private void useFixtureShop(String shop) {
+        if (ShopContext.DISTRIBUTION.equals(shop)) return;
+        long factory = shops.idOf(shop);
+        jdbc.update("UPDATE product_categories SET shop_id = ? WHERE id = ?", factory, category);
+        jdbc.update("UPDATE products SET shop_id = ? WHERE id = ?", factory, product);
+        jdbc.update("UPDATE customers SET shop_id = ? WHERE id = ?", factory, customer);
+        jdbc.update("UPDATE year_period_starts SET shop_id = ?", factory);
+        jdbc.update("UPDATE shop_month_periods SET shop_id = ?", factory);
+        ShopContext.set(shop);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedAdmin(1L, "test", false, UserRole.MANUFACTURING, shop), null, List.of()));
     }
 
     private void createFactoryMirror() {

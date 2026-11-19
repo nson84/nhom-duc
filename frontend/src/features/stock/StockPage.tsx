@@ -14,6 +14,7 @@ import { useCanWrite } from "../auth/auth-store";
 import { getYearCount, getYearReport, type YearCount, type YearReport } from "../factory/factory-api";
 import { Link } from "react-router-dom";
 import { useWorkingYear } from "../dashboard/working-year";
+import { OpeningInventory } from "./OpeningInventory";
 import { getYearPeriod } from "../dashboard/dashboard-api";
 import { visiblePeriod } from "../dashboard/working-period";
 import { DeliveredByCategory } from "./DeliveredByCategory";
@@ -141,6 +142,7 @@ export function StockPage() {
       }}>Kiểm kê / Hao hụt</AppActionButton>}
     </Space>}>
       {!asTon && <Space style={{ marginBottom: 12 }} wrap><span>Kỳ kiểm kê Xưởng:</span><DatePicker picker="year" allowClear={false} value={dayjs(`${factoryYear}-01-01`)} onChange={(value) => value && setFactoryYear(value.year())} /></Space>}
+      <OpeningInventory year={asTon ? workingYear.year : factoryYear} month={asTon || factoryYear === workingYear.year ? workingYear.month : undefined} />
       {workingYear.month && monthRange && <Card size="small" style={{ marginBottom: 12 }}>
         <Statistic title={`Đã giao trong tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")} (kg)`} value={qtyFormat.format(monthDeliveredKg ?? 0)} />
         <DeliveredByCategory from={monthRange[0]} to={monthRange[1]} shopKey={shop} />

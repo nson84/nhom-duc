@@ -35,11 +35,11 @@ public class MonthlyBookController {
     }
 
     public record Count(long categoryId, String category, @NotNull @DecimalMin("0") BigDecimal rawKg,
-                        @NotNull @DecimalMin("0") BigDecimal scrapKg, @DecimalMin("0") BigDecimal scrapValue, BigDecimal rawValue) {}
+                        @DecimalMin("0") BigDecimal scrapKg, @DecimalMin("0") BigDecimal scrapValue, BigDecimal rawValue) {}
     public record Snapshot(int year, String month, LocalDate from, LocalDate to, List<Count> counts,
                            BigDecimal sales, BigDecimal purchases, BigDecimal expenses, boolean closed, BigDecimal openingValue, BigDecimal endingValue,
                            BigDecimal internalOut, BigDecimal profit) {}
-    public record Input(int year, String month, @NotNull List<@NotNull @Valid Count> counts, @NotNull @DecimalMin("0") BigDecimal openingValue) {}
+    public record Input(int year, String month, @NotNull List<@NotNull @Valid Count> counts, @DecimalMin("0") BigDecimal openingValue) {}
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -97,13 +97,16 @@ public class MonthlyBookController {
         if (ids.size() != current.counts().size()) throw invalid("Cần gửi đủ các loại nhôm; ô trống tính là 0");
         var counts = current.counts().stream().map(category -> {
             Count count = input.counts().stream().filter(c -> c.categoryId() == category.categoryId()).findFirst().orElseThrow();
-            return new Count(category.categoryId(), category.category(), count.rawKg(), count.scrapKg(), count.scrapValue() == null ? BigDecimal.ZERO : count.scrapValue(),
+            return new Count(category.categoryId(), category.category(), count.rawKg(), count.scrapKg() == null ? BigDecimal.ZERO : count.scrapKg(), count.scrapValue() == null ? BigDecimal.ZERO : count.scrapValue(),
                     valuation.rawValue(count.categoryId(), count.rawKg(), current.to()));
         }).toList();
-        BigDecimal endingValue = counts.stream().map(count -> count.rawValue().add(count.scrapValue())).reduce(BigDecimal.ZERO, BigDecimal::add);
+        boolean unvaluedScrap = input.counts().stream().anyMatch(count -> count.scrapKg() != null && count.scrapKg().signum() > 0
+                && (count.scrapValue() == null || count.scrapValue().signum() == 0));
+        BigDecimal endingValue = unvaluedScrap ? null : counts.stream().map(count -> count.rawValue().add(count.scrapValue())).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal profit = current.openingValue() == null || unvaluedScrap ? null
+                : MonthlyInventoryValuation.profit(current.sales(), current.openingValue(), current.purchases(), current.internalOut(), endingValue, current.expenses());
         Snapshot snapshot = new Snapshot(current.year(), current.month(), current.from(), current.to(), counts,
-                current.sales(), current.purchases(), current.expenses(), true, input.openingValue(), endingValue, current.internalOut(),
-                MonthlyInventoryValuation.profit(current.sales(), input.openingValue(), current.purchases(), current.internalOut(), endingValue, current.expenses()));
+                current.sales(), current.purchases(), current.expenses(), true, current.openingValue(), endingValue, current.internalOut(), profit);
         jdbc.update("INSERT INTO monthly_books (shop_id, month_start, period_year, snapshot_json) VALUES (?, ?, ?, ?)",
                 shops.currentId(), parse(input.month()).atDay(1), input.year(), mapper.writeValueAsString(snapshot));
         return ApiResponse.ok(snapshot, "Đã lưu sổ tháng và kiểm kê");
@@ -128,12 +131,13 @@ public class MonthlyBookController {
     }
 
     private BigDecimal openingValue(int year, LocalDate from) {
+        var annual = jdbc.query("SELECT inventory_value FROM year_end_balances WHERE shop_id = ? AND period_to = ?",
+                (rs, i) -> rs.getBigDecimal(1), shops.currentId(), from.minusDays(1));
+        if (!annual.isEmpty()) return annual.get(0);
         var previous = jdbc.query("SELECT snapshot_json FROM monthly_books WHERE shop_id = ? AND month_start < ? ORDER BY month_start DESC LIMIT 1",
                 (rs, i) -> mapper.readValue(rs.getString(1), Snapshot.class), shops.currentId(), from.withDayOfMonth(1));
         if (!previous.isEmpty() && previous.get(0).to().plusDays(1).equals(from)) return previous.get(0).endingValue();
-        var annual = jdbc.query("SELECT inventory_value FROM year_end_balances WHERE shop_id = ? AND period_to = ?",
-                (rs, i) -> rs.getBigDecimal(1), shops.currentId(), from.minusDays(1));
-        return annual.isEmpty() ? null : annual.get(0);
+        return null;
     }
 
     private BigDecimal internalOut(LocalDate from, LocalDate to) {

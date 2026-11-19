@@ -149,3 +149,5 @@ Admin vào **Sao lưu** để cất khóa phục hồi ở nơi riêng, cấu h�
 ## Kết quả audit bổ sung 19/11/2026
 
 Xem [báo cáo đối chiếu và giới hạn nghiệm thu](docs/audit-followup-20261119.md). Đã chạy 74 unit test, 14 integration test trên MySQL riêng cổng 13307 và npm ci/build frontend. Chưa nghiệm thu chuyển DB/rollback, Windows sạch và UI/PDF trực quan. Không có migration mới trong lượt audit bổ sung.
+
+Tồn đầu kỳ hiện theo từng loại tại Tồn kho/Chốt sổ tháng/Quyết toán Xưởng: dùng nguyên kg từ bản chốt liền trước, không tạo phiếu nhập và không cộng trùng tháng/năm. V42 lưu chi tiết nguyên liệu chốt năm; kiểm thử bằng MySQL riêng.
