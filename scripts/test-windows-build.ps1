@@ -30,3 +30,5 @@ try {
         Remove-Item -LiteralPath $fixture -Recurse -Force
     }
 }
+# GitHub's pwsh wrapper propagates the last simulated native failure unless reset explicitly.
+exit 0

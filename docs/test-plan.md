@@ -143,3 +143,5 @@ PDF thực tế bằng Chrome headless từ template cuối: Phân phối30 tran
 R2 thật: R2LiveRecoveryIT chạy opt-in với ALUMINUM_TEST_R2_CONFIG_FILE và các biến MySQL thử. PUT/HEAD/GET fixture AES dưới verification/UUID, so byte, giải mã/dựng DB kiểm tra tiếng Việt, chỉ xóa object test mới tạo và giữ nguyên bytes file cấu hình. Đạt1 ca,0 lỗi/bỏ qua. Không chạy test này trong CI thường và không nhập secret vào repo.
 
 Diễn tập JAR từ profile đã phục hồi: đăng nhập/đổi mật khẩu bootstrap, kiểm tra quyền Admin, Phân phối trả đủ và Xưởng trả một phần/còn nợ, nhập nội bộ; actor lịch sử không đăng nhập được. Không thay tài khoản/DB cũ. Kết quả tại completion-recovery-e2e.json trong .runtime; đã dừng sạch tiến trình thử.
+
+CI Windows: script tự kiểm thử phải thoát0 sau khi bắt các lỗi native giả lập. Đã tái hiện wrapper GitHub pwsh kế thừa LASTEXITCODE còn9 dù các assert đạt; cả hai self-test có exit0 sau finally. Kiểm tra bằng pwsh -Command gọi script rồi truyền LASTEXITCODE như runner thật; lỗi assert vẫn thoát khác0.

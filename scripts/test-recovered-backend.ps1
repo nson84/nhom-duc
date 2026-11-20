@@ -35,3 +35,4 @@ try {
     if ([IO.Path]::GetFullPath($fixture).StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) -and
         (Split-Path $fixture -Leaf).StartsWith('aluminum-recovery-test-')) { Remove-Item -LiteralPath $fixture -Recurse -Force }
 }
+exit 0
