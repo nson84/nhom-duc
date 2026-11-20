@@ -28,3 +28,5 @@ GET /api/v1/dashboard/opening-inventory?year=...&month=... trả nguyên liệu 
 V42 thêm year_end_inventory_categories, lưu kg và tên từng loại nguyên liệu trong cùng transaction chốt năm. Bản chốt cũ chỉ dùng chi tiết/historical movements khi tổng khớp; thiếu dữ liệu phải hiện thông báo cần đối chiếu, không tự chia tổng kg hoặc coi thiếu dữ liệu là 0. Không tự chạy migration vào database thật để test.
 
 Audit b361221: closeYear và saveInventory khi kèm chốt lấy khóa ghi shop trước khi đọc/tính dữ liệu chốt, đồng bộ với guard ghi ngày nghiệp vụ. Không đổi phương pháp định giá, tiền công hoặc quy trình kiểm kê/chốt. Giới hạn nghiệm thu và kiểm thử đồng thời ghi tại docs/audit-next-main.md.
+
+Kiểm tra ngày đầu kỳ xưởng dùng chung gợi ý ngày với Tổng quan: báo ngày chốt kỳ trước và ngày bắt đầu hợp lệ ngay sau đó.

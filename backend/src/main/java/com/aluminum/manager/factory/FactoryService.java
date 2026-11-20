@@ -381,7 +381,7 @@ public class FactoryService {
 		if (Math.abs(year - periodFrom.getYear()) > 1)
 			throw invalid("Tên năm chốt không khớp ngày đầu kỳ");
 		if (prior != null && !periodFrom.equals(prior.periodTo().plusDays(1)))
-			throw invalid("Kỳ mới phải bắt đầu ngay sau ngày chốt năm trước");
+			throw invalid(YearEndBalanceService.nextPeriodStartMessage(prior.periodTo()));
 		yearEndBalances.saveDraftPeriod(year, periodFrom, periodTo);
 		BigDecimal openingKg = prior == null ? request.openingKg() : closingKg(prior);
 		BigDecimal openingValue = prior == null ? request.openingValue() : closingValue(prior);

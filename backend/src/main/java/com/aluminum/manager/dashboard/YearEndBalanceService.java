@@ -232,7 +232,7 @@ public class YearEndBalanceService {
         if (priorEnd == null && priorOpen != null && priorOpen > 0)
             throw invalid("Hãy chốt kỳ trước trước khi bắt đầu kỳ tiếp theo");
         if (priorEnd != null && !from.equals(priorEnd.plusDays(1)))
-            throw invalid("Kỳ mới phải bắt đầu ngay sau ngày chốt kỳ trước");
+            throw invalid(nextPeriodStartMessage(priorEnd));
         var end = jdbc.query("SELECT period_to FROM year_period_drafts WHERE shop_id = ? AND year_number = ?",
                 (rs, i) -> rs.getDate(1).toLocalDate(), shopId, year).stream().findFirst().orElse(null);
         if (end != null) validateNamedPeriod(year, from, end);
@@ -384,11 +384,18 @@ public class YearEndBalanceService {
         if (Math.abs(year - from.getYear()) > 1) throw invalid("Tên năm không khớp ngày đầu kỳ");
     }
 
+    public static String nextPeriodStartMessage(LocalDate priorEnd) {
+        var format = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        return "Kỳ trước đã chốt ngày " + priorEnd.format(format)
+                + ". Kỳ mới phải bắt đầu từ ngày " + priorEnd.plusDays(1).format(format)
+                + ". Vui lòng chọn lại ngày bắt đầu.";
+    }
+
     static void validatePeriod(LocalDate from, LocalDate to, LocalDate priorEnd, LocalDate nextStart) {
         if (from == null || to == null || from.isAfter(to) || from.plusDays(400).isBefore(to))
             throw invalid("Khoảng ngày chốt năm phải dài tối đa 400 ngày");
         if (priorEnd != null && !from.equals(priorEnd.plusDays(1)))
-            throw invalid("Kỳ mới phải bắt đầu ngay sau ngày chốt năm trước");
+            throw invalid(nextPeriodStartMessage(priorEnd));
         if (nextStart != null && !to.plusDays(1).equals(nextStart))
             throw invalid("Ngày chốt phải sát với kỳ năm sau đã chốt");
     }

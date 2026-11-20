@@ -19,6 +19,17 @@ import org.springframework.jdbc.core.RowMapper;
 
 class YearEndBalanceServiceTest {
     @Test
+    void wrongStartSuggestsExactDayAfterPreviousClose() {
+        var failure = assertThrows(BusinessException.class, () -> YearEndBalanceService.validatePeriod(
+                LocalDate.of(2026, 2, 23), LocalDate.of(2026, 3, 1), LocalDate.of(2026, 2, 27), null));
+        assertTrue(failure.getMessage().contains("27/02/2026"));
+        assertTrue(failure.getMessage().contains("28/02/2026"));
+        var rollover = assertThrows(BusinessException.class, () -> YearEndBalanceService.validatePeriod(
+                LocalDate.of(2026, 1, 2), LocalDate.of(2026, 2, 1), LocalDate.of(2025, 12, 31), null));
+        assertTrue(rollover.getMessage().contains("01/01/2026"));
+    }
+
+    @Test
     void closingAgainCannotOverwriteHistoricalSnapshot() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class, invocation -> {
             if (invocation.getMethod().getName().equals("queryForObject")) {
