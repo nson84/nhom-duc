@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ShopCode } from "../shop/shop-store";
+import { rememberAccount } from "./login-memory";
 
 export type UserRole = "ADMIN" | "DISTRIBUTION" | "MANUFACTURING";
 
@@ -31,6 +32,7 @@ function readSession(): Session | null {
 }
 
 let session = readSession();
+if (session) rememberAccount(session.username);
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -41,12 +43,14 @@ export const authStore = {
     return session;
   },
   set(next: Session) {
+    rememberAccount(next.username);
     session = next;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     sessionStorage.removeItem(STORAGE_KEY);
     emit();
   },
   clear() {
+    if (session) rememberAccount(session.username);
     session = null;
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(STORAGE_KEY);

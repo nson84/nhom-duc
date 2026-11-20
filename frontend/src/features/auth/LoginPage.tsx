@@ -1,5 +1,5 @@
 import { Form, Input, Select } from "antd";
-import { EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
+import { ArrowRightOutlined, EyeInvisibleOutlined, EyeOutlined, LoadingOutlined, LockOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,6 +9,7 @@ import { ApiError } from "../../services/error-handler";
 import { shopStore } from "../shop/shop-store";
 import { login } from "./auth-api";
 import { authStore } from "./auth-store";
+import { getLastLogin, passwordForAccount, rememberLogin } from "./login-memory";
 
 const ACCOUNT_OPTIONS = [
   { value: "admin", label: "admin — sao lưu và cài đặt" },
@@ -29,15 +30,19 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const { control, handleSubmit, formState, setValue } = useForm<FormValues>({
+  const { control, handleSubmit, formState, setValue, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { username: "admin", password: DEV_PASSWORD },
+    defaultValues: (() => {
+      const last = getLastLogin();
+      return { username: last.username, password: last.password || DEV_PASSWORD };
+    })(),
   });
 
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
     try {
       const result = await login(values.username, values.password);
+      rememberLogin(values.username, values.password);
       authStore.set({
         token: result.token,
         username: result.username,
@@ -64,18 +69,26 @@ export function LoginPage() {
           <div className="login-card">
             <img className="login-card-photo" src="/login-hero.jpg" alt="" />
             <div className="login-card-body">
-              <Form layout="vertical" onFinish={onSubmit} className="login-form">
+              <header className="login-heading">
+                <span className="login-eyebrow">KHÔNG GIAN QUẢN LÝ</span>
+                <h1>Chào mừng trở lại.</h1>
+                <p>Chọn tài khoản để bắt đầu ngày làm việc.</p>
+              </header>
+              <Form layout="vertical" onFinish={onSubmit} className="login-form" aria-busy={formState.isSubmitting}>
+                <input type="text" name="username" autoComplete="username" value={watch("username")} readOnly hidden />
                 <Controller
                   name="username"
                   control={control}
                   render={({ field, fieldState }) => (
                     <Form.Item
+                      label="Tài khoản"
                       validateStatus={fieldState.error ? "error" : ""}
                       help={fieldState.error?.message}
                       className="login-field-block"
                     >
                       <Select
                         {...field}
+                        disabled={formState.isSubmitting}
                         options={[...ACCOUNT_OPTIONS]}
                         size="large"
                         variant="outlined"
@@ -84,7 +97,7 @@ export function LoginPage() {
                         aria-label="Tài khoản"
                         onChange={(value: FormValues["username"]) => {
                           field.onChange(value);
-                          setValue("password", DEV_PASSWORD, {
+                          setValue("password", passwordForAccount(value) || DEV_PASSWORD, {
                             shouldDirty: true,
                             shouldValidate: true,
                           });
@@ -99,12 +112,14 @@ export function LoginPage() {
                   control={control}
                   render={({ field, fieldState }) => (
                     <Form.Item
+                      label="Mật khẩu"
                       validateStatus={fieldState.error ? "error" : ""}
                       help={fieldState.error?.message}
                       className="login-field-block"
                     >
                       <Input.Password
                         {...field}
+                        disabled={formState.isSubmitting}
                         autoFocus
                         autoComplete="current-password"
                         size="large"
@@ -117,13 +132,15 @@ export function LoginPage() {
                     </Form.Item>
                   )}
                 />
-                {error ? <p className="login-error">{error}</p> : null}
+                {error ? <p className="login-error" role="alert">{error}</p> : null}
                 <div className="login-submit-wrap">
                   <button type="submit" className="login-submit" disabled={formState.isSubmitting}>
                     {formState.isSubmitting ? "Đang đăng nhập..." : "ĐĂNG NHẬP"}
+                    {formState.isSubmitting ? <LoadingOutlined spin aria-hidden /> : <ArrowRightOutlined aria-hidden />}
                   </button>
                 </div>
               </Form>
+              <p className="login-footnote"><LockOutlined aria-hidden /> Quản lý cửa hàng Nhôm Đúc</p>
             </div>
           </div>
         </div>

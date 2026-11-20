@@ -37,221 +37,146 @@ body {
   font-family: "Segoe UI", sans-serif;
 }
 
+/* Login: warm metal accents, steady form, transform-only ambient motion. */
 .login-screen {
+  --login-gold: #e5c58d;
+  --login-ink: #181a1e;
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: grid;
   place-items: center;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   isolation: isolate;
+  background: #11151c;
+  color: #fff;
 }
-
 .login-backdrop {
   position: absolute;
   inset: -24px;
   z-index: 0;
-  background:
-    linear-gradient(180deg, rgba(28, 36, 48, 0.28), rgba(28, 36, 48, 0.42)),
-    url("/login-hero.jpg") center / cover no-repeat;
-  filter: blur(10px);
-  transform: scale(1.06);
+  background: linear-gradient(120deg, #11151cec, #181b249e), url('/login-hero.jpg') center / cover;
+  filter: blur(16px);
 }
-
-.login-panel {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 32px 20px;
+.login-screen::before,
+.login-screen::after {
+  content: '';
+  position: absolute;
+  width: min(60vw, 640px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #d4b5781f, transparent 68%);
+  pointer-events: none;
+  animation: login-drift 16s ease-in-out infinite alternate;
 }
-
-.login-stack {
-  position: relative;
-  width: min(560px, 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/* Logo nằm ngoài form, phía trên card — nền trắng, chữ đen */
+.login-screen::before { top: -25%; left: -15%; }
+.login-screen::after { bottom: -30%; right: -15%; animation-delay: -8s; }
+.login-panel { position: relative; z-index: 1; width: 100%; min-width: 0; padding: 48px 24px; }
+.login-stack { position: relative; width: min(520px, 100%); margin: auto; }
 .login-badge {
   position: relative;
   z-index: 2;
-  width: 112px;
-  height: 112px;
-  margin-bottom: -56px;
-  border-radius: 50%;
-  background: #fff;
-  color: #1c2430;
   display: grid;
   place-content: center;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto -48px;
+  border: 1px solid #ecd8af;
+  border-radius: 50%;
+  color: var(--login-ink);
+  background: linear-gradient(140deg, #fff9ed, #dfc18b);
+  box-shadow: 0 8px 32px #0005, inset 0 0 0 6px #fff3;
   text-align: center;
-  box-shadow: 0 8px 20px rgba(20, 28, 40, 0.18);
-  line-height: 1.15;
-  flex-shrink: 0;
+  animation: login-enter .7s ease-out both;
 }
-
-.login-badge-title {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #1c2430;
-}
-
-.login-badge-sub {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: #1c2430;
-  opacity: 0.85;
-  margin-top: 2px;
-}
-
+.login-badge-title { font-size: 16px; font-weight: 750; letter-spacing: .02em; }
+.login-badge-sub { font-size: 10px; letter-spacing: .18em; margin-top: 4px; }
 .login-card {
-  width: 100%;
-  min-height: min(720px, 60vh);
-  border-radius: 18px;
-  box-shadow: 0 18px 48px rgba(20, 28, 40, 0.28);
-  overflow: hidden;
   position: relative;
-  display: flex;
-  flex-direction: column;
   isolation: isolate;
-}
-
-/* Ảnh làm nền toàn form — không lớp phủ trắng */
-.login-card-photo {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 18%;
-  display: block;
-  pointer-events: none;
+  border: 1px solid #e5c58d40;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #181c24;
+  box-shadow: 0 32px 80px #0006;
+  animation: login-enter .8s .08s ease-out both;
 }
-
-.login-card-body {
-  position: relative;
-  z-index: 1;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 72px 48px 44px;
-  background: transparent;
-}
-
-.login-form {
-  width: 100%;
-}
-
-.login-form.ant-form-vertical .ant-form-item {
-  margin-bottom: 20px;
-}
-
-/* Ô tài khoản / mật khẩu trong suốt — không label */
-.login-field-block.ant-form-item {
-  background: transparent;
-  border-radius: 12px;
-  padding: 4px 0;
-  box-shadow: none;
-}
-
+.login-card-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 20%; z-index: -2; opacity: .24; pointer-events: none; }
+.login-card::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, #12182066, #121820f2 80%); pointer-events: none; }
+.login-card-body { position: relative; padding: 80px 40px 28px; }
+.login-heading { margin-bottom: 28px; }
+.login-eyebrow { color: var(--login-gold); font-size: 11px; font-weight: 650; letter-spacing: .2em; }
+.login-heading h1 { color: #fff; font-size: clamp(25px, 4vw, 32px); line-height: 1.3; font-weight: 600; letter-spacing: -.03em; margin: 12px 0; }
+.login-heading p { color: #c2c6ce; font-size: 14px; line-height: 1.6; margin: 0; }
+.login-form { width: 100%; }
+.login-form.ant-form-vertical .ant-form-item { margin-bottom: 20px; }
+.login-form .ant-form-item-label > label { color: #e8e9ec !important; font-size: 13px; }
+.login-field-block.ant-form-item { background: transparent; padding: 0; box-shadow: none; }
 .login-underline-control.ant-select,
 .login-underline-control.ant-input-affix-wrapper,
 .login-underline-control.ant-input {
-  border: 1px solid rgba(255, 255, 255, 0.85) !important;
-  border-radius: 10px !important;
-  box-shadow: none !important;
-  background: transparent !important;
-  padding: 8px 14px !important;
   width: 100%;
-}
-
-.login-underline-control.ant-select .ant-select-content,
-.login-underline-control.ant-select .ant-select-selector {
-  padding-inline: 0 !important;
-  background: transparent !important;
+  min-height: 50px;
+  border: 1px solid #ffffff40 !important;
+  border-radius: 10px !important;
+  background: #121820b8 !important;
+  padding: 10px 14px !important;
   box-shadow: none !important;
-  border: none !important;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
 }
-
+.login-underline-control.ant-select .ant-select-content,
+.login-underline-control.ant-select .ant-select-selector { padding-inline: 0 !important; background: transparent !important; box-shadow: none !important; border: none !important; }
+.login-underline-control.ant-select:hover,
+.login-underline-control.ant-input-affix-wrapper:hover { border-color: #e5c58d99 !important; }
 .login-underline-control.ant-select-focused,
 .login-underline-control.ant-input-affix-wrapper-focused,
-.login-underline-control.ant-input:focus {
-  border-color: #fff !important;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2) !important;
-}
-
+.login-underline-control.ant-input:focus { border-color: var(--login-gold) !important; box-shadow: 0 0 0 3px #e5c58d26 !important; }
 .login-underline-control.ant-select .ant-select-content,
 .login-underline-control.ant-select .ant-select-selection-item,
 .login-underline-control.ant-input-affix-wrapper input,
-.login-underline-control.ant-input {
-  color: #fff;
-  font-size: 18px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.login-underline-control.ant-input-affix-wrapper input::placeholder,
-.login-underline-control.ant-input::placeholder {
-  color: rgba(255, 255, 255, 0.7);
-}
-
+.login-underline-control.ant-input { color: #fff !important; font-size: 16px; }
+.login-underline-control.ant-input-affix-wrapper input { background: transparent !important; }
+.login-underline-control input::placeholder { color: #aeb5c0 !important; }
 .login-underline-control .ant-input-password-icon,
-.login-underline-control .ant-select-arrow {
-  color: rgba(255, 255, 255, 0.85) !important;
-}
-
-.login-error {
-  margin: 0 0 16px;
-  color: #fff;
-  background: rgba(163, 59, 50, 0.92);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-}
-
-.login-submit-wrap {
-  display: flex;
-  justify-content: center;
-  margin-top: 12px;
-}
-
-/* Nút bo tròn, rộng 50%, nền trắng chữ đen */
+.login-underline-control .ant-select-arrow { color: #d8dce3 !important; }
+.login-form .ant-form-item-explain-error { color: #ffb4ad; }
+.login-error { margin: 0 0 16px; color: #ffe1dd; background: #6e2727e8; border: 1px solid #f29b9155; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.6; }
+.login-submit-wrap { margin-top: 28px; }
 .login-submit {
-  width: 50%;
-  border: none;
-  border-radius: 999px;
-  background: #fff;
-  color: #1c2430;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 14px 18px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  overflow: hidden;
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid #f7dfb3;
+  border-radius: 10px;
+  background: linear-gradient(110deg, #e5c58d, #f3dfba);
+  color: var(--login-ink);
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  padding: 14px 20px;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(20, 28, 40, 0.18);
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform .2s ease, box-shadow .2s ease;
 }
-
-.login-submit:hover:not(:disabled) {
-  background: #f3f5f7;
-  box-shadow: 0 8px 20px rgba(20, 28, 40, 0.22);
+.login-submit::before { content: ''; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, #fff7 50%, transparent 70%); transform: translateX(-110%); transition: transform .65s ease; pointer-events: none; }
+.login-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px #e5c58d26; }
+.login-submit:hover:not(:disabled)::before { transform: translateX(110%); }
+.login-submit:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.login-submit:active:not(:disabled) { transform: translateY(0); }
+.login-submit:disabled { opacity: .7; cursor: wait; }
+.login-footnote { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 24px 0 0; color: #b7bdc6; font-size: 12px; }
+@keyframes login-enter { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes login-drift { from { transform: translate(0, 0); } to { transform: translate(48px, 32px); } }
+@media (prefers-reduced-motion: reduce) {
+  .login-screen *, .login-screen::before, .login-screen::after { animation: none !important; transition: none !important; }
 }
-
-.login-submit:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.login-submit:disabled {
-  opacity: 0.7;
-  cursor: wait;
-}
-
 .brand-block {
   height: 64px;
   display: flex;
@@ -890,23 +815,7 @@ body,
 }
 
 @media (max-width: 640px) {
-  .login-stack {
-    width: min(560px, 92vw);
-  }
 
-  .login-card {
-    min-height: min(640px, 70vh);
-  }
-
-  .login-card-body {
-    padding: 64px 28px 32px;
-  }
-
-  .login-badge {
-    width: 96px;
-    height: 96px;
-    margin-bottom: -48px;
-  }
 }
 
 /* Nút hành động — màu theo vai trò, lấy từ token (đổi theo Light / Dark, đạt AA) */
@@ -1719,24 +1628,7 @@ html[data-theme="light"] .chart-day-toggle > button.is-active {
     width: 100%;
   }
 
-  .login-card {
-    min-height: 0;
-  }
 
-  .login-card-body {
-    padding: 72px 20px 28px;
-  }
-
-  .login-submit {
-    width: 100%;
-  }
-
-  .login-underline-control.ant-select .ant-select-content,
-  .login-underline-control.ant-select .ant-select-selection-item,
-  .login-underline-control.ant-input-affix-wrapper input,
-  .login-underline-control.ant-input {
-    font-size: 16px;
-  }
 
   .ant-modal {
     max-width: calc(100vw - 16px) !important;
@@ -1781,4 +1673,11 @@ html[data-theme="light"] .chart-day-toggle > button.is-active {
 
 .customer-summary-row > .ant-col > .ant-card {
   width: 100%;
+}
+
+@media (max-width: 640px) {
+  .login-panel { padding: 28px 16px; }
+  .login-card { border-radius: 20px; }
+  .login-card-body { padding: 72px 24px 24px; }
+  .login-heading { margin-bottom: 24px; }
 }
