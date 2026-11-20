@@ -27,8 +27,16 @@ Phạm vi: sửa các điểm chặn đã xác định trên main b361221 và c�
 - .runtime/completion-npm-audit.json: npm audit --omit=dev không báo vulnerability tại thời điểm chạy.
 - .runtime/completion-pdf-check.log: PDF Phân phối30 trang, Xưởng32 trang, đủ40 phiếu/sổ, đúng tổng4triệu/đã trả3triệu/nợ1triệu; không trang trắng/chữ ngoài trang. PNG đã xem ở completion-pdf/final-*.
 
+## Nghiệm thu bổ sung trên main
+
+- [Verify main b88b2c6](https://github.com/nson84/nhom-duc/actions/runs/44769221612): thành công.
+- [Đóng gói Windows](https://github.com/nson84/nhom-duc/actions/runs/44763878211): thành công. Bộ cài từ mã ứng dụng 7baf4acd00e3; commit sau bổ sung kiểm thử, tài liệu và khóa phiên bản Rust.
+- [Kiểm thử bộ cài](https://github.com/nson84/nhom-duc/actions/runs/44769223215): thành công trên Windows Server 2025 runner riêng, Java 17, MySQL 8.0.46. Cài, mở cửa sổ, kiểm tra form bằng UI Automation và ảnh thật, đăng nhập, đóng ứng dụng dừng backend, gỡ cài đặt đều đạt. Lần trước cổng CDP không mở; thay bằng UI Automation, giữ kiểm tra form và ảnh thật.
+- Bản sao dữ liệu thật: giữ nguyên 46 bảng, 489 dòng qua Flyway validate và migrate lặp lại; preflight lương không sai lệch. Nguồn đã V44 nên không có migration chờ chạy. Nguồn chỉ SELECT và dump nhất quán, không thay dữ liệu/tài khoản/quyền. SQL và server bản sao riêng đã dọn sau kiểm tra.
+- Báo cáo: `.runtime/production-copy-upgrade-check.json` và `.runtime/installed-smoke-44769223215/installed-desktop-results-44769223215/summary.json`.
+- Bộ cài: `.runtime/releases/Aluminum-Manager-0.1.0-7baf4ac-x64-setup.exe`.
+- SHA256: `C36B412544D0E074EB27F99CD74AEFDE949D816D698E38088117028BC4AE070D`.
+
 ## Giới hạn nghiệm thu
 
-Chưa chứng nhận NSIS/máy Windows sạch, vì máy này thiếu Rust/C++ toolchain. Workflow mới chưa chạy trên GitHub. R2 transport/phục hồi đã thử thật với fixture; chưa nghiệm thu chạy lịch dài hạn hoặc máy vật lý khác. Chưa áp dụng V43/V44 vào database nghiệp vụ; trước nâng cấp phải sao lưu và chạy v43-preflight.sql trên bản sao. Backup cũ thiếu tác giả vẫn có thể không phục hồi được, không tự gán tác giả giả. Dump vẫn có giới hạn32Mi ký tự và dùng RAM; không phải thiết kế cho database rất lớn. Bundle frontend khoảng2,41MB minified còn cảnh báo kích thước. Restore trực tiếp ghi đè DB hoạt động vẫn khóa.
-
-Không dùng số ca test để tuyên bố toàn bộ sản phẩm đã được nghiệm thu trên mọi môi trường. Chỉ phát hành chính thức sau khi bộ cài và diễn tập phục hồi trên máy đích đạt.
+Windows runner riêng không đại diện mọi máy Windows. Máy chạy cần Java 17/MySQL 8, không cần Rust/C++. R2 transport/phục hồi đã thử thật với fixture; lịch tự động dài hạn chưa qua soak test. Backup cũ thiếu tác giả có thể không phục hồi được; không tự gán tác giả giả. Dump giới hạn 32Mi ký tự và dùng RAM. Bundle frontend khoảng 2,41MB minified còn cảnh báo kích thước. Restore ghi đè DB hoạt động vẫn khóa theo thiết kế. Chưa tự phát hành GitHub Release hoặc cài đè trên máy dùng dữ liệu thật.
