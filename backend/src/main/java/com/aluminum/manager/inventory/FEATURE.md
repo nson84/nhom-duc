@@ -33,3 +33,7 @@ Kiểm kê Phân phối gửi ngày nghiệp vụ theo tháng đang chọn. Thá
 Rà soát 19/11: sửa phiếu nhập Phân phối sau khi đã bán một phần cho phép tổng nhập mới hợp lệ; dựng lại phiếu rồi kiểm tra tồn cuối trong cùng transaction, rollback nếu thiếu hàng. Test MySQL bảo vệ số đã thu, hạn sửa gốc, hai request thu đồng thời và đảo cặp nội bộ. Xem docs/audit-followup-20261119.md.
 
 Audit b290e3c bổ sung ca MySQL: thanh toán đủ rồi retry không nhân đôi dòng tiền/biến động; phiếu hai loại đổi thứ tự, tăng lượng và rollback khi đổi sang loại không đủ tồn; tháng khóa từ chối tạo/sửa/xác nhận/hủy/đảo. Không đổi nghiệp vụ hoặc công thức kho.
+
+20/11: đảo phiếu dùng chung requireWorkingDate cho từng đầu nội bộ, giữ khóa tháng đến commit. Khóa shop rồi các phiếu theo ID tăng dần để hai bên đảo cùng lúc không deadlock. Ngày phiếu đảo/biến động nằm ở ngày gốc trong tháng đang mở, còn ngày xác nhận/hủy/nhật ký là lúc thao tác thật. Test mô phỏng máy 2026 đảo phiếu 2025, chờ chốt tháng và đảo đồng thời từ hai đầu.
+
+Pair ID được đọc hiện hành bằng FOR UPDATE và so với tập phiếu đã khóa. Nếu snapshot cũ thấy nháp chưa ghép cặp nhưng giao dịch khác vừa xác nhận nội bộ, trả lỗi yêu cầu tải lại trước khi ghi, không đảo riêng một đầu.

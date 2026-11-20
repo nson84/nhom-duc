@@ -597,4 +597,171 @@ class StockLifecycleMysqlIT {
         try { return action.get(); }
         finally { ShopContext.clear(); SecurityContextHolder.clearContext(); }
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"year-draft", "year-payment", "month-snapshot"})
+    void yearAndMonthlySnapshotWaitForInFlightWrites(String scenario) throws Exception {
+        confirm("PURCHASE", "10", "75000000");
+        var sale = scenario.equals("year-payment") ? confirm("SALE", "2", "76000000") : null;
+        jdbc.update("INSERT INTO year_period_drafts (shop_id, year_number, period_from, period_to) VALUES (?, 2025, '2025-02-18', '2025-02-28')", shops.currentId());
+        var checked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var guarded = org.mockito.Mockito.spy(periods);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            invocation.callRealMethod(); checked.countDown();
+            assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            return null;
+        }).when(guarded).requireWorkingDate(org.mockito.ArgumentMatchers.any());
+        var writer = new StockDocumentService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), new PurchasePriceService(jdbc, clock), clock, shops, guarded);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var writing = executor.submit(() -> withDistributionContext(() -> transaction(() -> sale == null
+                    ? writer.createDraft(request("SALE", "1", "76000000"))
+                    : writer.addPayment(sale.id(), new StockDtos.PaymentRequest(new BigDecimal("50000000"), "CASH", day, "Before close", UUID.randomUUID().toString(), "Hải", "Customer")))));
+            assertTrue(checked.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var closing = executor.submit(() -> withDistributionContext(() -> transaction(() -> {
+                if (scenario.equals("month-snapshot")) {
+                    var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+                    return book.close(new MonthlyBookController.Input(2025, "2025-02", List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("10000"), null, null, null)), null)).data();
+                }
+                periods.save(2025, day.toLocalDate(), java.time.LocalDate.of(2025, 2, 28), new BigDecimal(sale == null ? "10000" : "8000"), BigDecimal.ZERO, BigDecimal.ZERO);
+                return periods.get(2025);
+            })));
+            assertThrows(java.util.concurrent.TimeoutException.class, () -> closing.get(500, java.util.concurrent.TimeUnit.MILLISECONDS));
+            release.countDown(); writing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (sale == null) {
+                var failure = assertThrows(java.util.concurrent.ExecutionException.class, () -> closing.get(5, java.util.concurrent.TimeUnit.SECONDS));
+                assertInstanceOf(BusinessException.class, failure.getCause());
+                assertNull(periods.get(2025));
+                assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM monthly_books", Integer.class));
+            } else {
+                closing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                assertEquals(0, new BigDecimal("102000000").compareTo(periods.get(2025).customerDebt()));
+                assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM sales_payments", Integer.class));
+            }
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void simultaneousMonthlySnapshotsCreateOnlyOneBookAndDoNotLockTheOperatingMonth() throws Exception {
+        confirm("PURCHASE", "1", "75000000");
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var input = new MonthlyBookController.Input(2025, "2025-02", List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("600"), null, null, null)), null);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.Callable<Boolean> action = () -> withDistributionContext(() -> {
+            try { start.await(); transaction(() -> book.close(input)); return true; }
+            catch (BusinessException expected) { return false; }
+            catch (InterruptedException e) { throw new RuntimeException(e); }
+        });
+        try {
+            var first = executor.submit(action); var second = executor.submit(action); start.countDown();
+            assertNotEquals(first.get(5, java.util.concurrent.TimeUnit.SECONDS), second.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM monthly_books", Integer.class));
+            assertEquals("OPEN", periods.monthStatus(java.time.YearMonth.of(2025, 2)));
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test
+    void olderTransactionSnapshotCannotHideAnAlreadyClosedYearFromPaymentValidation() throws Exception {
+        confirm("PURCHASE", "10", "75000000"); var sale = confirm("SALE", "2", "76000000");
+        jdbc.update("INSERT INTO year_period_drafts (shop_id, year_number, period_from, period_to) VALUES (?, 2025, '2025-02-18', '2025-02-28')", shops.currentId());
+        var read = new java.util.concurrent.CountDownLatch(1); var closed = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var writing = executor.submit(() -> withDistributionContext(() -> transaction(() -> {
+                jdbc.queryForObject("SELECT COUNT(*) FROM year_end_balances", Integer.class); // establish the transaction's older consistent snapshot
+                read.countDown();
+                try { assertTrue(closed.await(5, java.util.concurrent.TimeUnit.SECONDS)); }
+                catch (InterruptedException e) { throw new RuntimeException(e); }
+                return service.addPayment(sale.id(), new StockDtos.PaymentRequest(new BigDecimal("50000000"), "CASH", day, "Too late", UUID.randomUUID().toString(), "Hải", "Customer"));
+            })));
+            assertTrue(read.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            transactions.executeWithoutResult(status -> periods.save(2025, day.toLocalDate(), java.time.LocalDate.of(2025, 2, 28), new BigDecimal("8000"), BigDecimal.ZERO, BigDecimal.ZERO));
+            closed.countDown();
+            var failure = assertThrows(java.util.concurrent.ExecutionException.class, () -> writing.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertInstanceOf(BusinessException.class, failure.getCause());
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM sales_payments", Integer.class));
+            assertEquals(0, new BigDecimal("152000000").compareTo(periods.get(2025).customerDebt()));
+        } finally { closed.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void reversingHistoricalInvoiceKeepsWorkingDateAndBlocksMonthClosing() throws Exception {
+        confirm("PURCHASE", "10", "75000000");
+        var sale = confirm("SALE", "2", "76000000");
+        var checked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var guarded = org.mockito.Mockito.spy(periods);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            invocation.callRealMethod(); checked.countDown();
+            assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            return null;
+        }).when(guarded).requireWorkingDate(org.mockito.ArgumentMatchers.any());
+        var futureClock = Clock.fixed(Instant.parse("2026-11-14T10:00:00Z"), ZoneOffset.UTC);
+        var writer = new StockDocumentService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), new PurchasePriceService(jdbc, futureClock), futureClock, shops, guarded);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var reversing = executor.submit(() -> withDistributionContext(() -> transaction(() -> writer.reverse(sale.id(), "Historical correction"))));
+            assertTrue(checked.await(3, java.util.concurrent.TimeUnit.SECONDS), "Reversal must use the shared working-period guard");
+            var closing = executor.submit(() -> withDistributionContext(() -> transaction(() -> periods.closeMonth(2025, java.time.YearMonth.of(2025, 2)))));
+            assertThrows(java.util.concurrent.TimeoutException.class, () -> closing.get(400, java.util.concurrent.TimeUnit.MILLISECONDS));
+            release.countDown();
+            var reversed = reversing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(day, jdbc.queryForObject("SELECT document_date FROM stock_documents WHERE id = ?", LocalDateTime.class, reversed.id()));
+            assertEquals(day, jdbc.queryForObject("SELECT movement_at FROM stock_movements WHERE document_id = ?", LocalDateTime.class, reversed.id()), "Accounting movement stays in the selected working period; audit timestamps retain the operation time");
+            assertTrue(closing.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(0, new BigDecimal("10000").compareTo(jdbc.queryForObject("SELECT quantity_base FROM stock_balances WHERE product_id = ? AND category_id = ?", BigDecimal.class, product, category)));
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void simultaneousInternalPairReversalsLeaveBothInventoriesConsistent(boolean oppositeEnds) throws Exception {
+        createFactoryMirror(); confirm("PURCHASE", "10", "75000000");
+        var transfer = internalTransfer();
+        long pair = jdbc.queryForObject("SELECT internal_pair_document_id FROM stock_documents WHERE id = ?", Long.class, transfer.id());
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var invocation = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.Callable<Boolean> action = () -> withDistributionContext(() -> {
+                boolean factoryEnd = oppositeEnds && invocation.getAndIncrement() == 1;
+                if (factoryEnd) {
+                    ShopContext.set(ShopContext.MANUFACTURING);
+                    SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                            new AuthenticatedAdmin(1L, "factory-test", false, UserRole.MANUFACTURING, ShopContext.MANUFACTURING), null, List.of()));
+                }
+                try { start.await(); transaction(() -> service.reverse(factoryEnd ? pair : transfer.id(), "Concurrent reversal")); return true; }
+                catch (BusinessException expected) { return false; }
+                catch (InterruptedException e) { throw new RuntimeException(e); }
+            });
+            var first = executor.submit(action); var second = executor.submit(action); start.countDown();
+            assertTrue(first.get(5, java.util.concurrent.TimeUnit.SECONDS) | second.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents WHERE reversal_of_document_id IN (?, ?)", Integer.class, transfer.id(), pair));
+            assertEquals(0, new BigDecimal("10000").compareTo(jdbc.queryForObject("SELECT quantity_base FROM stock_balances WHERE product_id = ? AND category_id = ?", BigDecimal.class, product, category)));
+            assertEquals(0, BigDecimal.ZERO.compareTo(jdbc.queryForObject("SELECT SUM(b.quantity_base) FROM stock_balances b JOIN products p ON p.id = b.product_id WHERE p.shop_id = ?", BigDecimal.class, shops.idOf(ShopContext.MANUFACTURING))));
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions", Integer.class));
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test void staleDraftSnapshotCannotReverseOnlyOneEndOfANewlyConfirmedInternalPair() {
+        createFactoryMirror();
+        confirm("PURCHASE", "10", "75000000");
+        var request = request("SALE", "1", "75000000");
+        var draft = transaction(() -> service.createDraft(new StockDtos.DocumentRequest(request.documentType(), request.documentDate(),
+                request.counterpartyName(), request.customerId(), request.issuedBy(), request.receivedBy(), request.reason(), request.discountAmount(),
+                request.paymentMethod(), request.notes(), request.idempotencyKey(), request.items(), true)));
+        var separate = new TransactionTemplate(transactions.getTransactionManager());
+        separate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        transaction(() -> {
+            jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents", Integer.class);
+            var confirmed = separate.execute(status -> service.confirm(draft.id()));
+            assertNotNull(confirmed.internalPairDocumentId());
+            assertThrows(BusinessException.class, () -> service.reverse(draft.id(), "Stale draft view must refresh"));
+            return null;
+        });
+        assertEquals("CONFIRMED", service.get(draft.id()).status());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents WHERE reversal_of_document_id IS NOT NULL", Integer.class));
+    }
 }

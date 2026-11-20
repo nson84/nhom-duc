@@ -41,11 +41,17 @@ public class YearEndBalanceService {
     }
 
     public void requireWorkingDate(LocalDateTime date) {
+        // Closing snapshots lock this same row before reading their business totals.
+        jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shops.currentId());
         // Keep the validated month open until this business transaction commits.
         String monthStatus = monthStatus(YearMonth.from(date), true);
         if (!"OPEN".equals(monthStatus))
             throw invalid("Tháng " + YearMonth.from(date) + ("CLOSED".equals(monthStatus)
                     ? " đã khóa" : " chưa mở") + "; không thể ghi phiếu");
+        // A payment may have established a REPEATABLE READ snapshot before waiting for the shop lock.
+        var closed = jdbc.query("SELECT year_number FROM year_end_balances WHERE shop_id = ? AND period_from <= ? AND period_to >= ? LIMIT 1 FOR SHARE",
+                (rs, i) -> rs.getInt(1), shops.currentId(), date.toLocalDate(), date.toLocalDate());
+        if (!closed.isEmpty()) throw invalid("Ngày phiếu nằm ngoài kỳ đang làm việc hoặc kỳ đã chốt");
         if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes request) {
             String workingMonth = request.getRequest().getParameter("workingMonth");
             if (workingMonth != null && !workingMonth.isBlank()) {

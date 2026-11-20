@@ -415,6 +415,7 @@ public class FactoryService {
 
 	@Transactional
 	public YearCountDto saveInventory(int year, FactoryDtos.InventorySaveRequest request, boolean close) {
+		if (close) jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shops.currentId());
 		saveYearCount(year, request.count());
 		saveRawCounts(year, new RawCountRequest(request.items()));
 		saveYearCount(year, request.count());
@@ -423,6 +424,7 @@ public class FactoryService {
 
 	@Transactional
 	public YearCountDto closeYear(int year) {
+		jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shops.currentId());
 		YearCountDto count = yearCount(year);
 		if (count.periodTo().isAfter(LocalDate.now(clock))) throw invalid("Không thể chốt ngày tương lai");
 		if ("MISSING".equals(count.status())) throw invalid("Lưu kiểm kê trước khi chốt năm");

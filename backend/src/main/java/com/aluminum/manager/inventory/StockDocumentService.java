@@ -642,10 +642,29 @@ public class StockDocumentService {
 
 	@Transactional
 	public DocumentDto reverse(long id, String reason) {
+		// Take shop locks before document locks, in the same order from either end of a transfer.
+		List<Long> affectedShops = jdbc.queryForList("""
+				SELECT DISTINCT shop_id FROM stock_documents
+				WHERE id = ? OR id = (SELECT internal_pair_document_id FROM stock_documents WHERE id = ? AND shop_id = ?)
+				ORDER BY shop_id
+				""", Long.class, id, id, shops.currentId());
+		for (Long shopId : affectedShops)
+			jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shopId);
+		List<Long> affectedDocuments = jdbc.queryForList("""
+				SELECT id FROM stock_documents WHERE id = ?
+				OR id = (SELECT internal_pair_document_id FROM stock_documents WHERE id = ? AND shop_id = ?)
+				ORDER BY id
+				""", Long.class, id, id, shops.currentId());
+		for (Long documentId : affectedDocuments)
+			jdbc.queryForObject("SELECT id FROM stock_documents WHERE id = ? FOR UPDATE", Long.class, documentId);
 		DocRow original = lock(id);
 		requireSupported(original.type());
 		Long pairId = jdbc.queryForObject(
-				"SELECT internal_pair_document_id FROM stock_documents WHERE id = ?", Long.class, id);
+				"SELECT internal_pair_document_id FROM stock_documents WHERE id = ? FOR UPDATE", Long.class, id);
+		Long expectedPair = affectedDocuments.stream().filter(documentId -> documentId != id).findFirst().orElse(null);
+		if (!java.util.Objects.equals(pairId, expectedPair))
+			throw new BusinessException(ErrorCode.DOCUMENT_NOT_REVERSIBLE,
+					"Phiếu vừa thay đổi hoặc vừa xác nhận nội bộ; hãy tải lại trước khi đảo phiếu", null);
 		if (pairId != null) {
 			String thisType = original.type();
 			long purchaseId = "PURCHASE".equals(thisType) ? id : pairId;
@@ -676,15 +695,14 @@ public class StockDocumentService {
 
 	private long reverseOne(long id, String reason) {
 		DocRow original = lockAny(id);
-		Integer monthOpen = jdbc.queryForObject("""
-				SELECT COUNT(*) FROM shop_month_periods m JOIN stock_documents d ON d.shop_id = m.shop_id
-				WHERE d.id = ? AND m.month_start = ? AND m.closed_at IS NULL
-				""", Integer.class, id, original.date().toLocalDate().withDayOfMonth(1));
-		if (monthOpen == null || monthOpen == 0)
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Tháng của phiếu chưa mở hoặc đã khóa; không thể đảo phiếu", null);
 		String originalShop = jdbc.queryForObject("""
 				SELECT s.code FROM stock_documents d JOIN shops s ON s.id = d.shop_id WHERE d.id = ?
 				""", String.class, id);
+		String requestShop = ShopContext.code();
+		try {
+			ShopContext.set(originalShop);
+			requireWorkingDate(original.date());
+		} finally { ShopContext.set(requestShop); }
 		if (ShopContext.MANUFACTURING.equals(originalShop)) assertFactoryYearOpen(original.date());
 		Integer reversed = jdbc.queryForObject(
 				"SELECT COUNT(*) FROM stock_documents WHERE reversal_of_document_id = ?", Integer.class, id);
@@ -701,7 +719,7 @@ public class StockDocumentService {
 		boolean originalIncoming = "PURCHASE".equals(original.type()) || "ADJUSTMENT_IN".equals(original.type());
 		String reversalType = originalIncoming ? "ADJUSTMENT_OUT" : "ADJUSTMENT_IN";
 		LocalDateTime now = LocalDateTime.now(clock);
-		String code = sequences.nextCode(reversalType, now.toLocalDate(), shopCode);
+		String code = sequences.nextCode(reversalType, original.date().toLocalDate(), shopCode);
 		long reversalId = insertReturningId("""
 				INSERT INTO stock_documents (document_code, document_type, status, document_date,
 				    counterparty_name, reason, subtotal, discount_amount, total_amount, payment_status,
@@ -709,7 +727,7 @@ public class StockDocumentService {
 				SELECT ?, ?, 'CONFIRMED', ?, counterparty_name, ?, subtotal, discount_amount, total_amount,
 				       'UNPAID', id, ?, ?, shop_id, is_internal
 				FROM stock_documents WHERE id = ?
-				""", code, reversalType, Timestamp.valueOf(now), reason.trim(), Timestamp.valueOf(now),
+				""", code, reversalType, Timestamp.valueOf(original.date()), reason.trim(), Timestamp.valueOf(now),
 				"Đảo phiếu " + original.code(), id);
 		List<StoredItem> items = storedItems(id);
 		items.sort(Comparator
@@ -766,7 +784,7 @@ public class StockDocumentService {
 					    movement_type, quantity_delta_base, unit_cost, movement_at)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 					""", reversalId, newItemId, item.productId(), item.categoryId(),
-					delta.signum() > 0 ? "IN" : "OUT", delta, itemCost, Timestamp.valueOf(now));
+					delta.signum() > 0 ? "IN" : "OUT", delta, itemCost, Timestamp.valueOf(original.date()));
 		}
 		jdbc.update("UPDATE stock_documents SET status = 'CANCELLED', cancelled_at = ? WHERE id = ?",
 				Timestamp.valueOf(now), id);

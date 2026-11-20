@@ -49,3 +49,5 @@ Form chỉ nhập kg nguyên liệu còn tồn; kg vụn là tùy chọn, bỏ t
 Nếu đã nhập kg vụn nhưng chưa có giá trị, endingValue và profit tháng để null; kg vẫn lưu và chuyển theo loại, không biến giá trị vụn chưa biết thành0 ở tháng sau. Đã kiểm tra74 unit test,6 ca MySQL liên quan và build frontend. Không kiểm thử UI trực quan trong lượt này.
 
 Audit b290e3c: kiểm tra ngày ghi phiếu giữ khóa đọc dòng tháng đến hết transaction; khóa tháng lấy khóa ghi trước khi kiểm tra phiếu nháp. Nhờ đó không thể khóa tháng xen giữa kiểm tra ngày và ghi phiếu. Không đổi quy tắc khóa/chốt tháng hoặc năm. StockLifecycleMysqlIT bổ sung test đồng thời cho trường hợp này, chuyển tồn tháng12 sang tháng1 với loại đã đổi tên/ngừng dùng và cô lập hai sổ.
+
+Audit b361221: transaction ghi ngày nghiệp vụ giữ khóa đọc dòng shop, dùng chung với khóa ghi của snapshot tháng/chốt năm. closeDistribution lấy khóa ghi trước khi đọc tổng. Guard đọc hiện hành bản chốt năm (FOR SHARE) để snapshot REPEATABLE READ được tạo trước đó không che mất kỳ vừa chốt. Test hai transaction bảo vệ cả writer trước close và close commit trước bước kiểm tra của khoản thu; không đổi ngày chốt, công thức hoặc snapshot lịch sử.

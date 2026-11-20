@@ -146,6 +146,7 @@ public class DashboardService {
 	@Transactional
 	public DashboardSummary.Closing closeDistribution(LocalDate from, LocalDate to, boolean annual, Integer year) {
 		if (!shops.isDistribution()) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ chốt kỳ Phân phối tại đây", null);
+		jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shops.currentId());
 		DateRange range = range(from, to);
 		if (range.to().isAfter(LocalDate.now(clock))) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không chốt ngày tương lai", null);
 		Integer missing = jdbc.queryForObject("""
