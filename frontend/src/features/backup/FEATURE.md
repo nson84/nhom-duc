@@ -1,5 +1,7 @@
 # Chức năng backup
 
+20/11: kết quả dựng DB thử hiện thành khối thông tin cố định trong trang, có thể copy tên DB, thư mục ảnh và verified-recovery.json. Không chỉ dùng toast tự mất. Modal dựng local có loading và khóa thao tác trong lúc chờ để tránh bấm tạo lặp. DB này chưa tự trở thành DB vận hành; launcher và quy trình đối chiếu/quay lại nằm ở docs/recovery-runbook.md.
+
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
 ### `/sao-luu` — Sao lưu & phục hồi

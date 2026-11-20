@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 /** Builds a separate MySQL database. Never opens the application's active database for writing. */
 @Service
 public class StagedRestoreService {
-	public record Prepared(String databaseName, int sqlStatements, int imagesVerified, String imageDirectory) {}
+	public record Prepared(String databaseName, int sqlStatements, int imagesVerified, String imageDirectory, String profilePath) {}
 	private final EncryptedBackupCodec codec;
 	private final RecoveryKeyService recoveryKey;
 	private final String activeUrl;
@@ -51,11 +51,14 @@ public class StagedRestoreService {
 		if (!sql.startsWith("-- ALUMINUM_MANAGER_BACKUP_V2")
 				|| !sql.trim().endsWith("-- ALUMINUM_MANAGER_BACKUP_END"))
 			throw new IOException("Bản sao lưu không đầy đủ");
+		var validationLines = sql.lines().iterator();
+		while (validationLines.hasNext()) BackupSqlPolicy.validate(validationLines.next().trim());
 		int images = verifyImages(sql);
 		String database = "aluminum_restore_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
 		Path imageDirectory = Path.of(System.getenv().getOrDefault("APPDATA", System.getProperty("user.home")),
 				"AluminumManager", "restore-staging", database, "image");
 		Files.createDirectories(imageDirectory);
+		R2CloudService.setOwnerOnly(imageDirectory.getParent());
 		R2CloudService.setOwnerOnly(imageDirectory);
 		writeImages(sql, imageDirectory);
 		String stageUrl = stagingUrl(activeUrl, database);
@@ -69,7 +72,11 @@ public class StagedRestoreService {
 		Map<String, Integer> expectedRows = new HashMap<>();
 		try (var connection = DriverManager.getConnection(stageUrl, restoreUsername, restorePassword);
 				Statement stmt = connection.createStatement()) {
-			for (String raw : sql.split("\\r?\\n")) {
+			// The writer escapes strings using MySQL backslash escapes, independently of server defaults.
+			stmt.execute("SET SESSION sql_mode = TRIM(BOTH ',' FROM REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), ',NO_BACKSLASH_ESCAPES,', ','))");
+			var importLines = sql.lines().iterator();
+			while (importLines.hasNext()) {
+				String raw = importLines.next();
 				String line = raw.trim();
 				if (line.isEmpty() || line.startsWith("--")) continue;
 				if (line.startsWith("INSERT INTO `")) {
@@ -101,7 +108,11 @@ public class StagedRestoreService {
 		} catch (Exception e) {
 			throw new IOException("Khôi phục thử trên database riêng thất bại: " + database, e);
 		}
-		return new Prepared(database, statements, images, imageDirectory.toString());
+		Path profile = imageDirectory.getParent().resolve("verified-recovery.json");
+		Files.writeString(profile, new tools.jackson.databind.ObjectMapper().writeValueAsString(Map.of(
+				"databaseName", database, "jdbcUrl", stageUrl, "imageDirectory", imageDirectory.toString(), "verified", true)), StandardCharsets.UTF_8);
+		R2CloudService.setOwnerOnly(profile);
+		return new Prepared(database, statements, images, imageDirectory.toString(), profile.toString());
 	}
 
 	// Re-enabling FOREIGN_KEY_CHECKS does not validate rows imported while it was disabled.

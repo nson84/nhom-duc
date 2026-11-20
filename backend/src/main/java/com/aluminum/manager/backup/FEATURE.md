@@ -34,4 +34,14 @@ Rà soát 19/11: quyền POSIX tệp0600/thư mục0700; staging kiểm tra khó
 
 Audit tại HEAD b290e3c: bộ tạo dump giữ cột DEFAULT_GENERATED (đặc biệt created_at/updated_at), chỉ bỏ cột tính toán STORED/VIRTUAL GENERATED. Staging đối chiếu mọi đường dẫn product-image trong bảng products với ảnh đã xác minh và dựng ở thư mục staging; thiếu ảnh phải trả lỗi. BackupBusinessMysqlIT bảo vệ dữ liệu hai sổ, quan hệ dòng hàng/thanh toán/nhân sự, ảnh và thời điểm lịch sử bằng database thử riêng.
 
-Phục hồi đầy đủ vẫn NOT_VERIFIED: tài khoản local không nằm trong archive nhưng kỳ công đã chốt có thể tham chiếu closed_by_admin_id/reopened_by_admin_id. Không tự xóa tham chiếu hoặc chép tài khoản để vượt kiểm tra FK. Cần quyết định chính sách giữ thông tin tác giả và diễn tập chuyển/rollback trước khi nghiệm thu recovery.
+Tại audit b290, phục hồi có tác giả vẫn NOT_VERIFIED. Giới hạn này được xử lý cho backup mới bởi V44 bên dưới; backup cũ thiếu tác giả vẫn không thể tự bổ sung.
+
+Audit b361221: mở rộng test public createManualBackup/verifiedArchive, SHA256, PNG,26 bảng bao gồm cặp nội bộ, phế liệu, raw layers và snapshot tháng/năm. Liệt kê thêm FK local của attendance_day_locks và customer_leads; không tự sửa liên kết hoặc khôi phục tài khoản. Test máy mới có tài khoản khác cùngID vẫn bị từ chối thay vì gán nhầm tác giả. Workload gần32Mi ký tự khôi phục đủ, vượt giới hạn báo FAILED và giữ bản cũ, không gọi upload file lỗi. Dump vẫn dùng RAM; số đo và giới hạn tại docs/audit-next-main.md.
+
+20/11: V44 giữ các tác giả được tham chiếu bằng bản ghi không đăng nhập được (__historical_ID, tên gốc ở historical_username, mật khẩu sentinel, inactive bắt buộc bởi CHECK). Không xuất hash/phiên/quyền cũ; giữ ID FK và ngày lịch sử, cả audit_logs. Database mới có account trùng ID không bị thay đổi vì luôn dựng DB riêng. Test closed/reopened payroll, khóa ngày công, lead và nhật ký; kiểm tra không kích hoạt lại được actor.
+
+Sau xác minh staging, trả thêm profilePath và ghi hồ sơ JSON chỉ chủ máy đọc, không chứa thông tin xác thực MySQL. Launcher start-recovered-backend.ps1 từ chối URL DB thật, cổng đã bận và ảnh ngoài hồ sơ. Dùng APPDATA/credentials riêng, phục hồi env khi dừng. aluminum.backup.scheduled-enabled=false tắt cả tick local lẫn retry R2 cho diễn tập; mặc định ứng dụng bình thường vẫn true. Không bật restore trực tiếp. Hướng dẫn chuyển và quay lại: docs/recovery-runbook.md.
+
+BackupSqlPolicy giới hạn câu lệnh staging vào SET FOREIGN_KEY_CHECKS, DELETE và INSERT chỉ có literal đúng định dạng dump. Không cho USE, DDL, bảng có schema, hàm/biểu thức hoặc nhiều câu lệnh. Kiểm tra trước khi tạo DB; import dùng MySQL backslash escaping theo writer kể cả khi server bật NO_BACKSLASH_ESCAPES. Không thay định dạng V2 hoặc thực thi SQL tự do từ archive.
+
+R2LiveRecoveryIT là test opt-in riêng với ALUMINUM_TEST_R2_CONFIG_FILE trỏ cấu hình DPAPI có sẵn và MySQL thử loopback. Không chạy trong CI thường. Chỉ thử fixture AES riêng dưới verification/UUID, kiểm tra PUT/HEAD/GET, so byte, giải mã/dựng DB rồi xóa chính object mới tạo. Cấu hình R2 không đổi; không dùng dữ liệu/khóa giải mã backup nghiệp vụ. Đã chạy đạt trong lượt20/11.

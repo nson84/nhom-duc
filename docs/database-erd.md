@@ -52,3 +52,7 @@ year_end_inventory_categories: khóa (shop_id, year_number, category_id), catego
 ## V43 — ràng buộc thực lĩnh gồm tiền ứng
 
 Chỉ thay CHECK chk_payroll_total để khớp công thức AttendanceService đã có: max(0, base_pay + overtime_pay + bonus_pay + allowances - deductions - advance_amount). Không UPDATE dữ liệu. Một ALTER nguyên tử; nếu bản ghi lịch sử không khớp thì nâng cấp thất bại và giữ ràng buộc cũ. Phải kiểm tra trên bản sao trước nâng cấp thật; audit chỉ áp dụng trên server test13307.
+
+## V44 — tác giả lịch sử
+
+admin_users thêm historical_username VARCHAR(80) NULL. CHECK chk_historical_actor_inactive yêu cầu bản ghi có historical_username luôn inactive và password_hash=!HISTORICAL_ACTOR. Tài khoản hiện hữu có historical_username=NULL giữ nguyên; không UPDATE dữ liệu cũ. Backup mới xuất tác giả để giữ ID/tên và FK hiện hữu; không mang hash/role/shop/phiên cũ. Username __historical_ID không chiếm tên admin/phanphoi/xuong. audit_logs được sao lưu.

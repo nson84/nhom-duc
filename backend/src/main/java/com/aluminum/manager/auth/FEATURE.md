@@ -9,3 +9,5 @@
 ## Màn hình liên quan
 
 [auth](../../../../../../../../frontend/src/features/auth/FEATURE.md)
+
+20/11: danh tính lịch sử từ backup có username __historical_ID, historical_username giữ tên nguồn và bị khóa inactive bởi V44. Không thay logic login/JWT/bootstrap; bootstrap tạo admin/phanphoi/xuong còn thiếu bằng ID mới, không dùng lại tài khoản lịch sử và không nhận mật khẩu cũ.

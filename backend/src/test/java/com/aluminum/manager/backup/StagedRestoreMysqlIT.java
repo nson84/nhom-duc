@@ -31,12 +31,15 @@ class StagedRestoreMysqlIT {
 		assertThrows(java.io.IOException.class, () -> service.prepare(archive, null, username, password));
 	}
 
-	@Test void restoresSqlIntoFreshMysqlDatabase() throws Exception {
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+	void restoresSqlIntoFreshMysqlDatabase(boolean noBackslashEscapes) throws Exception {
 		String url = System.getenv("ALUMINUM_TEST_DB_URL");
 		assumeTrue(url != null && url.startsWith("jdbc:mysql://127.0.0.1:") && url.contains("/aluminum_backup_test"));
 		String username = System.getenv("ALUMINUM_TEST_DB_USERNAME");
 		String password = System.getenv("ALUMINUM_TEST_DB_PASSWORD");
 		assumeTrue(username != null && password != null);
+		if (noBackslashEscapes) url += (url.contains("?") ? "&" : "?") + "sessionVariables=sql_mode='NO_BACKSLASH_ESCAPES'";
 		byte[] key = new byte[32]; java.util.Arrays.fill(key, (byte) 7);
 		Path archive = directory.resolve("fixture.ndbak");
 		byte[] image = "Test image bytes".getBytes(StandardCharsets.UTF_8);
@@ -44,7 +47,7 @@ class StagedRestoreMysqlIT {
 		new EncryptedBackupCodec().encrypt(("-- ALUMINUM_MANAGER_BACKUP_V2\n"
 				+ "SET FOREIGN_KEY_CHECKS = 0;\n"
 				+ "DELETE FROM `app_settings`;\n"
-				+ "INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('shop.name', 'Nhôm Đức');\n"
+				+ "INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('shop.name', 'Nhôm O\\'Brien');\n"
 				+ "SET FOREIGN_KEY_CHECKS = 1;\n"
 				+ "-- IMAGE " + imageName + " " + java.util.Base64.getEncoder().encodeToString(image) + "\n"
 				+ "-- ALUMINUM_MANAGER_BACKUP_END\n").getBytes(StandardCharsets.UTF_8), key, archive);
@@ -55,6 +58,9 @@ class StagedRestoreMysqlIT {
 		assertTrue(result.databaseName().startsWith("aluminum_restore_"));
 		assertTrue(result.sqlStatements() >= 3);
 		assertEquals(1, result.imagesVerified());
+		var restored = new org.springframework.jdbc.core.JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(
+				StagedRestoreService.stagingUrl(url, result.databaseName()), username, password));
+		assertEquals("Nhôm O'Brien", restored.queryForObject("SELECT setting_value FROM app_settings WHERE setting_key = 'shop.name'", String.class));
 		assertTrue(Files.isDirectory(Path.of(result.imageDirectory())));
 		assertArrayEquals(image, Files.readAllBytes(Path.of(result.imageDirectory()).resolve(imageName)));
 	}

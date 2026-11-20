@@ -31,3 +31,5 @@ Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn 
 Audit b290e3c bổ sung ca lifecycle Xưởng trong StockLifecycleMysqlIT: chỉ cộng tăng ca đã duyệt, ứng có ngày ghi một khoản chi dù retry, từ chối ứng vượt thực lĩnh, tính lại lúc chốt giữ tiền ứng và khóa thay đổi sau chốt. Không đổi cách tính công theo tháng.
 
 V43 đồng bộ CHECK chk_payroll_total với công thức thực lĩnh hiện có (trừ advance_amount và chặn dưới tại0). Không cập nhật số tiền lịch sử. Nếu dữ liệu cũ không khớp, ALTER thất bại thay vì sửa số tiền để vượt kiểm tra; cần đối chiếu riêng trước nâng cấp database thật.
+
+PayrollMigrationMysqlIT kiểm thử6 fixture nâng V42→V43, gồm kỳ mở/chốt/đã trả và dữ liệu có ứng không khớp. Dòng lệch bị từ chối, CHECK cũ và các số tiền giữ nguyên; không sửa migration đã có. scripts/v43-preflight.sql chỉ SELECT số liệu đối chiếu trên bản sao; không tự UPDATE/repair lịch sử.

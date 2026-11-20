@@ -61,9 +61,11 @@ public class BackupService {
 	private final CloudBackupService cloudBackups;
 	@Value("${ALUMINUM_IMAGE_DIR:image}")
 	private String imageDirectory;
+	@Value("${aluminum.backup.scheduled-enabled:true}")
+	private boolean scheduledEnabled = true;
 	// Authentication and backup history belong to this installation, not the business restore.
 	private static final Set<String> LOCAL_TABLES = Set.of("flyway_schema_history", "backup_logs",
-			"admin_users", "revoked_login_sessions", "audit_logs");
+			"admin_users", "revoked_login_sessions");
 
 	public BackupService(
 			JdbcTemplate jdbc,
@@ -171,6 +173,7 @@ public class BackupService {
 
 	@Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
 	public void scheduledBackupTick() {
+		if (!scheduledEnabled) return;
 		try {
 			LocalDateTime latest = jdbc.query("SELECT started_at FROM backup_logs ORDER BY started_at DESC, id DESC LIMIT 1",
 					rs -> rs.next() ? rs.getTimestamp(1).toLocalDateTime() : null);
@@ -305,6 +308,25 @@ public class BackupService {
 			conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
 			conn.setAutoCommit(false);
 			stmt.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT");
+			// Preserve author FKs without exporting credentials, sessions or usable account names.
+			try (ResultSet actors = stmt.executeQuery("""
+					SELECT u.id, COALESCE(u.historical_username, u.username) actor_name, u.created_at
+					FROM admin_users u WHERE u.id IN (
+					    SELECT closed_by_admin_id FROM payroll_periods
+					    UNION SELECT reopened_by_admin_id FROM payroll_periods
+					    UNION SELECT locked_by_admin_id FROM attendance_day_locks
+					    UNION SELECT contacted_by_admin_id FROM customer_leads
+					    UNION SELECT admin_user_id FROM audit_logs
+					) ORDER BY u.id
+					""")) {
+				while (actors.next()) {
+					long actorId = actors.getLong("id");
+					sb.append("INSERT INTO `admin_users` (`id`, `username`, `password_hash`, `is_active`, `historical_username`, `created_at`) VALUES (")
+							.append(actorId).append(", ").append(toSqlLiteral("__historical_" + actorId))
+							.append(", '!HISTORICAL_ACTOR', FALSE, ").append(toSqlLiteral(actors.getString("actor_name")))
+							.append(", ").append(toSqlLiteral(actors.getObject("created_at"))).append(");\n");
+				}
+			}
 			List<String> tables = new ArrayList<>();
 			try (ResultSet rs = stmt.executeQuery("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")) {
 				while (rs.next()) if (!LOCAL_TABLES.contains(rs.getString(1))) tables.add(rs.getString(1));

@@ -43,7 +43,7 @@ export type CloudInput = Omit<CloudSettings, "configured"> & { secretAccessKey?:
 
 export type CloudStatus = { configured: boolean; pending: number; latestKey: string | null; lastError: string | null };
 export type CloudObject = { key: string; size: number; uploadedAt: string };
-export type PreparedBackup = { databaseName: string; sqlStatements: number; imagesVerified: number };
+export type PreparedBackup = { databaseName: string; sqlStatements: number; imagesVerified: number; imageDirectory: string; profilePath: string };
 
 export async function getCloudStatus(): Promise<CloudStatus> {
   return (await api.get<Envelope<CloudStatus>>("/api/v1/backups/cloud/status")).data.data;

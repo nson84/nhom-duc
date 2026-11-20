@@ -33,6 +33,8 @@ public class CloudBackupService {
 	private final EncryptedBackupCodec codec;
 	private final RecoveryKeyService recoveryKey;
 	private volatile String lastError;
+	@org.springframework.beans.factory.annotation.Value("${aluminum.backup.scheduled-enabled:true}")
+	private boolean scheduledEnabled = true;
 
 	CloudBackupService(JdbcTemplate jdbc, R2CloudService cloud, EncryptedBackupCodec codec, RecoveryKeyService recoveryKey) {
 		this.jdbc = jdbc;
@@ -153,6 +155,7 @@ public class CloudBackupService {
 
 	@Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
 	public void retryPending() {
+		if (!scheduledEnabled) return;
 		if (cloud.settings().configured()) syncPending();
 	}
 

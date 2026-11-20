@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, message } from "antd";
+import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, Typography, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -29,6 +29,7 @@ import {
   type BackupLog,
   type BackupSettings,
   type BackupStatus,
+  type PreparedBackup,
 } from "./backup-api";
 
 function formatBytes(bytes: number | null): string {
@@ -61,6 +62,7 @@ export function BackupsPage() {
   const [preparingLocal, setPreparingLocal] = useState<BackupLog | null>(null);
   const [importingRecoveryKey, setImportingRecoveryKey] = useState(false);
   const [checkingBackup, setCheckingBackup] = useState(false);
+  const [prepared, setPrepared] = useState<PreparedBackup | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,6 +117,17 @@ export function BackupsPage() {
         </Space>
       }
     >
+      {prepared && <Alert type="success" showIcon style={{ marginBottom: 16 }}
+        message="Đã kiểm tra và dựng bản phục hồi riêng"
+        description={<>
+          <p>Database đang làm việc được giữ nguyên. Đã chạy {prepared.sqlStatements} câu lệnh và kiểm tra {prepared.imagesVerified} ảnh.</p>
+          <Typography.Paragraph copyable code>{prepared.databaseName}</Typography.Paragraph>
+          <p>Thư mục ảnh đã phục hồi:</p>
+          <Typography.Paragraph copyable code style={{ overflowWrap: "anywhere" }}>{prepared.imageDirectory}</Typography.Paragraph>
+          <p>Hồ sơ đã xác minh dùng để khởi động bản phục hồi:</p>
+          <Typography.Paragraph copyable code style={{ overflowWrap: "anywhere" }}>{prepared.profilePath}</Typography.Paragraph>
+          <p>Đây là database kiểm tra, chưa phải dữ liệu đang sử dụng. Chỉ chuyển kết nối sau khi đối chiếu; giữ database cũ để có thể quay lại.</p>
+        </>} />}
       {status?.lastBackupFailed ? (
         <Alert
           type="error"
@@ -282,6 +295,7 @@ export function BackupsPage() {
             if (prepareMode) {
               const result = await prepareCloud(verifyingObject.key, enteredRecoveryKey,
                 databaseUsername, databasePassword);
+              setPrepared(result);
               message.success(`Đã dựng ${result.databaseName}: ${result.sqlStatements} câu lệnh, ${result.imagesVerified} ảnh`);
             } else {
               await verifyCloud(verifyingObject.key, enteredRecoveryKey);
@@ -298,13 +312,17 @@ export function BackupsPage() {
           onUsername={setDatabaseUsername} onPassword={setDatabasePassword} /> : null}
       </Modal>
       <Modal open={!!preparingLocal} title="Dựng database khôi phục thử" okText="Dựng DB riêng"
+        confirmLoading={checkingBackup} closable={!checkingBackup} maskClosable={!checkingBackup} cancelButtonProps={{ disabled: checkingBackup }}
         onCancel={() => { setPreparingLocal(null); setDatabasePassword(""); }}
         onOk={async () => {
           if (!preparingLocal) return;
+          setCheckingBackup(true);
           try { const result = await prepareLocal(preparingLocal.id, databaseUsername, databasePassword);
+            setPrepared(result);
             message.success(`Đã dựng ${result.databaseName}: ${result.sqlStatements} câu lệnh, ${result.imagesVerified} ảnh`);
             setPreparingLocal(null); setDatabasePassword(""); }
           catch (error) { message.error(toApiError(error).message); }
+          finally { setCheckingBackup(false); }
         }}>
         <p>Nhập tài khoản MySQL có quyền tạo database thử. Mật khẩu chỉ dùng cho thao tác này và không được lưu.</p>
         <MysqlRestoreFields username={databaseUsername} password={databasePassword}
