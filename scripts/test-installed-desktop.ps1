@@ -6,7 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') { throw 'Installer lifecycle testing is restricted to a disposable Windows runner' }
-foreach ($port in @(8080,13308,9222)) {
+foreach ($port in @(8080,13308)) {
     if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) { throw "Required test port $port is already occupied" }
 }
 $root = Join-Path $env:RUNNER_TEMP ('aluminum-desktop-smoke-' + [guid]::NewGuid().ToString('N'))
@@ -28,6 +28,8 @@ public static class DesktopSmokeWindow {
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder text, int max);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint message, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int command);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   public static IntPtr Find(uint id) {
     IntPtr found=IntPtr.Zero;
     EnumWindows((h,l)=> { uint pid; GetWindowThreadProcessId(h,out pid); var text=new StringBuilder(512); GetWindowText(h,text,512);
@@ -37,12 +39,15 @@ public static class DesktopSmokeWindow {
 }
 '@
 try {
-    $installation = Start-Process -FilePath $InstallerPath -ArgumentList @('/S',('/D='+$installDirectory)) -WindowStyle Hidden -Wait -PassThru
+    Write-Host 'Installing NSIS candidate in the disposable directory...'
+    $installation = Start-Process -FilePath $InstallerPath -ArgumentList @('/S',('/D='+$installDirectory)) -WindowStyle Hidden -PassThru
+    if (-not $installation.WaitForExit(180000)) { throw 'NSIS installer exceeded its time limit' }
     if ($installation.ExitCode -ne 0) { throw "NSIS install failed: $($installation.ExitCode)" }
     $executables = @(Get-ChildItem -LiteralPath $installDirectory -Filter '*.exe' | Where-Object { $_.Name -notmatch '(?i)uninstall|webview' })
     if ($executables.Count -ne 1) { throw 'Expected exactly one installed desktop executable' }
     $executable = $executables[0].FullName
     if (-not (Get-ChildItem -LiteralPath $installDirectory -Filter 'aluminum-manager.jar' -Recurse)) { throw 'Installed backend JAR is missing' }
+    Write-Host 'Installed executable and backend JAR found; preparing private MySQL...'
     New-Item -ItemType Directory -Path $mysqlData | Out-Null
     & $server --no-defaults --initialize-insecure "--basedir=$MysqlDirectory" "--datadir=$mysqlData" --console *> (Join-Path $ResultDirectory 'mysql-initialize.log')
     if ($LASTEXITCODE -ne 0) { throw 'Private MySQL initialization failed' }
@@ -61,12 +66,12 @@ try {
     $env:APPDATA = Join-Path $root 'profile/Roaming'
     $env:LOCALAPPDATA = Join-Path $root 'profile/Local'
     $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $root 'webview'
-    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
     $env:ALUMINUM_FIRST_RUN_CREDENTIAL_DIR = Join-Path $root 'credentials'
     $env:ALUMINUM_BACKUP_SCHEDULED_ENABLED = 'false'
     $env:ALUMINUM_API_PORT = '8080'
     Remove-Item Env:ALUMINUM_DEV_BOOTSTRAP_PASSWORD -ErrorAction SilentlyContinue
     $app = Start-Process -FilePath $executable -WindowStyle Hidden -PassThru
+    Write-Host 'Launched installed app; waiting for its owned backend...'
     $ready = $null
     for ($i=0; $i -lt 120; $i++) {
         if ($app.HasExited) { throw 'Packaged desktop exited before becoming ready' }
@@ -78,12 +83,17 @@ try {
     $backendProcessId = (Get-NetTCPConnection -State Listen -LocalPort 8080).OwningProcess | Select-Object -First 1
     $window = [DesktopSmokeWindow]::Find($app.Id)
     if ($window -eq [IntPtr]::Zero) { throw 'Packaged native window was not created' }
-    & node (Join-Path $PSScriptRoot 'check-desktop-webview.mjs') (Join-Path $ResultDirectory 'packaged-login.png')
+    Write-Host 'Backend identity/schema verified; inspecting the packaged window...'
+    [DesktopSmokeWindow]::ShowWindow($window,5) | Out-Null
+    [DesktopSmokeWindow]::SetForegroundWindow($window) | Out-Null
+    Start-Sleep -Seconds 2
+    & powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'check-desktop-ui.ps1') -WindowHandle $window.ToInt64() -ScreenshotPath (Join-Path $ResultDirectory 'packaged-login.png')
     if ($LASTEXITCODE -ne 0) { throw 'Packaged WebView did not render the login screen' }
     $credentialFile = Get-ChildItem $env:ALUMINUM_FIRST_RUN_CREDENTIAL_DIR -Filter '*.txt' | Select-Object -First 1
     $line = Get-Content -LiteralPath $credentialFile.FullName | Where-Object { $_.StartsWith('admin: ') }
     $login = Invoke-RestMethod 'http://127.0.0.1:8080/api/v1/auth/login' -Method Post -ContentType 'application/json' -Body (@{username='admin';password=$line.Substring(7)} | ConvertTo-Json)
     if ($login.data.role -ne 'ADMIN' -or -not $login.data.mustChangePassword) { throw 'Packaged first-run login did not enforce the password change' }
+    Write-Host 'First-run authentication verified; closing the desktop window...'
     [DesktopSmokeWindow]::PostMessage($window,0x0010,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
     if (-not $app.WaitForExit(30000)) { throw 'Packaged app did not close' }
     for ($i=0; $i -lt 30; $i++) {
@@ -93,7 +103,9 @@ try {
     if (Get-NetTCPConnection -State Listen -LocalPort 8080 -ErrorAction SilentlyContinue) { throw 'Owned backend remained alive after closing the desktop' }
     $uninstaller = Get-ChildItem -LiteralPath $installDirectory -Filter '*uninstall*.exe' | Select-Object -First 1
     if (-not $uninstaller) { throw 'Installed uninstaller is missing' }
-    $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+    Write-Host 'Owned backend stopped; uninstalling candidate...'
+    $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -WindowStyle Hidden -PassThru
+    if (-not $uninstall.WaitForExit(120000)) { throw 'NSIS uninstaller exceeded its time limit' }
     if ($uninstall.ExitCode -ne 0) { throw 'NSIS uninstall failed' }
     for ($i=0; $i -lt 30 -and (Test-Path -LiteralPath $executable); $i++) { Start-Sleep -Seconds 1 }
     if (Test-Path -LiteralPath $executable) { throw 'Uninstall left the application executable behind' }
