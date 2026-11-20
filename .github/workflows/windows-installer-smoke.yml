@@ -1,0 +1,66 @@
+name: Test installed Windows candidate
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful Build Windows installer candidate run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  installed-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate artifact origin
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+        run: |
+          if ($env:SOURCE_RUN -notmatch '^[0-9]+$') { throw 'Invalid source run ID' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" | ConvertFrom-Json
+          if ($run.conclusion -ne 'success' -or $run.path -ne '.github/workflows/windows-installer.yml') { throw 'Source installer workflow must have passed' }
+          "INSTALLER_REVISION=$($run.head_sha)" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          pattern: aluminum-windows-*
+          path: .runtime/installer-smoke/artifacts
+          merge-multiple: true
+      - name: Download signed MySQL test runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'mysql-8.0.46-winx64.zip'
+          Invoke-WebRequest 'https://cdn.mysql.com/Downloads/MySQL-8.0/mysql-8.0.46-winx64.zip' -OutFile $archive
+          $destination = Join-Path $env:RUNNER_TEMP 'mysql-smoke-runtime'
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+          $mysql = Join-Path $destination 'mysql-8.0.46-winx64'
+          if ((Get-AuthenticodeSignature (Join-Path $mysql 'bin/mysqld.exe')).Status -ne 'Valid') { throw 'Invalid MySQL signature' }
+          "SMOKE_MYSQL_DIRECTORY=$mysql" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Install, run and uninstall the packaged app
+        shell: pwsh
+        run: |
+          $candidates = @(Get-ChildItem '.runtime/installer-smoke/artifacts' -Filter '*.exe' -Recurse)
+          if ($candidates.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          ./scripts/test-installed-desktop.ps1 -InstallerPath $candidates[0].FullName -MysqlDirectory $env:SMOKE_MYSQL_DIRECTORY -ExpectedRevision $env:INSTALLER_REVISION -ResultDirectory (Join-Path $pwd '.runtime/installer-smoke/results')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-desktop-results-${{ github.run_id }}
+          path: .runtime/installer-smoke/results
+          if-no-files-found: warn
+          retention-days: 7
