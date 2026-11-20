@@ -121,3 +121,25 @@ StockLifecycleMysqlIT bổ sung7 ca: thu đủ/retry, nhiều dòng, từ chối
 Xem audit-b290-20261119.md để biết kết quả cuối, các log tái hiện và phạm vi NOT_TESTED. Smoke responsive3 trang không thay thế UI/PDF nhiều dòng hoặc bộ cài NSIS. Recovery end-to-end vẫn NOT_VERIFIED, restore production vẫn503.
 
 Kết quả cuối audit b290e3c:75 unit +27 MySQL integration =102 test,0 lỗi,0 skip; package JAR và frontend build đạt. Flyway43 chỉ chạy trên DB thử. Không đổi định nghĩa thu/nợ: ca30/10→10/11 xác nhận doanh thu152m tháng10, tiền thực nhận50m tháng10 và102m tháng11, đã thu từ hóa đơn tháng10 đến nay152m, nợ snapshot102m giữ nguyên, hiện tạiPAID. Không coi kết quả này là nghiệm thu PDF/NSIS hoặc recovery toàn bộ.
+
+## Audit tiếp theo main b361221
+
+Kết quả tổng hợp75 unit +40 MySQL integration đều0 lỗi/0 skip; frontend5 test readiness đạt và build đạt. Toàn bộ115 ca backend đã được chạy trong lượt này: lần đầy đủ114 ca trước ca stale-snapshot mới; lần cuối105 ca (toàn bộ unit và30 lifecycle kho) sau sửa guard stale-snapshot. Các ca backup/capacity/upgrade không đổi sau lượt đầy đủ. Xem docs/audit-next-main.md và logs .runtime/audit-next.
+
+PayrollMigrationMysqlIT nâng schema42 sang43 trên6 fixture. BackupCapacityMysqlIT khôi phục520 dòng/33,28 triệu ký tự, từ chối34,56 triệu ký tự, giữ bản hợp lệ và không upload bản lỗi. StockLifecycleMysqlIT bổ sung6 ca:3 writer/close, snapshot cũ không được vào kỳ vừa chốt,2 request snapshot và2 request đảo cùng cặp nội bộ. Frontend: node --test tests/system-readiness.test.mjs.
+
+UI riêng5174/18080 trên database giả:170 lượt đo Phân phối/Xưởng ở5 viewport sáng/tối, không tràn ngang toàn trang; modal bán10 dòng và modal lịch backup vẫn thấy footer. Bản xem trước sổ40 hóa đơn đối chiếu4.000.000/950.000/3.050.000đ. In trong IAB bị treo, PDF thực tế NOT_TESTED; không coi preview là PDF đạt. Cargo/NSIS/máy sạch chưa nghiệm thu. Không sửa DB nghiệp vụ hoặc migration V1–V43, không commit/push.
+
+## Nghiệm thu bổ sung 20/11
+
+`mvnw.cmd -o '-Dtest=*Test,*MysqlIT' package` trên MySQL riêng13307 đạt120 ca,0 lỗi/bỏ qua trước khi bổ sung SQL policy. Sau giới hạn SQL, chạy lại toàn bộ unit và các suite BackupBusinessMysqlIT, BackupCapacityMysqlIT, StagedRestoreMysqlIT. Không đọc/ghi database nghiệp vụ. Xem completion-20261120.md để biết kết quả cuối.
+
+Hồi quy mới: V44 giữ cả4 FK tác giả nghiệp vụ và nhật ký, không mang hash cũ/không kích hoạt lại actor; máy mới trùngID không bị đổi tài khoản. Đảo phiếu quá khứ giữ ngày phiếu và biến động, chốt tháng phải đợi; đảo cặp từ hai bên đồng thời không deadlock. SQL policy từ chối USE/DROP, tên bảng có schema, biểu thức/hàm và nhiều câu lệnh trước khi tạo DB. Kiểm tra dấu nháy tiếng Việt khi session có NO_BACKSLASH_ESCAPES. Test V42→V43 giới hạn target43 để không nhầm với migration mới hơn.
+
+`node --test tests/*.test.mjs`: readiness và template sổ40 hóa đơn. `scripts/test-windows-build.ps1`: mô phỏng lỗi Maven/npm/Tauri, không dùng JAR cũ khi lỗi. `scripts/test-recovered-backend.ps1`: chỉ chọn DB thử đúng profile, tách APPDATA/ảnh/credentials, trả env cũ sau chạy và từ chối URL aluminum_app. CI chạy các ca này; bộ cài NSIS có workflow thủ công chờ Verify.
+
+PDF thực tế bằng Chrome headless từ template cuối: Phân phối30 trang, Xưởng32 trang, mỗi sổ40 hóa đơn, một hóa đơn65 dòng, có lương/ứng theo ngày ở Xưởng. Python pdfplumber kiểm tra đủ mã phiếu và tổng4.000.000/3.000.000/1.000.000đ, không trang trắng hoặc chữ ngoài trang. Đã render PNG và xem phần hóa đơn dài/lương. Chưa thay thế nghiệm thu hộp thoại in Tauri hoặc máy vật lý khác.
+
+R2 thật: R2LiveRecoveryIT chạy opt-in với ALUMINUM_TEST_R2_CONFIG_FILE và các biến MySQL thử. PUT/HEAD/GET fixture AES dưới verification/UUID, so byte, giải mã/dựng DB kiểm tra tiếng Việt, chỉ xóa object test mới tạo và giữ nguyên bytes file cấu hình. Đạt1 ca,0 lỗi/bỏ qua. Không chạy test này trong CI thường và không nhập secret vào repo.
+
+Diễn tập JAR từ profile đã phục hồi: đăng nhập/đổi mật khẩu bootstrap, kiểm tra quyền Admin, Phân phối trả đủ và Xưởng trả một phần/còn nợ, nhập nội bộ; actor lịch sử không đăng nhập được. Không thay tài khoản/DB cũ. Kết quả tại completion-recovery-e2e.json trong .runtime; đã dừng sạch tiến trình thử.

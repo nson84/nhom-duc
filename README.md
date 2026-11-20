@@ -155,3 +155,13 @@ Tồn đầu kỳ hiện theo từng loại tại Tồn kho/Chốt sổ tháng/Q
 ### Audit tiếp theo tại b290e3c
 
 [Báo cáo audit mới](docs/audit-b290-20261119.md) ghi lỗi đã tái hiện, sửa trong workspace và giới hạn nghiệm thu. Bổ sung V43 để CHECK tiền công khớp công thức Java đã trừ ứng; không cập nhật tiền lịch sử và chưa áp dụng vào DB nghiệp vụ. Giữ restore production khóa, recovery end-to-end NOT_VERIFIED vì còn liên kết tác giả kỳ công và chưa diễn tập chuyển/rollback máy mới. Sau audit, người dùng yêu cầu đẩy các sửa đã kiểm thử trực tiếp lên main.
+
+### Audit còn tồn tại tại main b361221
+
+Xem [kết quả audit tiếp theo](docs/audit-next-main.md): khóa chốt/ghi đồng thời và guard snapshot cũ; kiểm tra identity/DB khi khởi động web; kiểm thử V42→V43 và backup gần/vượt giới hạn. Báo cáo chỉ đọc trước V43: scripts/v43-preflight.sql, chạy trên bản sao. Không có migration mới, không thay dữ liệu nghiệp vụ; recovery tác giả, PDF thực tế và NSIS chưa nghiệm thu. Lượt này không commit/push.
+
+### Hoàn thiện tiếp ngày 20/11/2026
+
+[Kết quả và giới hạn hiện tại](docs/completion-20261120.md) thay cho trạng thái audit cũ bên trên. V44 giữ tác giả lịch sử inactive trong backup; đảo cặp nội bộ có thứ tự khóa thống nhất, giữ ngày nghiệp vụ; menu avatar hiển thị phiên bản đang chạy. [Quy trình phục hồi/quay lại](docs/recovery-runbook.md) dùng DB riêng đã xác minh, không ghi đè DB cũ. Không tự áp dụng V43/V44 vào MySQL thật trong kiểm thử.
+
+Kiểm thử frontend: `cd frontend; node --test tests/*.test.mjs`. Kiểm thử script: `pwsh -File scripts/test-windows-build.ps1` và `pwsh -File scripts/test-recovered-backend.ps1`. Script đóng gói dừng khi Maven/npm/Tauri lỗi hoặc thiếu Cargo. GitHub Actions → **Build Windows installer candidate** chạy thủ công, đợi toàn bộ workflow Verify đạt rồi mới tạo artifact NSIS; không tự phát hành.

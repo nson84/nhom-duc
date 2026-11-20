@@ -26,3 +26,5 @@ Ngày đầu/kết thúc sổ lấy từ bản chốt của từng cửa hàng, 
 Code: `AnnualBookPage.tsx`, `annual-book-api.ts`, `annual-book-print.ts`; backend `finance/AnnualBookController.java`, `finance/AnnualBookService.java`.
 
 Phiếu bán trong mục chi tiết từng khách có bảng hàng, bảng tiền phiếu/đã thu/còn nợ; hóa đơn đã thanh toán đánh dấu tích xanh, chưa thanh toán hoặc thanh toán một phần được viền đỏ nổi bật khi in.
+
+20/11: template tự sắp phiếu mới lên trước (ngày giảm dần, cùng ngày theo ID giảm dần), không phụ thuộc thứ tự API. Hình thức CASH/TRANSFER/OTHER in bằng Tiền mặt/Chuyển khoản/Khác. Regression dùng 40 phiếu, khách đủ/một phần/nợ, một phiếu 65 dòng; kiểm tra dữ liệu người dùng được escape và tổng tiền/thu/nợ.

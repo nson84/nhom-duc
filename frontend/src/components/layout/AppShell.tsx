@@ -28,6 +28,7 @@ import { SHOP_LABELS, useShop } from "../../features/shop/shop-store";
 import { logout } from "../../features/auth/auth-api";
 import { authStore, useSession } from "../../features/auth/auth-store";
 import { MonthlyBookReminder } from "../../features/dashboard/MonthlyBook";
+import { runningBackend } from "../../features/system/system-api";
 import { getSettings } from "../../features/settings/settings-api";
 import { listCategories } from "../../features/products/products-api";
 import { themeStore, useThemeMode } from "../../features/theme/theme-store";
@@ -276,6 +277,13 @@ export function AppShell() {
                         </Typography.Text>
                       </div>
                     ),
+                  },
+                  { key: "running-version", disabled: true,
+                    label: <div style={{ fontSize: 12 }}>
+                      <div>Giao diện: {import.meta.env.VITE_BUILD_REVISION ?? "development"}</div>
+                      <div>Backend: {runningBackend.version} · {runningBackend.revision}</div>
+                      <div>Database schema: {runningBackend.schemaVersion}</div>
+                    </div>,
                   },
                   { type: "divider" },
                   ...(role === "ADMIN" ? [] : [{

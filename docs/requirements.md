@@ -7,7 +7,7 @@ Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xư
 - Đơn vị tồn cơ sở là duy nhất. Mỗi dòng phiếu lưu số lượng bán, đơn vị, hệ số và số lượng cơ sở tại thời điểm giao dịch.
 - Hệ số bằng 0 bị từ chối. Không suy đoán hệ số khi chưa có số đã kiểm.
 - Phân phối quản lý tồn liên tục và không cho tồn âm. Xưởng quyết toán nhôm theo kiểm kê cuối năm; phiếu bán thành phẩm không trừ tồn từng ngày.
-- Phiếu nháp không đổi tồn. Phiếu đã xác nhận không sửa dòng. Sửa sai bằng phiếu đảo, mỗi phiếu chỉ đảo một lần.
+- Phiếu nháp không đổi tồn. Phiếu nhập/bán thường đã xác nhận được sửa trong 24 giờ từ lúc xác nhận, không đổi hạn gốc và không giảm tổng dưới số đã thanh toán. Phiếu nội bộ phải đảo cả cặp trước khi lập lại; mỗi phiếu chỉ đảo một lần. Tháng/năm đã khóa từ chối sửa hoặc đảo.
 - Thùng rác chỉ nhận phiếu **đã hủy** hoặc phiếu **đã xác nhận và đã đảo**. Phiếu nháp phải **hủy nháp** trước; không chuyển thẳng từ nháp vào thùng rác. Phiếu đã hủy trong thùng rác giữ tối đa 90 ngày rồi xóa cứng (nếu không ràng buộc kho/thu); phiếu đã đảo chỉ ẩn danh sách, không xóa cứng.
 - Phân phối theo dõi tồn tổng theo số lượng, không tự tính giá vốn khi xuất từng phiếu. Xưởng tính chi phí nhôm năm bằng giá trị đầu năm + nhập trong năm - giá trị kiểm kê cuối năm.
 - Phân phối giữ lịch sử giá nhập chuẩn theo ngày và snapshot trên dòng phiếu để tra cứu giá nhập. Giá tham khảo không thay đổi giá thực tế của phiếu nhập. Phiếu bán xưởng có thể gắn dòng phiếu nhập làm giá nhôm tham chiếu; không dùng giá đó làm giá vốn hằng ngày.
@@ -54,3 +54,13 @@ Chốt tháng không yêu cầu nhập tiền. Chỉ nhập kg nguyên liệu; v
 Không đổi các định nghĩa nghiệp vụ. Ghi chứng từ và khóa tháng phải đồng bộ bằng transaction để không ghi sau bước khóa. Backup phải giữ thời điểm lịch sử, từ chối sản phẩm thiếu ảnh staging và FK không hợp lệ. Recovery end-to-end vẫn NOT_VERIFIED; restore trực tiếp database hoạt động tiếp tục khóa.
 
 V43 chỉ sửa CHECK tiền công để khớp công thức Java đã trừ tiền ứng; không sửa công thức tính công hoặc số tiền lịch sử. Không áp dụng migration này vào database thật trong audit. Nếu dữ liệu cũ không thỏa ràng buộc mới, dừng nâng cấp và đối chiếu; không tự sửa số liệu. Bằng chứng/giới hạn xem audit-b290-20261119.md.
+
+Audit tiếp theo b361221 giữ nguyên nghiệp vụ và công thức: ghi/chốt đồng bộ khóa shop và guard dùng bản đọc hiện hành của kỳ đã chốt, tránh transaction có snapshot cũ ghi vào năm vừa chốt. V43 chỉ kiểm thử nâng cấp trên bản sao và xuất báo cáo SELECT; không tự sửa dữ liệu lịch sử. Xem audit-next-main.md cho bằng chứng tại thời điểm audit đó.
+
+## Hoàn thiện 20/11/2026
+
+V44 thêm historical_username vào admin_users. Backup mới chỉ mang tác giả đang được nghiệp vụ/nhật ký tham chiếu dưới dạng danh tính lịch sử: ID và tên gốc được giữ, username đăng nhập riêng __historical_ID, is_active=false, password_hash cố định !HISTORICAL_ACTOR. CHECK không cho kích hoạt danh tính này. Không mang mật khẩu, quyền, phiên hay thông tin đăng nhập cũ; tài khoản máy mới và DB đang dùng không bị thay thế. Nhật ký thao tác được giữ trong backup mới. Backup cũ thiếu tác giả tiếp tục bị từ chối FK; không tự đoán tác giả.
+
+Đảo phiếu là sửa sai trong tháng gốc đang mở: ngày phiếu đảo và biến động dùng ngày nghiệp vụ gốc; confirmed_at/cancelled_at và nhật ký giữ thời điểm thao tác thực tế. Cặp nội bộ được khóa theo thứ tự cố định. Không dùng đảo phiếu để điều chỉnh một kỳ đã khóa.
+
+Phục hồi tách biệt sinh verified-recovery.json sau khi kiểm tra số dòng, FK và ảnh. scripts/start-recovered-backend.ps1 chỉ khởi động DB aluminum_restore_* trên loopback, không ghi đè DB cũ; môi trường và thông tin đăng nhập được tách riêng. Mặc định diễn tập tắt lịch backup/R2, phải chủ động bật khi chuyển sang vận hành. Restore trực tiếp ghi đè DB vẫn khóa. Xem docs/completion-20261120.md và docs/recovery-runbook.md.

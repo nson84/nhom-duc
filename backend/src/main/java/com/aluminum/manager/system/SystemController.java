@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class SystemController {
 
 	private final JdbcTemplate jdbc;
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	private org.springframework.boot.info.BuildProperties build;
 
 	public SystemController(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
@@ -25,6 +27,8 @@ public class SystemController {
 				ORDER BY installed_rank DESC
 				LIMIT 1
 				""", String.class);
-		return ApiResponse.ok(new ReadyStatus("UP", "UP", version), null);
+		return ApiResponse.ok(build == null ? new ReadyStatus("UP", "UP", version)
+				: new ReadyStatus("UP", "UP", version, "aluminum-manager", build.getVersion(),
+						build.get("revision") == null ? "unversioned" : build.get("revision")), null);
 	}
 }

@@ -1,5 +1,7 @@
 # Danh mục chức năng
 
+Khung giao diện dùng chung và phiên bản đang chạy: [layout](../frontend/src/components/layout/FEATURE.md). Phục hồi/quay lại: [runbook](recovery-runbook.md). Trạng thái nghiệm thu mới nhất: [20/11/2026](completion-20261120.md).
+
 Mỗi thư mục chức năng có `FEATURE.md` mô tả hành vi hiện tại. Trước khi sửa code, đọc tài liệu của mọi frontend/backend liên quan và [requirements.md](requirements.md); sau khi sửa, cập nhật tài liệu tương ứng trong cùng thay đổi. Các quy tắc thao tác nằm trong [AGENTS.md](../AGENTS.md).
 
 | Vai trò | Phạm vi hiện tại |

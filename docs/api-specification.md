@@ -132,3 +132,9 @@ POST /api/v1/payroll/periods/{id}/details/{detailId}/advances: ghi ứng lương
 GET /api/v1/dashboard/opening-inventory?year=2026&month=2026-03 (month tùy chọn). Chỉ role vận hành, theo shop hiện tại. Trả from, sourceTo, source MONTH/YEAR, available, rows(categoryId, category, rawKg, scrapKg), totalRawKg, totalScrapKg, message. Không có nguồn chốt liền trước thì available=false; không tự chia tổng tồn. scrapKg/totalScrapKg của nguồn YEAR là null vì kiểm kê vụn năm chưa tách loại. Endpoint chỉ đọc, không tạo phiếu hoặc biến động kho.
 
 POST /dashboard/monthly-book: rawKg phải có; scrapKg có thể null/không gửi và được tạm ghi0. openingValue không bắt buộc, backend tự lấy nguồn đã lưu; frontend không gửi tiền. Thiếu giá trị đầu kỳ vẫn chốt kg được, profit=null. Định giá vụn và kiểm kê khi chốt năm vẫn thực hiện riêng.
+
+## Bổ sung 20/11/2026
+
+GET /api/v1/system/ready giữ application/status/database/schemaVersion và thêm version/revision. Không có build-info thì development/unversioned. Không trả tên DB/thông tin xác thực.
+
+POST /api/v1/backups/{id}/prepare và /api/v1/backups/cloud/prepare trả databaseName, sqlStatements, imagesVerified, imageDirectory, profilePath. Hồ sơ sinh sau xác minh staging, không có tài khoản/mật khẩu MySQL. Quyền Admin giữ nguyên; restore trực tiếp vẫn503. Quy trình chuyển/quay lại: recovery-runbook.md.

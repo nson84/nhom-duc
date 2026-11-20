@@ -33,7 +33,7 @@ function saleBlock(book: AnnualBook, sale: AnnualBook["sales"][number]) {
     ${sale.paidNow !== sale.paidAsOf ? `<p class="period-note">Tại ngày chốt ${day(book.periodTo)}: đã thu ${money(sale.paidAsOf)}, còn nợ ${money(Math.max(0, sale.total - sale.paidAsOf))}. Các lần trả sau kỳ được ghi riêng bên dưới.</p>` : ""}
     ${sale.notes ? `<p>Ghi chú: ${esc(sale.notes)}</p>` : ""}
     ${table(["Lần thu", "Số tiền", "Hình thức", "Người thu", "Ghi chú"], payments.map((payment) => [
-      esc(date(payment.date)), money(payment.amount), esc(payment.method), esc(payment.collector || "—"), esc(payment.note || ""),
+      esc(date(payment.date)), money(payment.amount), esc(({ CASH: "Tiền mặt", TRANSFER: "Chuyển khoản", OTHER: "Khác" } as Record<string, string>)[payment.method] ?? payment.method), esc(payment.collector || "—"), esc(payment.note || ""),
     ]), "Chưa ghi thu")}
   </div>`;
 }
@@ -58,6 +58,8 @@ function transactions(book: AnnualBook, kind: "receipts" | "expenses") {
 }
 
 function shopHtml(book: AnnualBook) {
+  // Printed order must remain stable even if an API caller supplies unsorted invoices.
+  book = { ...book, sales: [...book.sales].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id) };
   const customerSales = book.sales.filter((sale) => sale.customerId != null);
   const currentDebt = (sale: AnnualBook["sales"][number]) => Math.max(0, sale.total - sale.paidNow);
   const debtors = customerSales.filter((sale) => currentDebt(sale) > 0);

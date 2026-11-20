@@ -1,5 +1,6 @@
 name: Verify application
 on:
+  workflow_call:
   pull_request:
     branches: [main]
   push:
@@ -54,3 +55,17 @@ jobs:
       - name: Typecheck and build
         working-directory: frontend
         run: npm run build
+      - name: Frontend regressions
+        working-directory: frontend
+        run: node --test tests/*.test.mjs
+
+  windows-build-script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packaging stops on native command failures
+        shell: pwsh
+        run: ./scripts/test-windows-build.ps1
+      - name: Recovery launcher isolation
+        shell: pwsh
+        run: ./scripts/test-recovered-backend.ps1
