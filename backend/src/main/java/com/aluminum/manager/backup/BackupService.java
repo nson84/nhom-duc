@@ -159,13 +159,16 @@ public class BackupService {
 		if (!scheduledEnabled) return;
 		BackupLogDto result = performBackup("shutdown", null);
 		if ("FAILED".equals(result.status())) log.error("Sao lưu khi đóng ứng dụng thất bại: {}", result.errorMessage());
+		else cloudBackups.syncPending();
 	}
 
 	public BackupLogDto createDesktopBackup(String reason) {
 		if (!scheduledEnabled) throw new IllegalStateException("Sao lưu tự động đang tắt");
 		if (!"startup".equals(reason) && !"shutdown".equals(reason))
 			throw new IllegalArgumentException("Thời điểm sao lưu không hợp lệ");
-		return performBackup(reason, null);
+		BackupLogDto result = performBackup(reason, null);
+		if ("shutdown".equals(reason) && "SUCCESS".equals(result.status())) cloudBackups.syncPending();
+		return result;
 	}
 
 	public Path verifiedArchive(long id) {

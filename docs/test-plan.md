@@ -4,6 +4,7 @@
 
 - `DesktopBackupControlTest`: API backup lúc mở/đóng chỉ nhận loopback và mã đúng; từ chối thời điểm khác.
 - `BackupScheduleTest`: tick lịch backend vẫn giữ quy tắc tần suất riêng.
+- `RecoveryRehearsalTest`: chế độ diễn tập tắt không tạo backup hoặc gọi R2 khi đóng app.
 - CI Windows build kiểm tra mã Rust lưu mật khẩu theo từng tài khoản trong Windows Credential Manager và luồng desktop gọi backup sau 30 giây, khi đóng app.
 
 ## Đang có kiểm thử đơn vị
