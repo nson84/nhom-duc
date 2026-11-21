@@ -1,6 +1,7 @@
 package com.aluminum.manager.system;
 
 import com.aluminum.manager.common.ApiResponse;
+import com.aluminum.manager.backup.RecoveryKeyService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,8 @@ public class SystemController {
 	private final JdbcTemplate jdbc;
 	@org.springframework.beans.factory.annotation.Autowired(required = false)
 	private org.springframework.boot.info.BuildProperties build;
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	private RecoveryKeyService recoveryKey;
 
 	public SystemController(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
@@ -20,6 +23,8 @@ public class SystemController {
 
 	@GetMapping("/ready")
 	public ApiResponse<ReadyStatus> ready() {
+		if (recoveryKey != null && System.getenv("ALUMINUM_INITIAL_RECOVERY_KEY") != null)
+			recoveryKey.key();
 		jdbc.queryForObject("SELECT 1", Integer.class);
 		String databaseName = jdbc.queryForObject("SELECT DATABASE()", String.class);
 		String version = jdbc.queryForObject("""
