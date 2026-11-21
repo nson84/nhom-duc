@@ -5,6 +5,7 @@ $originalLocation = Get-Location
 try {
     New-Item -ItemType Directory -Force -Path "$fixture/scripts", "$fixture/backend/target", "$fixture/frontend" | Out-Null
     Copy-Item "$PSScriptRoot/build-windows.ps1" "$fixture/scripts/build-windows.ps1"
+    Copy-Item "$PSScriptRoot/start-recovered-backend.ps1" "$fixture/scripts/start-recovered-backend.ps1"
     Set-Content "$fixture/backend/target/test.jar" 'fixture'
     function global:npm { & $env:ComSpec /c 'exit 0' }
     function global:cargo { & $env:ComSpec /c 'exit 0' }
@@ -19,6 +20,9 @@ try {
         try { & "$fixture/scripts/build-windows.ps1" }
         catch { $failed = $_.Exception.Message -match 'exit code' }
         if (-not $failed) { throw "Packaging must reject native $scenario failure" }
+        if ($scenario -eq 'frontend' -and -not (Test-Path "$fixture/frontend/src-tauri/resources/start-recovered-backend.ps1")) {
+            throw 'Packaging must include the recovery launcher beside the backend JAR'
+        }
     }
     Write-Host 'PASS: Maven, frontend and installer failures stop packaging.'
 } finally {

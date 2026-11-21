@@ -144,7 +144,7 @@ npm run tauri dev
 Tauri kiểm tra cổng 8080. Nếu backend chưa chạy và có file JAR, Tauri tự khởi động Java rồi dừng tiến trình đó khi đóng cửa sổ. Nhật ký nằm ở `%APPDATA%\AluminumManager\backend.log`.
 ### Sao lưu Cloudflare R2
 
-Admin vào **Sao lưu** để cất khóa phục hồi ở nơi riêng, cấu hình R2 và kiểm tra kết nối. Backup mới có đuôi `.ndbak`, được nén và mã hóa trước khi đồng bộ. Nếu mất máy, nhập khóa phục hồi và cấu hình R2 trên máy mới, tải bản cloud rồi dùng **Dựng DB thử** để xác minh. Chức năng thay database đang dùng vẫn khóa cho đến khi quy trình chuyển và quay lại được kiểm thử trên máy khác. Xem [hướng dẫn khôi phục](docs/backup-recovery-guide.md).
+Admin vào **Sao lưu** để cất khóa phục hồi ở nơi riêng, cấu hình R2 và kiểm tra kết nối. Backup mới có đuôi `.ndbak`, được nén và mã hóa trước khi đồng bộ. Nếu mất máy, cài ứng dụng trên máy mới, tạo token R2 mới, chọn bản cloud và dùng **Dựng DB thử** với khóa phục hồi cũ. Sau khi đối chiếu, chạy `resources/start-recovered-backend.ps1` đi kèm bộ cài bằng hồ sơ `verified-recovery.json`, rồi mở ứng dụng. Restore ghi đè database đang dùng vẫn khóa. Bản nháp chỉ lưu trên thiết bị không nằm trong backup. Xem [hướng dẫn khôi phục](docs/backup-recovery-guide.md) và [quy trình vận hành bản phục hồi](docs/recovery-runbook.md).
 
 ## Kết quả audit bổ sung 19/11/2026
 

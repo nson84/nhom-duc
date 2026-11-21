@@ -10,11 +10,19 @@ Dùng ứng dụng V44 trở lên. Cất riêng tệp .ndbak và khóa phục h�
 
 ## Chạy bản phục hồi
 
-Đóng ứng dụng/backend cũ trước khi dùng cổng8080. Launcher từ chối cổng đã bận, không tự giết tiến trình. Từ thư mục dự án:
+Đóng ứng dụng/backend cũ trước khi dùng cổng8080. Launcher từ chối cổng đã bận, không tự giết tiến trình. Nếu có mã nguồn, chạy từ thư mục dự án:
 
 ```powershell
 ./scripts/start-recovered-backend.ps1 -ProfilePath 'C:/duong-dan/aluminum_restore_xxxxxxxxxxxx/verified-recovery.json'
 ```
+
+Nếu chỉ có bộ cài Windows mới, mở thư mục cài đặt của ứng dụng (qua **Open file location** trên shortcut), tìm `resources/start-recovered-backend.ps1` cạnh `aluminum-manager.jar`, rồi chạy trong PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File 'C:/duong-dan-cai-dat/resources/start-recovered-backend.ps1' -ProfilePath 'C:/duong-dan/aluminum_restore_xxxxxxxxxxxx/verified-recovery.json'
+```
+
+Launcher hỏi tên và mật khẩu MySQL; mật khẩu không ghi vào hồ sơ. Giữ cửa sổ PowerShell mở, sau đó mở ứng dụng desktop. Khi ứng dụng thấy backend phục hồi đã sẵn sàng ở cổng8080, nó dùng backend đó. Không mở ứng dụng trước launcher vì ứng dụng sẽ tự khởi động DB mặc định.
 
 Nhập tài khoản MySQL có quyền trên DB đã phục hồi; ưu tiên tài khoản chỉ có quyền DB đó. Launcher chỉ nhận DB aluminum_restore_* ở127.0.0.1 và ảnh đúng thư mục hồ sơ, từ chối aluminum_app/host Internet. Có thể truyền -JarPath nếu JAR nằm ở nơi khác.
 

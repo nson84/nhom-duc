@@ -1,5 +1,8 @@
 # Sao lưu và phục hồi
 
+21/11: launcher `scripts/start-recovered-backend.ps1` được đóng gói cạnh `aluminum-manager.jar` trong tài nguyên Tauri; tự tìm JAR cùng thư mục khi chạy từ bộ cài. Luồng tải R2, xác minh, dựng DB riêng và giữ DB cũ không đổi. Xem `docs/backup-recovery-guide.md` cho các bước trên máy mới.
+`R2LatestBackupReadIT` là kiểm thử tùy chọn chỉ đọc object `.ndbak` mới nhất trên R2 thật, so kích thước/checksum rồi giải mã bằng khóa máy đang dùng; không xuất nội dung và không ghi R2.
+
 Đọc tài liệu này trước khi sửa code trong thư mục; cập nhật cùng thay đổi.
 
 ## Chức năng hiện có

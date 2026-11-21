@@ -126,8 +126,17 @@ export function BackupsPage() {
           <Typography.Paragraph copyable code style={{ overflowWrap: "anywhere" }}>{prepared.imageDirectory}</Typography.Paragraph>
           <p>Hồ sơ đã xác minh dùng để khởi động bản phục hồi:</p>
           <Typography.Paragraph copyable code style={{ overflowWrap: "anywhere" }}>{prepared.profilePath}</Typography.Paragraph>
-          <p>Đây là database kiểm tra, chưa phải dữ liệu đang sử dụng. Chỉ chuyển kết nối sau khi đối chiếu; giữ database cũ để có thể quay lại.</p>
+          <p>Đây là database kiểm tra, chưa phải dữ liệu đang sử dụng. Sau khi đối chiếu, đóng ứng dụng, chạy <code>start-recovered-backend.ps1</code> trong thư mục cài đặt với <code>-ProfilePath</code> là đường dẫn hồ sơ trên, rồi mở lại ứng dụng. Giữ cửa sổ PowerShell đó mở và giữ database cũ để có thể quay lại.</p>
         </>} />}
+      <Card size="small" title="Nếu mất máy: lấy dữ liệu từ R2 về máy mới" style={{ marginBottom: 16 }}>
+        <ol style={{ margin: 0, paddingInlineStart: 22 }}>
+          <li>Cất khóa phục hồi bên ngoài máy. Khóa này khác mật khẩu đăng nhập và khóa truy cập R2.</li>
+          <li>Trên máy mới, cài Java 17, MySQL 8 và ứng dụng; đăng nhập Admin mới. Tạo khóa truy cập R2 mới trong tài khoản Cloudflare của bạn, rồi nhập endpoint, bucket và khóa vào Cấu hình Cloudflare R2.</li>
+          <li>Chọn bản trong danh sách R2, bấm Dựng DB thử. Nhập khóa phục hồi cũ và tài khoản MySQL có quyền tạo database. Chờ kết quả DB, ảnh và hồ sơ xác minh hiện trên trang này.</li>
+          <li>Đối chiếu phiếu, công nợ, tồn kho và ảnh. Đóng ứng dụng, chạy launcher phục hồi kèm đường dẫn hồ sơ, rồi mở ứng dụng lại. Lưu mật khẩu đăng nhập mới và xuất khóa phục hồi mới trước khi bật lại lịch sao lưu.</li>
+        </ol>
+        <Typography.Paragraph type="secondary" style={{ margin: "10px 0 0" }}>Có thể tải tệp .ndbak trực tiếp từ Cloudflare Dashboard → R2 → bucket → backups khi cần. Tệp vẫn mã hóa; chỉ tải về chưa khôi phục dữ liệu. Bản nháp chỉ lưu trong trình duyệt không nằm trong backup.</Typography.Paragraph>
+      </Card>
       {status?.lastBackupFailed ? (
         <Alert
           type="error"

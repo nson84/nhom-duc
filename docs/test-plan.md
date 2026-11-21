@@ -138,6 +138,14 @@ Hồi quy mới: V44 giữ cả4 FK tác giả nghiệp vụ và nhật ký, kh�
 
 `node --test tests/*.test.mjs`: readiness và template sổ40 hóa đơn. `scripts/test-windows-build.ps1`: mô phỏng lỗi Maven/npm/Tauri, không dùng JAR cũ khi lỗi. `scripts/test-recovered-backend.ps1`: chỉ chọn DB thử đúng profile, tách APPDATA/ảnh/credentials, trả env cũ sau chạy và từ chối URL aluminum_app. CI chạy các ca này; bộ cài NSIS có workflow thủ công chờ Verify.
 
+21/11: `scripts/test-recovered-backend.ps1` kiểm tra thêm launcher khi nằm cạnh JAR như trong bộ cài và khóa JWT riêng cho hồ sơ phục hồi. `scripts/test-windows-build.ps1` kiểm tra script launcher được đưa vào tài nguyên khi build. UI Sao lưu có các bước lấy object từ R2 trên máy mới; phiếu nháp trình duyệt hiển thị cả kỳ khác và có thao tác xóa xác nhận. Hộp Khóa tháng hiển thị khoảng ngày cần đối chiếu. Kiểm thử trên máy mới vật lý vẫn phải thực hiện riêng.
+
+Lượt 21/11: `mvnw.cmd -q test` đạt 114 ca backend, 0 lỗi; `npm run build` và `node --test tests/*.test.mjs` đạt 10/10 frontend; cả hai script self-test Windows đạt. `R2LiveRecoveryIT` chạy riêng trên MySQL thử loopback 13307 và cấu hình R2 đã có: 1 ca đạt, 0 lỗi/bỏ qua; fixture mã hóa `verification/UUID` được PUT/HEAD/GET, giải mã và dựng DB riêng đến Flyway V44, sau đó xóa đúng object fixture và dừng MySQL thử. Không dùng bản sao dữ liệu nghiệp vụ hoặc DB thật. Chưa thử bộ cài mới trên máy Windows sạch.
+
+Chạy thêm `BackupBusinessMysqlIT` và `StagedRestoreMysqlIT` trên cùng loại MySQL thử: 4 ca đạt, 0 lỗi/bỏ qua, kiểm tra hai sổ, quan hệ phiếu/thanh toán, ảnh, thời điểm lịch sử và các trường hợp staging từ chối dữ liệu sai. Cổng13307 được xác nhận không còn listener sau lượt thử.
+
+`R2LatestBackupReadIT` là bài opt-in chỉ đọc R2, yêu cầu `ALUMINUM_TEST_R2_CONFIG_FILE` và `ALUMINUM_TEST_RECOVERY_KEY_FILE` trên Windows. Lượt21/11 đạt1 ca,0 lỗi/bỏ qua: object mới nhất `backups/aluminum-scheduled-20261120-232730-973.ndbak` tải ngày20/11/2026 23:27 giờ Việt Nam, khớp kích thước/SHA-256 metadata và giải mã AES-GCM bằng khóa phục hồi hiện có. Tệp tạm do JUnit dọn; không ghi/xóa object R2 và không in nội dung backup. Bài này chứng minh archive hiện có đọc và giải mã được, không thay cho diễn tập chuyển máy vật lý.
+
 PDF thực tế bằng Chrome headless từ template cuối: Phân phối30 trang, Xưởng32 trang, mỗi sổ40 hóa đơn, một hóa đơn65 dòng, có lương/ứng theo ngày ở Xưởng. Python pdfplumber kiểm tra đủ mã phiếu và tổng4.000.000/3.000.000/1.000.000đ, không trang trắng hoặc chữ ngoài trang. Đã render PNG và xem phần hóa đơn dài/lương. Chưa thay thế nghiệm thu hộp thoại in Tauri hoặc máy vật lý khác.
 
 R2 thật: R2LiveRecoveryIT chạy opt-in với ALUMINUM_TEST_R2_CONFIG_FILE và các biến MySQL thử. PUT/HEAD/GET fixture AES dưới verification/UUID, so byte, giải mã/dựng DB kiểm tra tiếng Việt, chỉ xóa object test mới tạo và giữ nguyên bytes file cấu hình. Đạt1 ca,0 lỗi/bỏ qua. Không chạy test này trong CI thường và không nhập secret vào repo.

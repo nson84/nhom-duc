@@ -2,6 +2,8 @@
 
 20/11: kết quả dựng DB thử hiện thành khối thông tin cố định trong trang, có thể copy tên DB, thư mục ảnh và verified-recovery.json. Không chỉ dùng toast tự mất. Modal dựng local có loading và khóa thao tác trong lúc chờ để tránh bấm tạo lặp. DB này chưa tự trở thành DB vận hành; launcher và quy trình đối chiếu/quay lại nằm ở docs/recovery-runbook.md.
 
+21/11: màn Sao lưu có hướng dẫn mất máy ngay trên trang: tạo R2 token mới, tìm object `backups/*.ndbak`, dùng Dựng DB thử, đối chiếu rồi chạy launcher bằng hồ sơ đã xác minh. Tệp tải trực tiếp từ Cloudflare Dashboard chưa được nhập từ đường dẫn local vào ứng dụng. Bản nháp trình duyệt không nằm trong backup. Bộ cài mới mang launcher trong `resources` cùng JAR.
+
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
 ### `/sao-luu` — Sao lưu & phục hồi

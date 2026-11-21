@@ -1,7 +1,11 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory)][string]$ProfilePath,
-    [string]$JarPath = (Join-Path $PSScriptRoot '../backend/target/aluminum-manager-0.0.1-SNAPSHOT.jar'),
+    [string]$JarPath = $(if (Test-Path (Join-Path $PSScriptRoot 'aluminum-manager.jar')) {
+        Join-Path $PSScriptRoot 'aluminum-manager.jar'
+    } else {
+        Join-Path $PSScriptRoot '../backend/target/aluminum-manager-0.0.1-SNAPSHOT.jar'
+    }),
     [string]$DatabaseUsername,
     [Security.SecureString]$DatabasePassword,
     [ValidateRange(1024,65535)][int]$ApiPort = 8080,
@@ -26,7 +30,7 @@ try {
 } finally { $probe.Dispose() }
 if (-not $DatabaseUsername) { $DatabaseUsername = Read-Host 'MySQL username with access to the restored database' }
 if (-not $DatabasePassword) { $DatabasePassword = Read-Host 'MySQL password (not saved)' -AsSecureString }
-$variables = @('SPRING_DATASOURCE_URL','SPRING_DATASOURCE_USERNAME','SPRING_DATASOURCE_PASSWORD','APPDATA',
+$variables = @('SPRING_DATASOURCE_URL','SPRING_DATASOURCE_USERNAME','SPRING_DATASOURCE_PASSWORD','APPDATA','ALUMINUM_JWT_SECRET_FILE',
     'ALUMINUM_IMAGE_DIR','ALUMINUM_API_PORT','ALUMINUM_FIRST_RUN_CREDENTIAL_DIR','ALUMINUM_BACKUP_SCHEDULED_ENABLED')
 $previous = @{}
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -36,6 +40,7 @@ try {
     $env:SPRING_DATASOURCE_USERNAME = $DatabaseUsername
     $env:SPRING_DATASOURCE_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretPointer)
     $env:APPDATA = Join-Path $profileDirectory 'runtime'
+    $env:ALUMINUM_JWT_SECRET_FILE = Join-Path $profileDirectory 'runtime/jwt.key'
     $env:ALUMINUM_IMAGE_DIR = $imageDirectory
     $env:ALUMINUM_API_PORT = [string]$ApiPort
     $env:ALUMINUM_FIRST_RUN_CREDENTIAL_DIR = Join-Path $profileDirectory 'runtime/credentials'

@@ -21,6 +21,7 @@ if (-not $jar) {
 $resourcesDir = Join-Path $root "frontend\src-tauri\resources"
 New-Item -ItemType Directory -Force -Path $resourcesDir | Out-Null
 Copy-Item $jar.FullName (Join-Path $resourcesDir "aluminum-manager.jar") -Force
+Copy-Item (Join-Path $PSScriptRoot 'start-recovered-backend.ps1') (Join-Path $resourcesDir 'start-recovered-backend.ps1') -Force
 Write-Host "   -> Da copy JAR vao $resourcesDir\aluminum-manager.jar"
 
 Write-Host "2. Build Frontend React + Vite..."

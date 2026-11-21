@@ -1,19 +1,29 @@
 # Sao lưu và khôi phục khi mất máy
 
-1. Trên máy đang dùng, đăng nhập Admin → **Sao lưu** → **Khóa phục hồi**. Cất chuỗi khóa ở nơi riêng ngoài máy. Nếu mất khóa này, không thể giải mã archive trên R2.
-2. Trong Cloudflare R2, tạo token Object Read & Write giới hạn đúng bucket. Nhập S3 API endpoint, bucket, Access Key ID và Secret Access Key vào ứng dụng. Bấm **Kiểm tra kết nối**. Token đã xuất hiện trong ảnh/chat cần được thu hồi và tạo lại.
-3. Bấm **Sao lưu ngay**, sau đó **Đồng bộ R2 ngay**. Xem số bản chờ bằng 0, bản cloud xuất hiện trong danh sách, bấm **Kiểm tra**. Lịch mặc định mỗi 4 giờ khi backend đang chạy; khi mất mạng, ứng dụng thử đồng bộ lại mỗi 5 phút.
-4. Khi cài máy mới, kết nối MySQL và khởi động ứng dụng, đăng nhập Admin. Nhập lại khóa tại **Nhập khóa máy cũ**, cấu hình R2 bằng token hợp lệ và bấm **Kiểm tra kết nối**.
-5. Chọn bản trên R2 → **Dựng DB thử**. Nhập tạm tài khoản MySQL có quyền `CREATE DATABASE` và mật khẩu của tài khoản đó; ứng dụng không lưu mật khẩu này. Ứng dụng tải archive, xác minh SHA-256, giải mã, kiểm tra ảnh, chạy Flyway và nhập SQL vào database mới tên `aluminum_restore_*`. Ảnh nằm tại thư mục được báo sau khi dựng. Đối chiếu dữ liệu Phân phối/Xưởng trước khi dùng.
+Ứng dụng dùng trên một máy. Muốn phục hồi sau khi mất máy cần **cả hai**: tệp `.ndbak` trên Cloudflare R2 và khóa phục hồi đã cất ngoài máy. Mật khẩu đăng nhập, mật khẩu MySQL và khóa R2 không thay thế được khóa phục hồi.
 
-Ứng dụng chưa tự đổi database hoạt động sang database thử; thao tác restore trực tiếp vẫn trả 503. Không xóa database cũ hoặc backup cuối cùng. Việc chuyển database và rollback cần được hoàn thiện, thử trên máy Windows khác trước khi xem là khôi phục hoàn chỉnh.
+## Chuẩn bị khi máy cũ còn hoạt động
 
-Bản đóng gói hiện đưa backend JAR vào tài nguyên Tauri nhưng vẫn cần Java 17 và MySQL 8 được cài trên máy. Chưa xác minh bộ cài NSIS vì môi trường phát triển hiện không có Cargo.
+1. Đăng nhập Admin → **Sao lưu** → **Khóa phục hồi**. Cất chuỗi khóa ngoài máy và kiểm tra có thể đọc lại. Không lưu cùng thư mục backup hoặc trong ảnh chụp màn hình công khai.
+2. Cấu hình Cloudflare R2 bằng S3 API endpoint, bucket, Access Key ID và Secret Access Key. Tạo token **Object Read & Write** giới hạn đúng bucket. Bấm **Kiểm tra kết nối**.
+3. Bấm **Sao lưu ngay**, **Đồng bộ R2 ngay**, kiểm tra **Bản chờ đồng bộ = 0** và bản mới xuất hiện trong danh sách R2. Bấm **Kiểm tra** cho bản đó; nếu có thể, bấm **Dựng DB thử** và đối chiếu dữ liệu trên database riêng.
+4. Hoàn thành và lưu các phiếu nháp còn nằm trên thiết bị. Bản nháp chỉ trong trình duyệt không có trong `.ndbak`.
 
-## Kiểm tra staging trước khi dùng
+Lịch sao lưu mặc định mỗi 4 giờ **khi backend đang chạy**; khi mất mạng, backend thử đồng bộ lại mỗi 5 phút. Kiểm tra định kỳ bản mới nhất trên R2; số bản chờ bằng 0 riêng nó không chứng minh bản mới nhất đã phục hồi được.
 
-Staging kiểm tra số dòng, nội dung ảnh và khóa ngoại sau nhập. Nếu thiếu bản ghi cha, thao tác dựng phải báo lỗi; không bỏ ràng buộc để cho qua. Bộ tạo backup hiện giới hạn 32 Mi ký tự SQL để chặn tăng RAM không kiểm soát; dữ liệu lớn hơn cần phương án dump chuyên dụng. Xem audit-followup-20261119.md cho diễn tập chuyển/rollback còn chưa hỗ trợ.
+## Nếu mất máy: lấy bản sao từ R2
 
-## Giới hạn xác nhận tại b290e3c
+1. Trên máy mới, cài Java 17, MySQL 8 và **bộ cài ứng dụng phiên bản bằng hoặc mới hơn bản đã sao lưu**. Cần quyền tạo database riêng để dựng thử. Mở ứng dụng và đăng nhập Admin mới; đây là tài khoản máy mới, không phải tài khoản từ backup.
+2. Đăng nhập tài khoản Cloudflare của bạn → **R2 object storage** → chọn bucket → thư mục `backups/`. Chọn bản `.ndbak` gần nhất cần khôi phục. Cloudflare cho tải object qua menu **… → Download** để giữ thêm một bản ngoài máy; tệp tải xuống vẫn mã hóa. Ứng dụng hiện chưa nhận trực tiếp tệp `.ndbak` tải thủ công, nên các bước tiếp theo dùng kết nối R2 trong màn Sao lưu.
+3. Nếu mất Access Key ID/Secret Access Key của máy cũ, tạo **R2 API token mới** có quyền đọc bucket đó; lưu secret khi Cloudflare hiển thị vì sau đó không xem lại được. Trong ứng dụng: **Sao lưu → Cấu hình Cloudflare R2**, nhập endpoint dạng `https://<account-id>.r2.cloudflarestorage.com`, tên bucket và cặp khóa mới. Bấm **Kiểm tra kết nối**.
+4. Danh sách **Bản trên R2** phải hiện các object `backups/*.ndbak`. Chọn bản cần dùng → **Dựng DB thử**. Nhập khóa phục hồi cũ đã cất riêng (có thể nhập ở **Nhập khóa máy cũ** trước) và tài khoản MySQL có quyền `CREATE DATABASE`. Ứng dụng tải object về `%APPDATA%\AluminumManager\cloud-downloads`, đối chiếu SHA-256, giải mã, chạy Flyway, nhập dữ liệu và kiểm tra ảnh/khóa ngoại/số dòng trên database `aluminum_restore_*` riêng. Không thay database đang chạy.
+5. Ghi lại `verified-recovery.json` được hiển thị. Đối chiếu cả hai sổ: phiếu nhập/bán, từng lần thanh toán, công nợ, tồn từng loại, nhân sự/lương, bản chốt và ảnh. Chỉ khi đối chiếu đạt mới chuyển sang [chạy bản phục hồi](recovery-runbook.md).
 
-Recovery end-to-end vẫn **NOT_VERIFIED**. Archive có kỳ công tham chiếu người chốt có thể bị từ chối vì tài khoản local không nằm trong backup. Không bỏ kiểm tra FK hoặc tự gán lại người chốt. Test mới đối chiếu hai sổ, dòng hàng, biến động kho, thanh toán, nhân sự, tiền công và bytes ảnh; giữ created_at/updated_at lịch sử, từ chối ảnh bị thiếu. Xem [báo cáo audit và quy trình rollback trên máy thử](audit-b290-20261119.md). Không coi nút “Kiểm tra” giải mã thành công là đã chứng minh khôi phục hoạt động trên máy mới.
+Cloudflare xác nhận có thể tải object từ R2 Dashboard hoặc S3 API: [Download objects](https://developers.cloudflare.com/r2/objects/download-objects/). Cách tạo token và endpoint: [R2 CLI guide](https://developers.cloudflare.com/r2/get-started/cli/).
+
+## Giới hạn
+
+- Bộ cài mới đóng gói `start-recovered-backend.ps1` cùng backend JAR trong thư mục `resources`. Launcher nhận hồ sơ đã xác minh và chạy DB phục hồi; ứng dụng chưa có nút chuyển DB tự động. Giữ cửa sổ launcher mở trong lúc dùng.
+- Restore trực tiếp vào DB đang chạy vẫn khóa. Không xóa DB cũ hoặc object R2 cuối cùng.
+- Nếu mất cả khóa phục hồi, không thể giải mã bản `.ndbak`. Nếu chưa từng đồng bộ thành công lên R2, dữ liệu chỉ trên máy cũ không thể lấy từ R2.
+- Kiểm thử tự động trên một máy không thay thế diễn tập trên một máy Windows sạch. Chưa có bằng chứng cho một lần khôi phục sau khi mất máy vật lý thật.
