@@ -4,6 +4,8 @@ Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xư
 
 Khi backend khởi động cùng ứng dụng desktop, tự tạo backup ở tick đầu sau khoảng 30 giây nếu bản gần nhất cách ít nhất 5 phút; sau đó theo tần suất đã cấu hình khi ứng dụng còn chạy. Khi desktop đóng bình thường, tạo một bản cuối trước khi dừng backend. Backup thành công thử đồng bộ R2; lỗi mạng được thử lại khi ứng dụng còn chạy.
 
+Reset thủ công dữ liệu nghiệp vụ qua `scripts/reset-business-data.sql` xóa phiếu, khách hàng, nhân sự, kiểm kê, bản chốt và kỳ tháng/năm làm việc; giữ tài khoản, cấu hình ứng dụng/cửa hàng/ngân hàng, danh mục và sản phẩm. Chỉ chạy sau khi tạo và xác minh bản sao lưu đầy đủ.
+
 ## Đã khóa
 
 - Đơn vị tồn cơ sở là duy nhất. Mỗi dòng phiếu lưu số lượng bán, đơn vị, hệ số và số lượng cơ sở tại thời điểm giao dịch.

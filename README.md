@@ -63,7 +63,7 @@ Các phép thử kiểm tra quy đổi khối lượng, phép tính kho, từ ch
 
 ### Nạp dữ liệu mẫu để thử kỳ 2025
 
-Để xóa dữ liệu nghiệp vụ và tự nhập lại phiếu từ năm 2025, sao lưu MySQL trước rồi chạy `scripts/reset-business-data.sql`. Lệnh này xóa phiếu kho, thu chi, khách hàng, nhân viên, chấm công, kiểm kê và bản chốt; giữ danh mục nhôm, tài khoản và cấu hình. Giá nhập tham chiếu được đặt lại thành một mốc đầu kỳ 01/01/2025 từ giá hiện có của từng loại. Trường **Ngày phiếu** trên phiếu nhập/bán cho chọn ngày giờ quá khứ; phiếu Xưởng chỉ bị khóa nếu ngày đó thuộc kỳ đã chốt.
+Để xóa dữ liệu nghiệp vụ và tự nhập lại phiếu từ năm 2025, sao lưu MySQL trước rồi chạy `scripts/reset-business-data.sql`. Lệnh này xóa phiếu kho, thu chi, khách hàng, nhân viên, chấm công, kiểm kê, bản chốt và các kỳ tháng/năm đang làm việc; giữ danh mục nhôm, sản phẩm, tài khoản, thông tin cửa hàng, ngân hàng và cấu hình ứng dụng. Giá nhập tham chiếu được đặt lại thành một mốc đầu kỳ 01/01/2025 từ giá hiện có của từng loại. Trường **Ngày phiếu** trên phiếu nhập/bán cho chọn ngày giờ quá khứ; phiếu Xưởng chỉ bị khóa nếu ngày đó thuộc kỳ đã chốt.
 
 Khi MySQL đã chạy và mỗi sổ chỉ có ba loại nhôm mẫu, chạy từ thư mục gốc:
 
