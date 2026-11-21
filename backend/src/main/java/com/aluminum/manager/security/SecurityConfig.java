@@ -39,6 +39,7 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/system/ready").permitAll()
+						.requestMatchers(HttpMethod.POST, "/api/v1/system/desktop-backup/startup", "/api/v1/system/desktop-backup/shutdown").permitAll()
 						// Landing page công khai: khách gửi form liên hệ. Chỉ đúng một endpoint này,
 						// đọc danh sách khách thì vẫn phải đăng nhập.
 						.requestMatchers(HttpMethod.GET, "/api/v1/public/shop-info").permitAll()

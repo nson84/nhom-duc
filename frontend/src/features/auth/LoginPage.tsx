@@ -1,6 +1,6 @@
 import { Form, Input, Select } from "antd";
 import { ArrowRightOutlined, EyeInvisibleOutlined, EyeOutlined, LoadingOutlined, LockOutlined } from "@ant-design/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +10,7 @@ import { shopStore } from "../shop/shop-store";
 import { login } from "./auth-api";
 import { authStore } from "./auth-store";
 import { getLastLogin, passwordForAccount, rememberLogin } from "./login-memory";
+import { savedPassword, savePassword } from "./saved-password";
 
 const ACCOUNT_OPTIONS = [
   { value: "admin", label: "admin — sao lưu và cài đặt" },
@@ -30,7 +31,7 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const { control, handleSubmit, formState, setValue, watch } = useForm<FormValues>({
+  const { control, handleSubmit, formState, getValues, setValue, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: (() => {
       const last = getLastLogin();
@@ -38,11 +39,21 @@ export function LoginPage() {
     })(),
   });
 
+  useEffect(() => {
+    const account = getValues("username");
+    savedPassword(account).then((password) => {
+      if (password && getValues("username") === account && !getValues("password")) {
+        setValue("password", password);
+      }
+    }).catch(() => undefined);
+  }, [getValues, setValue]);
+
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
     try {
       const result = await login(values.username, values.password);
       rememberLogin(values.username, values.password);
+      await savePassword(values.username, values.password).catch(() => undefined);
       authStore.set({
         token: result.token,
         username: result.username,
@@ -95,13 +106,17 @@ export function LoginPage() {
                         className="login-underline-control"
                         popupMatchSelectWidth
                         aria-label="Tài khoản"
-                        onChange={(value: FormValues["username"]) => {
+                        onChange={async (value: FormValues["username"]) => {
                           field.onChange(value);
                           setValue("password", passwordForAccount(value) || DEV_PASSWORD, {
                             shouldDirty: true,
                             shouldValidate: true,
                           });
                           setError(null);
+                          const password = await savedPassword(value).catch(() => null);
+                          if (password && getValues("username") === value) {
+                            setValue("password", password, { shouldDirty: true, shouldValidate: true });
+                          }
                         }}
                       />
                     </Form.Item>

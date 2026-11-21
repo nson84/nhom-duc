@@ -15,6 +15,8 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 | API | `/api/v1/backups` |
 
 **Chức năng**
+- Cảnh báo khôi phục trực tiếp giải thích rõ nút ghi đè database đang tạm khóa; sao lưu vẫn hoạt động và có thể dựng bản R2 trên database riêng để kiểm tra.
+- Hai nút dựng thử được ghi rõ nguồn: **Dựng DB từ R2** cho trường hợp mất máy và **Dựng DB từ máy này** cho tệp local còn trên máy.
 - Trạng thái lịch (tần suất, lần kế tiếp, thư mục), cảnh báo lỗi lần gần nhất
 - Sao lưu ngay; danh sách bản sao lưu. Nút khôi phục tạm khóa vì backend chưa có quy trình xác minh trên database riêng; API trả 503, không ghi đè dữ liệu làm việc.
 - Cấu hình tần suất 1/2/4/8/24 giờ, thư mục và số ngày giữ (chưa tự dọn bản cũ)

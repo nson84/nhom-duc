@@ -1,5 +1,11 @@
 # Kiểm thử đã khóa và phần còn lại
 
+## Backup desktop và đăng nhập Windows
+
+- `DesktopBackupControlTest`: API backup lúc mở/đóng chỉ nhận loopback và mã đúng; từ chối thời điểm khác.
+- `BackupScheduleTest`: tick lịch backend vẫn giữ quy tắc tần suất riêng.
+- CI Windows build kiểm tra mã Rust lưu mật khẩu theo từng tài khoản trong Windows Credential Manager và luồng desktop gọi backup sau 30 giây, khi đóng app.
+
 ## Đang có kiểm thử đơn vị
 
 | ID | Việc đã khóa |

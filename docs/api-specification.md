@@ -9,6 +9,7 @@ Prefix `/api/v1`. Mọi phản hồi có `success`. Lỗi có `code` và `messag
 | GET | `/auth/me` | Tài khoản hiện tại |
 | PUT | `/auth/password` | Đổi mật khẩu, trả phiên mới |
 | GET | `/system/ready` | Công khai, dùng cho màn hình khởi động |
+| POST | `/system/desktop-backup/{startup\|shutdown}` | Desktop nội bộ: loopback và mã ngẫu nhiên riêng của backend, tạo bản backup khi mở/đóng app |
 | GET | `/settings` | Cấu hình cửa hàng và lịch sao lưu |
 | PUT | `/settings` | Cập nhật cấu hình |
 | GET | `/bank-accounts` | Danh sách tài khoản QR nhận tiền (nhiều TK; có ảnh thẻ) |

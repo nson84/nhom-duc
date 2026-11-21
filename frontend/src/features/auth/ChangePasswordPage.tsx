@@ -8,6 +8,7 @@ import { ApiError } from "../../services/error-handler";
 import { changePassword } from "./auth-api";
 import { authStore } from "./auth-store";
 import { forgetLoginPassword } from "./login-memory";
+import { savePassword } from "./saved-password";
 
 const schema = z
   .object({
@@ -35,6 +36,7 @@ export function ChangePasswordPage() {
     try {
       const result = await changePassword(values.currentPassword, values.newPassword);
       forgetLoginPassword();
+      await savePassword(result.username, values.newPassword).catch(() => undefined);
       authStore.set({
         token: result.token,
         username: result.username,

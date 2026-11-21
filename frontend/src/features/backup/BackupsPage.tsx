@@ -132,7 +132,7 @@ export function BackupsPage() {
         <ol style={{ margin: 0, paddingInlineStart: 22 }}>
           <li>Cất khóa phục hồi bên ngoài máy. Khóa này khác mật khẩu đăng nhập và khóa truy cập R2.</li>
           <li>Trên máy mới, cài Java 17, MySQL 8 và ứng dụng; đăng nhập Admin mới. Tạo khóa truy cập R2 mới trong tài khoản Cloudflare của bạn, rồi nhập endpoint, bucket và khóa vào Cấu hình Cloudflare R2.</li>
-          <li>Chọn bản trong danh sách R2, bấm Dựng DB thử. Nhập khóa phục hồi cũ và tài khoản MySQL có quyền tạo database. Chờ kết quả DB, ảnh và hồ sơ xác minh hiện trên trang này.</li>
+          <li>Chọn bản trong danh sách R2, bấm Dựng DB từ R2. Nhập khóa phục hồi cũ và tài khoản MySQL có quyền tạo database. Chờ kết quả DB, ảnh và hồ sơ xác minh hiện trên trang này.</li>
           <li>Đối chiếu phiếu, công nợ, tồn kho và ảnh. Đóng ứng dụng, chạy launcher phục hồi kèm đường dẫn hồ sơ, rồi mở ứng dụng lại. Lưu mật khẩu đăng nhập mới và xuất khóa phục hồi mới trước khi bật lại lịch sao lưu.</li>
         </ol>
         <Typography.Paragraph type="secondary" style={{ margin: "10px 0 0" }}>Có thể tải tệp .ndbak trực tiếp từ Cloudflare Dashboard → R2 → bucket → backups khi cần. Tệp vẫn mã hóa; chỉ tải về chưa khôi phục dữ liệu. Bản nháp chỉ lưu trong trình duyệt không nằm trong backup.</Typography.Paragraph>
@@ -198,13 +198,13 @@ export function BackupsPage() {
               catch (error) { message.error(toApiError(error).message); }
             }}>Tải về máy</Button>
             <Button onClick={() => { setPrepareMode(false); setVerifyingObject(item); }}>Kiểm tra</Button>
-            <Button onClick={() => { setPrepareMode(true); setVerifyingObject(item); }}>Dựng DB thử</Button>
+            <Button onClick={() => { setPrepareMode(true); setVerifyingObject(item); }}>Dựng DB từ R2</Button>
           </Space> },
         ]} /> : null}
 
       <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-        message="Tạm khóa khôi phục tự động"
-        description="Bản sao phải được thử trên database riêng trước khi thay dữ liệu đang dùng. Các bản backup hiện có vẫn được giữ nguyên." />
+        message="Khôi phục trực tiếp đang tạm khóa"
+        description="Nút khôi phục trực tiếp có thể ghi đè dữ liệu hiện tại, nên chưa được bật. Nếu mất máy, chọn bản trên R2 và dùng 'Dựng DB từ R2' để kiểm tra trên database riêng trước. Việc tạo bản backup vẫn hoạt động bình thường." />
 
       <PagedTable<BackupLog>
         rowKey="id"
@@ -254,7 +254,7 @@ export function BackupsPage() {
               ? <Space><Button onClick={async () => {
                   try { await verifyLocal(log.id); message.success("Bản sao lưu hợp lệ"); }
                   catch (error) { message.error(toApiError(error).message); }
-                }}>Kiểm tra</Button><Button onClick={() => setPreparingLocal(log)}>Dựng DB thử</Button></Space> : <span>Tạm khóa</span>,
+                }}>Kiểm tra</Button><Button onClick={() => setPreparingLocal(log)}>Dựng DB từ máy này</Button></Space> : <span>Tạm khóa</span>,
           },
         ]}
       />

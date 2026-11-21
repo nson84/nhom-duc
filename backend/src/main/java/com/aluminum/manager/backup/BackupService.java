@@ -161,6 +161,13 @@ public class BackupService {
 		if ("FAILED".equals(result.status())) log.error("Sao lưu khi đóng ứng dụng thất bại: {}", result.errorMessage());
 	}
 
+	public BackupLogDto createDesktopBackup(String reason) {
+		if (!scheduledEnabled) throw new IllegalStateException("Sao lưu tự động đang tắt");
+		if (!"startup".equals(reason) && !"shutdown".equals(reason))
+			throw new IllegalArgumentException("Thời điểm sao lưu không hợp lệ");
+		return performBackup(reason, null);
+	}
+
 	public Path verifiedArchive(long id) {
 		List<BackupLogDto> rows = jdbc.query("SELECT * FROM backup_logs WHERE id = ?",
 				(rs, i) -> mapLog(rs), id);

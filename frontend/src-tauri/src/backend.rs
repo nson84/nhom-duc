@@ -81,10 +81,16 @@ pub fn ensure_started() -> Result<(), String> {
 }
 
 pub fn stop() {
-    STOPPED.store(true, Ordering::SeqCst);
+    if STOPPED.swap(true, Ordering::SeqCst) { return; }
     let Ok(mut guard) = CHILD.lock() else {
         return;
     };
+    if guard.is_none() {
+        if let Err(err) = desktop_backup("shutdown") {
+            log(&format!("Không sao lưu được khi đóng desktop dùng backend đã chạy sẵn: {err}"));
+        }
+        return;
+    }
     if let Some(child) = guard.as_mut() {
         if let Some(mut input) = child.stdin.take() {
             let _ = input.write_all(b"BACKUP_AND_EXIT\n");
@@ -104,6 +110,40 @@ pub fn stop() {
         let _ = child.wait();
     }
     *guard = None;
+}
+
+pub fn backup_after_start() {
+    std::thread::sleep(Duration::from_secs(30));
+    if STOPPED.load(Ordering::SeqCst) { return; }
+    for _ in 0..6 {
+        match desktop_backup("startup") {
+            Ok(()) => { log("Đã sao lưu sau khi mở desktop."); return; }
+            Err(err) => {
+                if STOPPED.load(Ordering::SeqCst) { return; }
+                log(&format!("Chưa sao lưu được sau khi mở desktop: {err}"));
+                std::thread::sleep(Duration::from_secs(5));
+            }
+        }
+    }
+}
+
+fn desktop_backup(reason: &str) -> Result<(), String> {
+    let token = fs::read_to_string(app_data_dir().join("desktop-backup-token"))
+        .map_err(|err| format!("Không đọc được mã điều khiển backup: {err}"))?;
+    let port = std::env::var("ALUMINUM_API_PORT").unwrap_or_else(|_| "8080".to_string());
+    let addr = format!("127.0.0.1:{port}").parse::<SocketAddr>().map_err(|err| err.to_string())?;
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(3))
+        .map_err(|err| format!("Không kết nối được backend: {err}"))?;
+    stream.set_read_timeout(Some(Duration::from_secs(90))).map_err(|err| err.to_string())?;
+    stream.set_write_timeout(Some(Duration::from_secs(3))).map_err(|err| err.to_string())?;
+    let request = format!("POST /api/v1/system/desktop-backup/{reason} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nX-Desktop-Backup-Token: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", token.trim());
+    stream.write_all(request.as_bytes()).map_err(|err| err.to_string())?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response).map_err(|err| err.to_string())?;
+    if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+        return Err(format!("Backend trả về {}", response.lines().next().unwrap_or("không có phản hồi")));
+    }
+    Ok(())
 }
 
 fn find_jar() -> Option<PathBuf> {

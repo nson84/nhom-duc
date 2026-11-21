@@ -2,7 +2,7 @@
 
 Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xưởng và Phân phối. Phần mềm quản lý sản phẩm, phiếu nhập/bán, khách mua, nhân sự xưởng, thu chi, báo cáo và sao lưu. Admin chỉ quản lý Sao lưu và Cài đặt; phân phối do chủ quản lý, không có nhân viên hay tiền công.
 
-Khi backend khởi động cùng ứng dụng desktop, tự tạo backup ở tick đầu sau khoảng 30 giây nếu bản gần nhất cách ít nhất 5 phút; sau đó theo tần suất đã cấu hình khi ứng dụng còn chạy. Khi desktop đóng bình thường, tạo một bản cuối trước khi dừng backend. Backup thành công thử đồng bộ R2; lỗi mạng được thử lại khi ứng dụng còn chạy.
+Mỗi lần mở desktop, sau khoảng 30 giây tạo một bản backup kể cả khi backend đã chạy sẵn. Khi desktop đóng bình thường, tạo một bản cuối; backend dùng chung được giữ chạy. Ngoài ra backend tự sao lưu theo tần suất đã cấu hình. Backup thành công thử đồng bộ R2; lỗi mạng được thử lại khi backend còn chạy.
 
 Reset thủ công dữ liệu nghiệp vụ qua `scripts/reset-business-data.sql` xóa phiếu, khách hàng, nhân sự, kiểm kê, bản chốt và kỳ tháng/năm làm việc; giữ tài khoản, cấu hình ứng dụng/cửa hàng/ngân hàng, danh mục và sản phẩm. Chỉ chạy sau khi tạo và xác minh bản sao lưu đầy đủ.
 
