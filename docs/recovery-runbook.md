@@ -8,30 +8,18 @@ Dùng ứng dụng V44 trở lên. Cất riêng tệp .ndbak và khóa phục h�
 2. Chờ kết quả cố định: tên aluminum_restore_*, thư mục ảnh và verified-recovery.json. Hồ sơ chỉ sinh sau kiểm tra số dòng, FK và ảnh; không lưu mật khẩu MySQL.
 3. Đối chiếu phiếu, kg từng loại, từng lần thu/chi, công nợ, lương/ứng và bản chốt. Backup mới giữ tác giả inactive, không mang mật khẩu/quyền cũ. Backup cũ thiếu tác giả có thể bị từ chối; tạo bản mới từ nguồn còn chạy được, không NULL hoặc bỏ FK.
 
-## Chạy bản phục hồi
+## Dùng dữ liệu đã dựng trong ứng dụng desktop
 
-Đóng ứng dụng/backend cũ trước khi dùng cổng8080. Launcher từ chối cổng đã bận, không tự giết tiến trình. Nếu có mã nguồn, chạy từ thư mục dự án:
+1. Trong khối kết quả dựng thử, bấm **Dùng dữ liệu này**. Ứng dụng sẽ sao lưu và dừng backend do nó khởi động, mở DB đã dựng và kiểm tra tên DB từ `/system/ready`. Nếu backend cổng 8080 được khởi động bên ngoài, nút từ chối chuyển để tránh đóng nhầm tiến trình.
+2. Nếu chuyển thành công, giao diện hiện mật khẩu đăng nhập lần đầu của các tài khoản mới. Cất mật khẩu, bấm xác nhận, đăng nhập lại rồi đổi mật khẩu. Tài khoản đăng nhập máy cũ không nằm trong backup.
+3. Đối chiếu dữ liệu trong ứng dụng. Backend của DB phục hồi có thư mục ảnh và khóa JWT riêng. Nó dùng lại khóa giải mã và sao chép cấu hình R2 đã nhập trên máy này vào runtime mới; bản sao local tự động tiếp tục chạy. Mở **Khóa phục hồi** để kiểm tra và cất khóa ngoài máy, rồi bấm **Kiểm tra kết nối** và xem bản mới có đồng bộ R2 hay không.
 
-```powershell
-./scripts/start-recovered-backend.ps1 -ProfilePath 'C:/duong-dan/aluminum_restore_xxxxxxxxxxxx/verified-recovery.json'
-```
-
-Nếu chỉ có bộ cài Windows mới, mở thư mục cài đặt của ứng dụng (qua **Open file location** trên shortcut), tìm `resources/start-recovered-backend.ps1` cạnh `aluminum-manager.jar`, rồi chạy trong PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File 'C:/duong-dan-cai-dat/resources/start-recovered-backend.ps1' -ProfilePath 'C:/duong-dan/aluminum_restore_xxxxxxxxxxxx/verified-recovery.json'
-```
-
-Launcher hỏi tên và mật khẩu MySQL; mật khẩu không ghi vào hồ sơ. Giữ cửa sổ PowerShell mở, sau đó mở ứng dụng desktop. Khi ứng dụng thấy backend phục hồi đã sẵn sàng ở cổng8080, nó dùng backend đó. Không mở ứng dụng trước launcher vì ứng dụng sẽ tự khởi động DB mặc định.
-
-Nhập tài khoản MySQL có quyền trên DB đã phục hồi; ưu tiên tài khoản chỉ có quyền DB đó. Launcher chỉ nhận DB aluminum_restore_* ở127.0.0.1 và ảnh đúng thư mục hồ sơ, từ chối aluminum_app/host Internet. Có thể truyền -JarPath nếu JAR nằm ở nơi khác.
-
-Mở frontend bình thường khi backend ở8080. Diễn tập song song dùng -ApiPort18080 và frontend riêng với VITE_API_BASE_URL=http://127.0.0.1:18080. APPDATA, JWT, bootstrap và cloud config được tách khỏi cài đặt cũ. Mật khẩu mới nằm ở runtime/credentials cạnh hồ sơ, chỉ chủ máy đọc; không dùng lại mật khẩu đăng nhập cũ.
-
-Mặc định tắt lịch backup/R2 trong diễn tập. Sau khi đối chiếu và chọn vận hành bản này, chạy lại launcher với -EnableScheduledBackup, cấu hình R2 và xuất khóa giải mã mới ra nơi riêng. Lịch chạy khi backend đang mở.
+Tauri giữ lựa chọn DB, mật khẩu MySQL và khóa phục hồi trong Windows Credential Manager để lần mở sau tự kết nối. Hồ sơ xác minh không chứa các mã này. DB cũ vẫn tồn tại. Khi backend mới không mở được, desktop thử mở lại backend cũ và báo lỗi. Nếu việc mở lại cũng thất bại, không tự xóa DB nào; xem `backend.log`.
 
 ## Quay lại
 
-Dừng backend phục hồi bằng Ctrl+C; mở ứng dụng/backend cũ bằng cấu hình cũ. Launcher phục hồi env của shell khi kết thúc, không đổi cấu hình cũ và không drop/rename/restore DB cũ. Không tự nhập gộp phiếu đã ghi trên bản phục hồi về DB cũ; chọn một nơi vận hành chính thức sau đối chiếu.
+Vào **Sao lưu → Quay lại database trước**. Ứng dụng sao lưu trạng thái hiện tại, chuyển về DB trước, kiểm tra tên DB rồi yêu cầu đăng nhập lại. Dữ liệu đã ghi trên DB phục hồi không tự nhập gộp vào DB cũ. Không xóa DB nào trước khi đối chiếu.
+
+Launcher `scripts/start-recovered-backend.ps1` vẫn có trong mã nguồn cho kiểm tra kỹ thuật, nhưng luồng desktop không yêu cầu chạy lệnh thủ công.
 
 Restore trực tiếp DB đang chạy tiếp tục khóa. Diễn tập cùng máy không thay thế kiểm thử R2, bộ cài và máy vật lý khác.

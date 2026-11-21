@@ -136,6 +136,6 @@ POST /dashboard/monthly-book: rawKg phải có; scrapKg có thể null/không g�
 
 ## Bổ sung 20/11/2026
 
-GET /api/v1/system/ready giữ application/status/database/schemaVersion và thêm version/revision. Không có build-info thì development/unversioned. Không trả tên DB/thông tin xác thực.
+GET /api/v1/system/ready giữ application/status/database/schemaVersion/version/revision và trả thêm databaseName từ `SELECT DATABASE()`. Desktop dùng tên này để xác nhận chuyển DB; API không trả thông tin xác thực.
 
-POST /api/v1/backups/{id}/prepare và /api/v1/backups/cloud/prepare trả databaseName, sqlStatements, imagesVerified, imageDirectory, profilePath. Hồ sơ sinh sau xác minh staging, không có tài khoản/mật khẩu MySQL. Quyền Admin giữ nguyên; restore trực tiếp vẫn503. Quy trình chuyển/quay lại: recovery-runbook.md.
+POST /api/v1/backups/{id}/prepare và /api/v1/backups/cloud/prepare trả databaseName, sqlStatements, imagesVerified, imageDirectory, profilePath. Hồ sơ sinh sau xác minh staging, không có tài khoản/mật khẩu MySQL. Quyền Admin giữ nguyên; restore trực tiếp vẫn503. Lệnh Tauri `activate_recovery`, `rollback_recovery`, `recovery_status` phục vụ chuyển/quay lại trong desktop, không mở thành HTTP API. Quy trình: recovery-runbook.md.

@@ -23,7 +23,7 @@ Cloudflare xác nhận có thể tải object từ R2 Dashboard hoặc S3 API: [
 
 ## Giới hạn
 
-- Bộ cài mới đóng gói `start-recovered-backend.ps1` cùng backend JAR trong thư mục `resources`. Launcher nhận hồ sơ đã xác minh và chạy DB phục hồi; ứng dụng chưa có nút chuyển DB tự động. Giữ cửa sổ launcher mở trong lúc dùng.
+- Trong ứng dụng desktop mới, sau khi dựng và đối chiếu DB thử, bấm **Dùng dữ liệu này**. Desktop tự chuyển backend, kiểm tra đúng DB rồi cho đăng nhập lại; nút **Quay lại database trước** nằm trên trang Sao lưu. `start-recovered-backend.ps1` vẫn là công cụ kỹ thuật cũ, không cần chạy trong luồng thông thường.
 - Restore trực tiếp vào DB đang chạy vẫn khóa. Không xóa DB cũ hoặc object R2 cuối cùng.
 - Nếu mất cả khóa phục hồi, không thể giải mã bản `.ndbak`. Nếu chưa từng đồng bộ thành công lên R2, dữ liệu chỉ trên máy cũ không thể lấy từ R2.
 - Kiểm thử tự động trên một máy không thay thế diễn tập trên một máy Windows sạch. Chưa có bằng chứng cho một lần khôi phục sau khi mất máy vật lý thật.

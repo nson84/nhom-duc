@@ -1,6 +1,6 @@
 # Chức năng backup
 
-20/11: kết quả dựng DB thử hiện thành khối thông tin cố định trong trang, có thể copy tên DB, thư mục ảnh và verified-recovery.json. Không chỉ dùng toast tự mất. Modal dựng local có loading và khóa thao tác trong lúc chờ để tránh bấm tạo lặp. DB này chưa tự trở thành DB vận hành; launcher và quy trình đối chiếu/quay lại nằm ở docs/recovery-runbook.md.
+22/11: sau khi dựng DB thử, ứng dụng desktop hiện nút **Dùng dữ liệu này**. Nút yêu cầu Tauri tự dừng backend đang sở hữu, mở DB đã xác minh, kiểm tra tên DB từ `/system/ready`, lưu lựa chọn và hiện mật khẩu đăng nhập lần đầu. Nếu không mở được, thử quay lại DB trước. Nút **Quay lại database trước** có trên trang Sao lưu sau khi chuyển. Trình duyệt ngoài desktop chỉ xem kết quả dựng thử.
 
 21/11: màn Sao lưu có hướng dẫn mất máy ngay trên trang: tạo R2 token mới, tìm object `backups/*.ndbak`, dùng Dựng DB thử, đối chiếu rồi chạy launcher bằng hồ sơ đã xác minh. Tệp tải trực tiếp từ Cloudflare Dashboard chưa được nhập từ đường dẫn local vào ứng dụng. Bản nháp trình duyệt không nằm trong backup. Bộ cài mới mang launcher trong `resources` cùng JAR.
 
@@ -23,7 +23,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 - Cấu hình tần suất 1/2/4/8/24 giờ, thư mục và số ngày giữ (chưa tự dọn bản cũ)
 - Cấu hình bucket/endpoint/khóa R2, kiểm tra kết nối, đồng bộ ngay, xem/tải/kiểm tra bản trên R2. Secret Access Key không được hiển thị lại.
 - Xuất khóa phục hồi để cất ngoài máy, nhập khóa trên máy mới; kiểm tra local/cloud và dựng database khôi phục thử. Database làm việc không bị thay thế; nút restore trực tiếp vẫn khóa.
-- Khi dựng DB thử, nhập tài khoản MySQL có quyền CREATE DATABASE. Mật khẩu chỉ dùng cho lần yêu cầu đó.
+- Khi dựng DB thử, nhập tài khoản MySQL có quyền CREATE DATABASE. Mật khẩu và khóa giải mã đã dùng được giữ trong bộ nhớ giao diện tới khi chọn chuyển DB; khi chuyển, Tauri lưu trong Windows Credential Manager để lần mở ứng dụng sau dùng lại. Hồ sơ JSON không chứa các mã này.
 
 ## Bổ sung theo code hiện tại
 

@@ -7,7 +7,12 @@ mod windows {
     };
 
     fn target(account: &str) -> Result<Vec<u16>, String> {
-        if !matches!(account, "admin" | "phanphoi" | "xuong") {
+        let recovery_name = account.strip_prefix("recovery/")
+            .or_else(|| account.strip_prefix("recovery-key/"));
+        if !matches!(account, "admin" | "phanphoi" | "xuong")
+            && !recovery_name.is_some_and(|name|
+                name.len() == 29 && name.starts_with("aluminum_restore_")
+                    && name[17..].bytes().all(|byte| byte.is_ascii_hexdigit())) {
             return Err("Tài khoản không hợp lệ".to_string());
         }
         Ok(format!("AluminumManager/login/{account}\0").encode_utf16().collect())
@@ -58,6 +63,26 @@ mod windows {
         }
         Ok(())
     }
+}
+
+pub fn load_recovery_password(database: &str) -> Result<Option<String>, String> {
+    #[cfg(windows)] { windows::load(&format!("recovery/{database}")) }
+    #[cfg(not(windows))] { let _ = database; Err("Chỉ hỗ trợ Windows".to_string()) }
+}
+
+pub fn save_recovery_password(database: &str, password: &str) -> Result<(), String> {
+    #[cfg(windows)] { windows::save(&format!("recovery/{database}"), password) }
+    #[cfg(not(windows))] { let _ = (database, password); Err("Chỉ hỗ trợ Windows".to_string()) }
+}
+
+pub fn load_recovery_key(database: &str) -> Result<Option<String>, String> {
+    #[cfg(windows)] { windows::load(&format!("recovery-key/{database}")) }
+    #[cfg(not(windows))] { let _ = database; Err("Chỉ hỗ trợ Windows".to_string()) }
+}
+
+pub fn save_recovery_key(database: &str, key: &str) -> Result<(), String> {
+    #[cfg(windows)] { windows::save(&format!("recovery-key/{database}"), key) }
+    #[cfg(not(windows))] { let _ = (database, key); Err("Chỉ hỗ trợ Windows".to_string()) }
 }
 
 #[tauri::command]

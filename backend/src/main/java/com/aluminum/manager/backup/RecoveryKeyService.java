@@ -26,13 +26,18 @@ public class RecoveryKeyService {
 
 	public synchronized byte[] key() {
 		try {
+			String initial = System.getenv("ALUMINUM_INITIAL_RECOVERY_KEY");
 			if (Files.exists(file)) {
 				byte[] key = protector.unprotect(Files.readAllBytes(file));
 				if (key.length != 32) throw new IllegalStateException("Khóa phục hồi bị hỏng");
+				if (initial != null && !initial.isBlank()
+						&& !java.security.MessageDigest.isEqual(key, parse(initial)))
+					throw new IllegalStateException("Khóa phục hồi của hồ sơ không khớp khóa đã lưu");
 				return key;
 			}
-			byte[] key = new byte[32];
-			new SecureRandom().nextBytes(key);
+			byte[] key;
+			if (initial != null && !initial.isBlank()) key = parse(initial);
+			else { key = new byte[32]; new SecureRandom().nextBytes(key); }
 			write(key);
 			return key;
 		} catch (IOException e) {
