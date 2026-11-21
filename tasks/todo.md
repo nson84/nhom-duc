@@ -1,28 +1,35 @@
-# Danh sách việc: phục hồi R2 trong ứng dụng
+# Việc triển khai: phục hồi R2 bằng giao diện desktop
 
-Chưa triển khai. Mỗi việc dùng DB/profile thử riêng; không thử ghi database đang dùng.
+Chưa triển khai. Mọi thử nghiệm dùng DB/profile riêng, không ghi DB đang vận hành.
 
-## R1 — Xác minh bản đã dựng
+## R1 — ID và xác minh lần dựng thử
 
-- [ ] Lưu kết quả dựng thử cùng nguồn R2, thời điểm backup, DB, ảnh và bản tóm tắt dữ liệu.
-- [ ] Kiểm tra lại schema/ảnh/DB, từ chối profile tự sửa và URL ngoài loopback `aluminum_restore_*`.
-- [ ] Test profile hợp lệ, sửa tay, thiếu ảnh, sai DB.
+- [ ] Sau tải/giải mã/dựng R2, trả ID bền vững, nguồn/thời gian bản sao và tóm tắt hai sổ; giữ ảnh, FK và số dòng đã kiểm tra.
+- [ ] API xác minh lại ID trước khi chuyển; từ chối profile bị sửa, URL ngoài loopback và thiếu ảnh.
+- [ ] Test bản hợp lệ, sai khóa, thiếu ảnh, profile giả.
 
-## R2 — Mở backend bằng DB đã chọn
+## R2 — Tauri khởi động backend theo profile
 
-- [ ] Tauri đọc lựa chọn DB trước khi khởi động backend; dùng profile do app tạo, không hỏi đường dẫn.
-- [ ] Hỏi mật khẩu MySQL trong app khi cần; không lưu vào JSON/log. Nếu nhớ, dùng Windows Credential Manager.
-- [ ] Chỉ coi khởi động thành công khi ready trả đúng DB/schema; cổng bận không giết backend khác.
+- [ ] Tauri chọn profile trước khi khởi động Java; runtime, ảnh, bootstrap, R2 và token backup trỏ đúng profile.
+- [ ] Nhận MySQL credential qua kênh nội bộ; lưu theo profile trong Windows Credential Manager hoặc hỏi trong UI khi mở lại.
+- [ ] Kiểm tra cổng bận, quyền sở hữu tiến trình, `/ready` đúng DB/schema; không dừng backend ngoài app.
 
-## R3 — Một nút chuyển và quay lại
+## R3 — Chuyển và quay lại an toàn
 
-- [ ] Sau **Dựng DB từ R2**, hiện tóm tắt đối chiếu và nút **Dùng bản này**.
-- [ ] Tạo backup trước chuyển; hiển thị tiến trình, lỗi cụ thể và DB đang dùng.
-- [ ] Lưu lựa chọn nguyên tử, tự mở lại app; lỗi hoặc tắt ngang quay về DB trước.
-- [ ] Có nút **Quay về dữ liệu trước** và xác minh sau khi quay lại.
+- [ ] Tạo backup của DB đang dùng trước chuyển; lưu A/B nguyên tử.
+- [ ] Tauri dừng backend do app sở hữu, mở B, chỉ xác nhận B sau khi kiểm tra đạt; lỗi tự mở lại A.
+- [ ] Mất điện/tắt app giữa chuyển: lần mở sau tự quay về A, không xóa B.
+- [ ] Cùng cơ chế cho nút Quay về dữ liệu trước; test chuyển hai chiều.
 
-## R4 — Backup của DB phục hồi
+## R4 — Wizard trong giao diện
 
-- [ ] Phân biệt bản backup/khóa của DB phục hồi và DB cũ trên R2.
-- [ ] Kiểm tra R2 và khóa phục hồi rồi bật lịch backup cho DB đã chọn làm nguồn vận hành.
-- [ ] Diễn tập trên Windows sạch: mất máy → R2 → dựng → một nút dùng → backup → quay lại; thử cả sai khóa, thiếu ảnh và mất mạng.
+- [ ] Chọn bản R2, nhập khóa và MySQL trong modal, bấm Khôi phục bản này; hiển thị tiến trình và ngăn thao tác trùng.
+- [ ] Tóm tắt bản đã dựng; nút Dùng dữ liệu này kèm xác nhận thời điểm và DB cũ được giữ.
+- [ ] Đặt mật khẩu Admin mới/hiển thị thiết lập tài khoản còn lại trong UI; sau chuyển điều hướng đăng nhập, hiển thị DB đang dùng.
+- [ ] Hiển thị lỗi dễ hiểu, nút Thử lại và Quay về dữ liệu trước; không yêu cầu đường dẫn hay lệnh.
+
+## R5 — Backup và diễn tập trên Windows sạch
+
+- [ ] Phân biệt backup/khóa của DB trước và DB phục hồi trên R2; kiểm tra R2, khóa và lịch trước khi bật backup tự động.
+- [ ] Diễn tập: máy mới → R2 → dựng → dùng → đóng/mở app → backup → dựng lại → quay về; chỉ thao tác trên giao diện.
+- [ ] Test sai khóa, sai MySQL, thiếu ảnh, cổng bận, mất mạng và tắt máy trong lúc chuyển.
