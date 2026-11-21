@@ -18,6 +18,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 - KPI chính: tổng tiền hàng nhập, tiền bán dự kiến, đã thu từ các phiếu bán lập trong kỳ, phần còn phải thu của chính các phiếu đó, doanh nghiệp còn nợ nhà cung cấp từ phiếu nhập trong kỳ, tổng khối lượng đã giao (kg quy đổi thành tấn). Tiền đã thu và công nợ phản ánh mọi lần thanh toán đã ghi cho phiếu trong kỳ, kể cả thanh toán sau kỳ; đây không phải bản chụp công nợ tại ngày chốt. Bản chụp tại ngày chốt ở Sổ cuối năm. Sổ Thu chi vẫn dùng ngày nhận/chi tiền thực tế.
 - Ô tổng khối lượng đã giao liệt kê thêm số tấn theo từng loại nhôm trong cùng kỳ; phiếu chuyển nội bộ vẫn nằm trong khối lượng giao Phân phối.
 - Tổng quan tự chọn tháng bắt đầu của kỳ năm và có nút **Mở tháng** / **Khóa tháng**. Chọn tháng lấy giao của tháng với khoảng đầu/cuối kỳ, ví dụ kỳ bắt đầu 18/02 thì tháng 02 chỉ tính từ ngày 18. Tháng sau chỉ mở khi tháng trước đã khóa; Xưởng cần chốt kỳ công trước khi khóa. Khóa tháng không tự chốt năm, không đổi tồn hay công nợ.
+- Hộp xác nhận **Khóa tháng** hiển thị tên/khoảng ngày của kỳ và nhắc đối chiếu phiếu, thu chi, công nợ; mặc định đặt focus ở **Quay lại**.
 - Biểu đồ cột theo ngày (lọc ngày có phát sinh / tất cả)
 - Biểu đồ dùng hết chiều rộng vùng nội dung ở màn hình lớn và co theo vùng xem ở màn hình nhỏ.
 - Dashboard chỉ giữ biểu đồ cột so sánh doanh thu dự kiến và tiền đã thu; bỏ các KPI chi phí/lãi khỏi trang này.

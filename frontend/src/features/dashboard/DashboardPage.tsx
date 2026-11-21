@@ -210,8 +210,9 @@ export function DashboardPage() {
         {workingYear.month && canWrite && !period?.closed && monthStatus === "OPEN" && <AppActionButton tone="confirm" icon={<CheckOutlined />}
           onClick={() => Modal.confirm({
             title: `Khóa tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}?`,
-            content: "Sau khi khóa, phiếu và chấm công thuộc tháng này không sửa được. Xưởng cần chốt kỳ công trước; sau đó chọn tháng kế tiếp và bấm Mở tháng.",
+            content: <><p>Kỳ {period?.periodName}: {range ? `${range[0].format("DD/MM/YYYY")} – ${range[1].format("DD/MM/YYYY")}` : "chưa có khoảng ngày"}.</p><p>Hãy đối chiếu phiếu nhập, phiếu bán, thu chi và công nợ trước khi khóa. Sau khi khóa, phiếu và chấm công thuộc tháng này không sửa được. Xưởng cần chốt kỳ công trước.</p></>,
             okText: "Khóa tháng", cancelText: "Quay lại",
+            autoFocusButton: "cancel",
             onOk: async () => { try { await closeMonth(viewYear, workingYear.month!); setMonthStatus("CLOSED"); message.success("Đã khóa tháng"); }
               catch (caught) { setError(toApiError(caught).message); throw caught; } },
           })}>Khóa tháng</AppActionButton>}
