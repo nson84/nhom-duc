@@ -1,66 +1,50 @@
-# Kế hoạch: chuyển sang dữ liệu phục hồi trong app và bắt đầu sổ từ giấy
+# Kế hoạch: phục hồi dữ liệu R2 ngay trong ứng dụng
 
-Ngày lập: 21/11/2026. Đây là kế hoạch, chưa triển khai tính năng. Phần mềm phục vụ một người trên một máy Windows, MySQL local và R2.
+Ngày cập nhật: 21/11/2026. Đây là kế hoạch, chưa triển khai tính năng. Phạm vi chỉ gồm việc chọn và sử dụng bản DB đã phục hồi trong app; không gồm nhập liệu từ sổ giấy.
 
-## Quyết định phạm vi
+## Mục tiêu người dùng
 
-1. **Phục hồi trong app:** sau khi dựng và kiểm tra bản R2 trên `aluminum_restore_*`, người dùng có thể chọn dùng database đó trong app, khởi động lại và quay về database trước nếu cần. Không ghi đè hoặc xóa database cũ.
-2. **Chuyển từ giấy:** ưu tiên chốt kỳ đang ghi trên giấy, chọn một ngày bắt đầu kỳ mới và nhập các số đầu kỳ đã đối chiếu. Tiếp tục nhập giao dịch mới bằng màn phiếu hiện có. Nhập lại toàn bộ giấy cũ chỉ khi cần báo cáo lịch sử hoặc thiếu chứng từ để định giá/đối chiếu.
-3. Phiên đầu của chuyển từ giấy là nhập tay có hướng dẫn và đối chiếu. Nhận dạng ảnh giấy/OCR là giai đoạn sau, luôn phải được người dùng kiểm tra trước khi ghi DB.
+Trên máy mới: cài ứng dụng, cấu hình R2, chọn bản backup, nhập khóa phục hồi và tài khoản MySQL cần thiết, bấm **Dựng DB từ R2**. Sau khi xem kết quả kiểm tra, bấm **Dùng bản này**. Ứng dụng tự khởi động lại với dữ liệu đã phục hồi. Người dùng không chạy PowerShell, không chép tệp và không nhập đường dẫn `verified-recovery.json`.
 
-## Bằng chứng và giới hạn hiện tại
+## Hiện trạng
 
-- `StagedRestoreService` đã tải/giải mã, dựng DB riêng và tạo `verified-recovery.json`; `start-recovered-backend.ps1` hiện phải chạy ngoài app. Nút restore trực tiếp trả 503.
-- Tauri tự khởi động backend mặc định hoặc dùng backend có sẵn ở cổng 8080. Việc chọn profile phục hồi phải xảy ra **trước** khi backend mặc định khởi động.
-- Phiếu nhập/bán đã cho chọn ngày quá khứ khi tháng/kỳ còn mở. Kỳ đã khóa từ chối ghi; không nới quy tắc này để nhập giấy cũ.
-- Tồn đầu kỳ hiện đọc từ kỳ chốt liền trước, không có màn nhập lớp tồn đầu kỳ theo loại khi chưa có lịch sử nhập. Báo cáo công nợ chuyển kỳ hiện dựa trên phiếu cũ.
-- Bản backup không chứa bản nháp chỉ lưu trong trình duyệt. Chỉ dữ liệu đã ghi DB mới được R2 bảo vệ.
+- Backend đã tải, giải mã và dựng DB riêng `aluminum_restore_*`, xác minh ảnh/FK/số dòng và sinh `verified-recovery.json`.
+- Hiện phải chạy `start-recovered-backend.ps1` ngoài app để dùng DB đó. Restore trực tiếp vào DB đang chạy vẫn khóa.
+- Tauri hiện tự khởi động backend mặc định hoặc dùng backend có sẵn ở cổng 8080. Lựa chọn DB phải được áp dụng **trước** lúc khởi động backend.
 
-## Luồng phục hồi mong muốn
+## Giao diện đề xuất
 
-R2 → chọn `.ndbak` → nhập khóa phục hồi + quyền tạo DB thử → dựng DB riêng → đối chiếu số liệu/ảnh → **Dùng bản này** → app kiểm tra profile và DB lần nữa → tạo bản backup trạng thái hiện tại → dừng backend do app sở hữu → lưu lựa chọn profile bằng ghi nguyên tử → khởi động backend với DB/ảnh đã xác minh → kiểm tra `/ready` và số liệu mẫu → báo thành công. Nếu bất kỳ bước nào lỗi, app quay về cấu hình cũ và hiện lỗi cụ thể. Có nút **Quay về dữ liệu trước**.
+1. Màn **Sao lưu**: sau **Dựng DB từ R2**, hiển thị bản tóm tắt cố định gồm ngày bản sao, hai sổ, số phiếu, tồn, công nợ, ảnh đã kiểm tra và tên DB thử.
+2. Nút **Dùng bản này** chỉ sáng khi kiểm tra đạt. Hộp xác nhận nêu rõ bản nào sẽ trở thành dữ liệu đang dùng, thời điểm backup và DB hiện tại được giữ lại.
+3. App hiển thị tiến trình: sao lưu trước chuyển → dừng backend do app sở hữu → chọn DB đã xác minh → mở backend → kiểm tra ready/dữ liệu → hoàn tất. Nếu cần mật khẩu MySQL, hỏi ngay trong app.
+4. Màn Sao lưu cho biết **Đang dùng dữ liệu nào** và có nút **Quay về dữ liệu trước**.
 
-### Quy tắc an toàn phục hồi
+## Cách vận hành bên trong
 
-- Chỉ chấp nhận profile do bước dựng thử tạo, đường dẫn DB loopback `aluminum_restore_*`, ảnh đúng thư mục staging, schema và số dòng vẫn khớp. Không tin riêng trường `verified: true` trong JSON.
-- Không tự đóng/giết backend do tiến trình khác sở hữu. Nếu cổng bị chiếm, hiển thị hướng dẫn đóng tiến trình đó và giữ nguyên lựa chọn cũ.
-- Mật khẩu MySQL không ghi vào JSON, log hay Git. Nếu cần dùng lại khi mở app, lưu trong Windows Credential Manager; khi thiếu hoặc sai, hỏi lại trong app.
-- Giữ database và ảnh cũ. Không bật backup tự động cho DB phục hồi trước khi người dùng xác nhận đây là DB vận hành. Sau khi xác nhận, kiểm tra khóa phục hồi mới và R2; phân biệt rõ bản backup của từng DB để tránh chọn nhầm.
-- Khôi phục một bản cũ không tự gộp các giao dịch đã phát sinh sau thời điểm backup. Cần cảnh báo chênh lệch thời gian và chọn nguồn vận hành chính thức.
-
-## Luồng chuyển sổ giấy mong muốn
-
-### Mốc chuyển sổ
-
-Chốt kỳ giấy tại ngày T. Ghi lại theo **Xưởng** và **Phân phối**: tồn kg và giá trị theo từng loại, công nợ từng khách/NCC, số tiền đã thu/trả và chứng từ còn mở, tiền/chi phí chưa ghi, hàng đang làm và phế liệu nếu có. Hai bên đối chiếu tổng giấy trước khi nhập app. Dữ liệu phát sinh từ T+1 nhập bằng các màn hiện có.
-
-### Dữ liệu đầu kỳ
-
-- Tồn đầu kỳ cần nguồn riêng theo shop, sản phẩm/loại, kg, giá trị/đơn giá và ngày hiệu lực; không tạo phiếu nhập giả để tăng tồn. Kiểm tra điều kiện định giá và chốt kỳ.
-- Nợ đầu kỳ cần nguồn riêng theo khách/NCC, số còn nợ, ngày và tham chiếu sổ giấy; thanh toán sau T giảm đúng nợ mà không tạo doanh thu/chi phí mới hoặc gắn sai phiếu.
-- Xác định có cần số dư tiền mặt/ngân hàng, ứng lương, lương phải trả, hàng dở dang và vụn hay không trước khi mở rộng schema. Giá trị chưa rõ phải hiện **chưa đối chiếu**, không tự coi bằng 0.
-- Mỗi lô nhập có mã tham chiếu giấy, người nhập, thời điểm, trạng thái nháp/đã xác nhận và cảnh báo trùng. Chỉ bản đã xác nhận mới ảnh hưởng báo cáo và được backup.
-
-### Cách dùng sau chuyển sổ
-
-Nhập chứng từ mới vào app hằng ngày; có thể giữ giấy song song một kỳ để đối chiếu cuối ngày/tuần. Chỉ đóng giấy khi tồn, nợ, thu/chi và số phiếu khớp. Không nhập lặp cùng giao dịch ở cả tính năng đầu kỳ và phiếu phát sinh.
+- Dùng đường dẫn profile vừa do app tạo; không yêu cầu người dùng chọn file bằng tay. Nếu app khởi động lại sau sự cố, nó đọc lựa chọn đã lưu an toàn rồi hỏi mật khẩu MySQL nếu cần.
+- Lưu lựa chọn DB bằng ghi nguyên tử. Chỉ đánh dấu chuyển thành công sau khi backend mới trả ready và kiểm tra đúng DB/schema/ảnh.
+- Mật khẩu MySQL không ghi vào profile, log hoặc Git. Có thể lưu bằng Windows Credential Manager để lần mở sau không hỏi lại; khi sai thì yêu cầu nhập lại.
+- Không ghi đè, đổi tên hoặc xóa DB và ảnh cũ. Không dừng backend do tiến trình khác sở hữu; nếu cổng 8080 bị chiếm, dừng thao tác và hướng dẫn đóng tiến trình đó.
+- Chỉ nhận profile từ lần dựng thử đã được xác minh; kiểm tra lại đường dẫn loopback `aluminum_restore_*`, ảnh cùng thư mục, schema và dữ liệu trước khi kích hoạt. Không tin riêng cờ `verified: true` trong JSON.
+- Khi chuyển lỗi hoặc app tắt giữa chừng, lần mở sau quay về DB trước và nêu lý do; không tự mở một DB chưa được kiểm chứng.
+- Sau khi chọn DB phục hồi làm nguồn vận hành, phân biệt rõ bản backup/khóa của nó với DB cũ trên R2, xác nhận cấu hình R2 và khóa phục hồi trước khi bật lịch sao lưu. Bản sao cũ có thể thiếu giao dịch sau ngày backup; cảnh báo mốc thời gian trước khi xác nhận.
 
 ## Thứ tự triển khai
 
-1. Hoàn thiện chuyển DB phục hồi trong app, rollback và diễn tập trên Windows sạch.
-2. Chốt mẫu đối chiếu giấy, ngày T và phạm vi số dư đầu kỳ. Không sửa DB thật trong bước khảo sát.
-3. Làm từng lát dọc: tồn đầu kỳ → nợ đầu kỳ → màn hướng dẫn/đối chiếu → báo cáo/chốt kỳ → backup/restore rehearsal.
-4. Chỉ sau khi đối chiếu thực tế đạt mới cân nhắc nhập lịch sử hàng loạt hoặc OCR.
+1. Kiểm tra profile và trạng thái DB đã dựng, thêm dữ liệu tóm tắt để người dùng đối chiếu.
+2. Cho Tauri khởi động backend từ profile được chọn và xử lý thông tin MySQL trong app.
+3. Thêm nút **Dùng bản này**, tiến trình chuyển, rollback và hiển thị DB đang dùng.
+4. Phân biệt backup của DB phục hồi, bật lại lịch có kiểm soát và diễn tập trên Windows sạch.
 
-## Tiêu chí hoàn tất chung
+## Tiêu chí hoàn tất
 
-- Mất máy: cài trên Windows khác, cấu hình R2, dựng bản, chọn dùng trong app, khởi động lại, thấy đúng phiếu/tồn/nợ/ảnh; quay lại bản trước được; không mất DB cũ.
-- Chuyển giấy: tổng đầu kỳ theo từng shop khớp biên bản giấy; một giao dịch sau T chỉ tính một lần; báo cáo và chốt tháng/năm không tự tạo lãi hoặc tồn giả; backup R2 rồi dựng thử vẫn giữ dữ liệu đầu kỳ và nguồn giấy.
-- Lỗi mạng/R2, sai khóa, sai mật khẩu MySQL, thiếu ảnh, cổng 8080 bận và app tắt giữa quá trình đều dừng an toàn, không đổi database đang dùng.
+- Trên Windows sạch: cấu hình bucket cũ bằng cặp R2 key mới → chọn bản → dựng thử → bấm **Dùng bản này** → app mở lại với đúng phiếu, tồn, công nợ, ảnh; không dùng PowerShell hoặc đường dẫn thủ công.
+- Mất mạng, sai khóa, sai MySQL, thiếu ảnh, cổng bận hoặc app tắt giữa chuyển: DB đang dùng không bị thay bằng bản lỗi, DB cũ còn nguyên.
+- Nút **Quay về dữ liệu trước** hoạt động sau một lần chuyển thành công; backend và dữ liệu được kiểm tra lại.
+- Backup mới của DB phục hồi tải lên R2, tải xuống và dựng lại được mà không lẫn với các bản của DB trước.
 
-## Câu hỏi cần chốt trước khi làm phần giấy
+## Ngoài phạm vi
 
-- Ngày T dự kiến và kỳ giấy hiện tại đã chốt đến đâu?
-- Giấy gồm những loại nào: nhập/bán, thu/chi, nợ, tồn, nhân sự/lương, hàng dở dang/vụn?
-- Có cần xem báo cáo các kỳ giấy cũ trong app, hay chỉ cần số đầu kỳ đúng để làm tiếp?
-- Có mẫu giấy thật để đối chiếu trường dữ liệu và quy tắc tính không? Có thể dùng mẫu đã che thông tin nhạy cảm.
+- Không nhập/gộp chứng từ từ sổ giấy hoặc từ DB cũ vào DB phục hồi.
+- Không khôi phục bằng cách ghi đè trực tiếp DB đang hoạt động.
+- Không tự tạo khóa R2 hay khóa giải mã khi người dùng đã mất chúng; vẫn cần cấu hình R2 và khóa phục hồi cũ.
