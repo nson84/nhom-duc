@@ -11,7 +11,7 @@ import {
   StopOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
-import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Statistic, Tag, message } from "antd";
+import { Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Statistic, Tag, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
@@ -263,7 +263,8 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   }, [loading, editing, draftKey, kind, workingPeriod]);
 
   function updateParked(next: ParkedDraft[]) {
-    localStorage.setItem(parkedKey, JSON.stringify(next));
+    if (next.length) localStorage.setItem(parkedKey, JSON.stringify(next));
+    else localStorage.removeItem(parkedKey);
     setParked(next);
   }
 
@@ -381,17 +382,35 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           },
         ]}
       />
-      {(listFilter === "all" || listFilter === "draft") && parked.length > 0 && (
-        <Card size="small" title="Phiếu nháp trên thiết bị này" style={{ marginTop: 12 }}>
-          <Space direction="vertical">
-            {parked.filter((draft) => workingPeriod?.started && draft.values.documentDate &&
-              !dayjs(draft.values.documentDate).isBefore(dayjs(workingPeriod.periodFrom), "day") &&
-              !dayjs(draft.values.documentDate).isAfter(dayjs(workingPeriod.periodTo), "day")).map((draft) => (
-              <Button key={draft.parkedId} disabled={editing != null}
-                onClick={() => void resumeDraft(draft)}>
-                Sửa phiếu nháp · {draft.values.counterpartyName || "Chưa nhập đối tác"} · {dayjs(draft.savedAt).format("DD/MM/YYYY HH:mm")}
-              </Button>
-            ))}
+      {parked.length > 0 && (
+        <Card size="small" title={`Phiếu nháp trên thiết bị này (${parked.length})`} style={{ marginTop: 12 }}
+          extra={<Button danger disabled={editing != null} onClick={() => Modal.confirm({
+            title: `Xóa cả ${parked.length} bản nháp trên thiết bị?`,
+            content: "Các bản chưa lưu lên hệ thống sẽ không thể phục hồi. Phiếu đã lưu trong database không bị xóa.",
+            okText: "Xóa bản nháp", okButtonProps: { danger: true }, cancelText: "Giữ lại",
+            autoFocusButton: "cancel",
+            onOk: () => { updateParked([]); message.success("Đã xóa bản nháp trên thiết bị"); },
+          })}>Xóa tất cả</Button>}>
+          <Typography.Text type="secondary">Bản nháp chưa lưu lên hệ thống không nằm trong bản sao lưu R2. Hãy hoàn thành và lưu phiếu trước khi chuyển máy.</Typography.Text>
+          <Space direction="vertical" style={{ display: "flex", marginTop: 12 }}>
+            {parked.map((draft) => {
+              const inPeriod = !!(workingPeriod?.started && draft.values.documentDate &&
+                !dayjs(draft.values.documentDate).isBefore(dayjs(workingPeriod.periodFrom), "day") &&
+                !dayjs(draft.values.documentDate).isAfter(dayjs(workingPeriod.periodTo), "day"));
+              return <Space key={draft.parkedId} wrap>
+                <Button disabled={editing != null || !inPeriod} onClick={() => void resumeDraft(draft)}>
+                  Sửa phiếu nháp · {draft.values.counterpartyName || "Chưa nhập đối tác"} · {dayjs(draft.savedAt).format("DD/MM/YYYY HH:mm")}
+                </Button>
+                {!inPeriod && <Tag>Khác kỳ đang chọn</Tag>}
+                <Button danger disabled={editing != null} onClick={() => Modal.confirm({
+                  title: "Xóa bản nháp này?",
+                  content: "Bản chưa lưu lên hệ thống sẽ không thể phục hồi. Phiếu trong database không bị xóa.",
+                  okText: "Xóa bản nháp", okButtonProps: { danger: true }, cancelText: "Giữ lại",
+                  autoFocusButton: "cancel",
+                  onOk: () => { updateParked(parked.filter((item) => item.parkedId !== draft.parkedId)); },
+                })}>Xóa</Button>
+              </Space>;
+            })}
           </Space>
         </Card>
       )}
@@ -486,7 +505,9 @@ type ParkedDraft = DocumentDraft & { parkedId: string };
 function readParkedDrafts(key: string): ParkedDraft[] {
   try {
     const drafts = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(drafts) ? drafts : [];
+    return Array.isArray(drafts) ? drafts.filter((draft): draft is ParkedDraft =>
+      draft && typeof draft.parkedId === "string" && draft.values &&
+      typeof draft.values === "object" && typeof draft.savedAt === "number") : [];
   } catch {
     return [];
   }

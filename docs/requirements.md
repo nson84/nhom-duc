@@ -8,6 +8,7 @@ Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xư
 - Hệ số bằng 0 bị từ chối. Không suy đoán hệ số khi chưa có số đã kiểm.
 - Phân phối quản lý tồn liên tục và không cho tồn âm. Xưởng quyết toán nhôm theo kiểm kê cuối năm; phiếu bán thành phẩm không trừ tồn từng ngày.
 - Phiếu nháp không đổi tồn. Phiếu nhập/bán thường đã xác nhận được sửa trong 24 giờ từ lúc xác nhận, không đổi hạn gốc và không giảm tổng dưới số đã thanh toán. Phiếu nội bộ phải đảo cả cặp trước khi lập lại; mỗi phiếu chỉ đảo một lần. Tháng/năm đã khóa từ chối sửa hoặc đảo.
+- Phiếu nháp chỉ lưu trên thiết bị, chưa đủ điều kiện ghi vào database, không có trong backup/R2. Giao diện phải cho xem và xóa nháp kể cả khi đang chọn kỳ khác; cần hoàn thành và lưu vào database trước khi chuyển/mất máy.
 - Thùng rác chỉ nhận phiếu **đã hủy** hoặc phiếu **đã xác nhận và đã đảo**. Phiếu nháp phải **hủy nháp** trước; không chuyển thẳng từ nháp vào thùng rác. Phiếu đã hủy trong thùng rác giữ tối đa 90 ngày rồi xóa cứng (nếu không ràng buộc kho/thu); phiếu đã đảo chỉ ẩn danh sách, không xóa cứng.
 - Phân phối theo dõi tồn tổng theo số lượng, không tự tính giá vốn khi xuất từng phiếu. Xưởng tính chi phí nhôm năm bằng giá trị đầu năm + nhập trong năm - giá trị kiểm kê cuối năm.
 - Phân phối giữ lịch sử giá nhập chuẩn theo ngày và snapshot trên dòng phiếu để tra cứu giá nhập. Giá tham khảo không thay đổi giá thực tế của phiếu nhập. Phiếu bán xưởng có thể gắn dòng phiếu nhập làm giá nhôm tham chiếu; không dùng giá đó làm giá vốn hằng ngày.

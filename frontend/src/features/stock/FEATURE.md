@@ -75,6 +75,8 @@ Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi c�
 
 Khi đóng form phiếu nhập/bán đã thay đổi hoặc chuyển trang trong ứng dụng, chọn **Tiếp tục nhập** để giữ form mở hoặc **Lưu nháp và rời** để nhập tiếp sau. Phiếu đủ thông tin vào danh sách **Nháp** của sổ. Phiếu chưa đủ thông tin nằm trong mục **Phiếu nháp trên thiết bị này** và có thể mở lại để sửa rồi lưu.
 
+Mục phiếu nháp trên thiết bị luôn hiện toàn bộ nháp của sổ/tài khoản, kể cả nháp ở kỳ khác. Nháp khác kỳ đang chọn không mở sửa được cho tới khi chọn đúng kỳ; có nút xóa từng bản và xóa tất cả với xác nhận. Nháp chỉ trên thiết bị không nằm trong sao lưu database/R2 và sẽ mất khi xóa dữ liệu ứng dụng hoặc mất máy. Hãy hoàn thành và lưu phiếu vào database trước khi chuyển máy; bản nháp đủ điều kiện lưu vào database vẫn có trong backup.
+
 Lịch sử chi tiền trên phiếu nhập hiển thị hình thức thanh toán, người trả và người nhận ở các cột riêng.
 
 Popup ghi chi và ghi thu bố trí hai ô mỗi hàng trên màn hình rộng và một ô mỗi hàng trên màn hình hẹp. Khi số tiền nhập lớn hơn 0 và nhỏ hơn số dư, dưới ô số tiền hiện “Thanh toán 1 phần”. Nút “Thanh toán hết số còn lại” điền số dư vào ô số tiền để người dùng kiểm tra trước khi ghi nhận.
