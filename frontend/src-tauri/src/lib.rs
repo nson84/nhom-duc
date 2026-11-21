@@ -4,7 +4,8 @@ mod credentials;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![credentials::saved_password, credentials::save_password])
+        .invoke_handler(tauri::generate_handler![credentials::saved_password, credentials::save_password,
+            backend::activate_recovery, backend::rollback_recovery, backend::recovery_status])
         .setup(|_app| {
             std::thread::spawn(|| {
                 if let Err(err) = backend::ensure_started() {

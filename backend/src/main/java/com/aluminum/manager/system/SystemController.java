@@ -21,14 +21,15 @@ public class SystemController {
 	@GetMapping("/ready")
 	public ApiResponse<ReadyStatus> ready() {
 		jdbc.queryForObject("SELECT 1", Integer.class);
+		String databaseName = jdbc.queryForObject("SELECT DATABASE()", String.class);
 		String version = jdbc.queryForObject("""
 				SELECT version FROM flyway_schema_history
 				WHERE success = 1
 				ORDER BY installed_rank DESC
 				LIMIT 1
 				""", String.class);
-		return ApiResponse.ok(build == null ? new ReadyStatus("UP", "UP", version)
-				: new ReadyStatus("UP", "UP", version, "aluminum-manager", build.getVersion(),
+		return ApiResponse.ok(build == null ? new ReadyStatus("UP", "UP", databaseName, version)
+				: new ReadyStatus("UP", "UP", databaseName, version, "aluminum-manager", build.getVersion(),
 						build.get("revision") == null ? "unversioned" : build.get("revision")), null);
 	}
 }

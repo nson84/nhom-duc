@@ -59,6 +59,20 @@ jobs:
         working-directory: frontend
         run: node --test tests/*.test.mjs
 
+  desktop-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create placeholder resource for compile check
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path frontend/src-tauri/resources -Force | Out-Null
+          New-Item -ItemType File -Path frontend/src-tauri/resources/aluminum-manager.jar -Force | Out-Null
+          Copy-Item scripts/start-recovered-backend.ps1 frontend/src-tauri/resources/start-recovered-backend.ps1
+      - name: Check desktop Rust code
+        working-directory: frontend/src-tauri
+        run: cargo check --locked
+
   windows-build-script:
     runs-on: windows-latest
     steps:

@@ -85,6 +85,8 @@ Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và b
 - Chạy `frontend/npm run build` và kiểm tra cảnh báo khôi phục tạm khóa chỉ hiện ở màn Admin.
 - Kiểm tra không đăng nhập nhận 401 bằng HTTP trên backend local; không gọi restore với database làm việc.
 - Cần thêm integration test MySQL trên database thử riêng, restore V2 và chuyển database có thể quay lại trước khi mở lại chức năng khôi phục.
+
+22/11: CI Windows chạy `cargo check --locked` cho các lệnh Tauri chuyển/quay lại DB. Trước khi phát hành bộ cài mới, cần kiểm thử desktop thực trên máy thử: dựng từ R2, chuyển DB, thấy tài khoản mới, đóng/mở lại, tạo backup local, cấu hình R2, quay lại DB trước, và lỗi MySQL phải quay lại an toàn. `npm run build`, `node --test tests/*.test.mjs` và Maven test không thay thế kiểm thử Tauri này.
 - Bootstrap: ba tài khoản mới trên bản production nhận mật khẩu ngẫu nhiên riêng trong tệp quyền chủ máy; môi trường dev vẫn dùng `1234567`; tài khoản cũ không bị cập nhật.
 # Kiểm thử backup mã hóa và R2
 

@@ -7,7 +7,10 @@ mod windows {
     };
 
     fn target(account: &str) -> Result<Vec<u16>, String> {
-        if !matches!(account, "admin" | "phanphoi" | "xuong") {
+        if !matches!(account, "admin" | "phanphoi" | "xuong")
+            && !account.strip_prefix("recovery/").is_some_and(|name|
+                name.len() == 29 && name.starts_with("aluminum_restore_")
+                    && name[17..].bytes().all(|byte| byte.is_ascii_hexdigit())) {
             return Err("Tài khoản không hợp lệ".to_string());
         }
         Ok(format!("AluminumManager/login/{account}\0").encode_utf16().collect())
@@ -58,6 +61,16 @@ mod windows {
         }
         Ok(())
     }
+}
+
+pub fn load_recovery_password(database: &str) -> Result<Option<String>, String> {
+    #[cfg(windows)] { windows::load(&format!("recovery/{database}")) }
+    #[cfg(not(windows))] { let _ = database; Err("Chỉ hỗ trợ Windows".to_string()) }
+}
+
+pub fn save_recovery_password(database: &str, password: &str) -> Result<(), String> {
+    #[cfg(windows)] { windows::save(&format!("recovery/{database}"), password) }
+    #[cfg(not(windows))] { let _ = (database, password); Err("Chỉ hỗ trợ Windows".to_string()) }
 }
 
 #[tauri::command]
