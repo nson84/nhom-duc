@@ -49,7 +49,7 @@ pub fn ensure_started() -> Result<(), String> {
         .arg(&jar)
         .current_dir(&data_dir)
         .env("ALUMINUM_IMAGE_DIR", &image_dir)
-        .stdin(Stdio::null());
+        .stdin(Stdio::piped());
 
     let log_path = app_data_dir().join("backend.log");
     if let Ok(file) = OpenOptions::new().create(true).append(true).open(&log_path) {
@@ -86,9 +86,22 @@ pub fn stop() {
         return;
     };
     if let Some(child) = guard.as_mut() {
+        if let Some(mut input) = child.stdin.take() {
+            let _ = input.write_all(b"BACKUP_AND_EXIT\n");
+            let _ = input.flush();
+        }
+        let deadline = std::time::Instant::now() + Duration::from_secs(90);
+        while std::time::Instant::now() < deadline {
+            if let Ok(Some(_)) = child.try_wait() {
+                log("Backend đã sao lưu và dừng khi đóng ứng dụng.");
+                *guard = None;
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        log("Backend chưa dừng sau 90 giây; xem backend.log để kiểm tra bản sao lưu cuối.");
         let _ = child.kill();
         let _ = child.wait();
-        log("Đã dừng backend do ứng dụng đóng.");
     }
     *guard = None;
 }

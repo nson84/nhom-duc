@@ -2,6 +2,8 @@
 
 Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xưởng và Phân phối. Phần mềm quản lý sản phẩm, phiếu nhập/bán, khách mua, nhân sự xưởng, thu chi, báo cáo và sao lưu. Admin chỉ quản lý Sao lưu và Cài đặt; phân phối do chủ quản lý, không có nhân viên hay tiền công.
 
+Khi backend khởi động cùng ứng dụng desktop, tự tạo backup ở tick đầu sau khoảng 30 giây nếu bản gần nhất cách ít nhất 5 phút; sau đó theo tần suất đã cấu hình khi ứng dụng còn chạy. Khi desktop đóng bình thường, tạo một bản cuối trước khi dừng backend. Backup thành công thử đồng bộ R2; lỗi mạng được thử lại khi ứng dụng còn chạy.
+
 ## Đã khóa
 
 - Đơn vị tồn cơ sở là duy nhất. Mỗi dòng phiếu lưu số lượng bán, đơn vị, hệ số và số lượng cơ sở tại thời điểm giao dịch.

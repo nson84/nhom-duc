@@ -9,7 +9,7 @@
 3. Bấm **Sao lưu ngay**, **Đồng bộ R2 ngay**, kiểm tra **Bản chờ đồng bộ = 0** và bản mới xuất hiện trong danh sách R2. Bấm **Kiểm tra** cho bản đó; nếu có thể, bấm **Dựng DB thử** và đối chiếu dữ liệu trên database riêng.
 4. Hoàn thành và lưu các phiếu nháp còn nằm trên thiết bị. Bản nháp chỉ trong trình duyệt không có trong `.ndbak`.
 
-Lịch sao lưu mặc định mỗi 4 giờ **khi backend đang chạy**; khi mất mạng, backend thử đồng bộ lại mỗi 5 phút. Kiểm tra định kỳ bản mới nhất trên R2; số bản chờ bằng 0 riêng nó không chứng minh bản mới nhất đã phục hồi được.
+Khi mở ứng dụng desktop và backend khởi động, ứng dụng tạo một bản sao lưu sau khoảng 30 giây nếu bản gần nhất đã cách ít nhất 5 phút. Sau đó lịch mặc định chạy mỗi 4 giờ **khi backend đang chạy**. Khi đóng desktop bình thường, ứng dụng tạo thêm một bản `shutdown` rồi thử đồng bộ R2 trước khi thoát; nếu vượt 90 giây, desktop buộc dừng backend và cần kiểm tra nhật ký. Khi mất mạng, backend thử đồng bộ lại mỗi 5 phút trong lúc chạy. Mở lại ứng dụng trong vòng 5 phút không tạo bản khởi động trùng, nhưng đóng bình thường vẫn tạo bản cuối. Kiểm tra định kỳ bản mới nhất trên R2; số bản chờ bằng 0 riêng nó không chứng minh bản mới nhất đã phục hồi được.
 
 ## Nếu mất máy: lấy bản sao từ R2
 

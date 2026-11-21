@@ -20,6 +20,7 @@ class RecoveryRehearsalTest {
         ReflectionTestUtils.setField(backup, "scheduledEnabled", false);
         ReflectionTestUtils.setField(sync, "scheduledEnabled", false);
         backup.scheduledBackupTick();
+        backup.createShutdownBackup();
         sync.retryPending();
         sync.syncAfterBackup();
         verifyNoInteractions(jdbc, source, settings, cloud, codec, keys, frequency);

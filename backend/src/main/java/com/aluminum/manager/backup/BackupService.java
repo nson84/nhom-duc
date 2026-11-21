@@ -63,6 +63,7 @@ public class BackupService {
 	private String imageDirectory;
 	@Value("${aluminum.backup.scheduled-enabled:true}")
 	private boolean scheduledEnabled = true;
+	private boolean firstScheduledTick = true;
 	// Authentication and backup history belong to this installation, not the business restore.
 	private static final Set<String> LOCAL_TABLES = Set.of("flyway_schema_history", "backup_logs",
 			"admin_users", "revoked_login_sessions");
@@ -154,6 +155,12 @@ public class BackupService {
 		verifiedArchive(id);
 	}
 
+	public void createShutdownBackup() {
+		if (!scheduledEnabled) return;
+		BackupLogDto result = performBackup("shutdown", null);
+		if ("FAILED".equals(result.status())) log.error("Sao lưu khi đóng ứng dụng thất bại: {}", result.errorMessage());
+	}
+
 	public Path verifiedArchive(long id) {
 		List<BackupLogDto> rows = jdbc.query("SELECT * FROM backup_logs WHERE id = ?",
 				(rs, i) -> mapLog(rs), id);
@@ -177,11 +184,21 @@ public class BackupService {
 		try {
 			LocalDateTime latest = jdbc.query("SELECT started_at FROM backup_logs ORDER BY started_at DESC, id DESC LIMIT 1",
 					rs -> rs.next() ? rs.getTimestamp(1).toLocalDateTime() : null);
-			if (latest != null && latest.plusHours(frequency.get()).isAfter(LocalDateTime.now(clock))) return;
+			if (!backupDue(latest, LocalDateTime.now(clock), frequency.get(), firstScheduledTick)) {
+				firstScheduledTick = false;
+				return;
+			}
 			performBackup("scheduled", null);
+			firstScheduledTick = false;
 		} catch (Exception ex) {
 			log.warn("Không chạy được lịch sao lưu tự động", ex);
 		}
+	}
+
+	static boolean backupDue(LocalDateTime latest, LocalDateTime now, int frequencyHours, boolean firstTick) {
+		if (latest == null) return true;
+		if (firstTick && !latest.plusMinutes(5).isAfter(now)) return true;
+		return !latest.plusHours(frequencyHours).isAfter(now);
 	}
 
 	public synchronized BackupLogDto restoreBackup(long backupId, RestoreRequest request) {

@@ -23,7 +23,7 @@ Sau khi backup thành công, tác vụ nền thử tải `.ndbak` cùng manifest
 
 Dựng database thử cần Admin nhập tạm tài khoản MySQL có quyền CREATE DATABASE. Mật khẩu chỉ đi trong yêu cầu cục bộ, không lưu trong cấu hình hoặc log ứng dụng. Tài khoản vận hành `aluminum_app` chỉ có quyền database hiện tại nên không thể dùng cho bước này trên máy phát triển hiện tại.
 
-Lịch backup mặc định 4 giờ; chọn 1/2/4/8/24 giờ ở trang Admin. Không xóa bản backup local cũ theo retention lúc này, để tránh xóa bản cuối trước khi cloud được xác minh. Bộ tạo SQL V2 hiện vẫn dùng bộ nhớ theo kích thước dữ liệu và ảnh; cần tối ưu streaming trước khi dùng với dữ liệu rất lớn.
+Sau khi backend khởi động, tick đầu (trễ khoảng 30 giây) tạo một bản backup ngay nếu bản gần nhất đã cách ít nhất 5 phút; tránh bản trùng khi khởi động lại nhanh. Các tick sau theo lịch mặc định 4 giờ; chọn 1/2/4/8/24 giờ ở trang Admin. Khi desktop đóng bình thường, nó gửi lệnh qua stdin riêng của tiến trình Java để tạo thêm bản `shutdown` trước khi backend thoát; không cần đăng nhập Admin. Bản thành công được thử đồng bộ lên R2 ngay, lỗi mạng được thử lại mỗi 5 phút khi backend còn chạy. Lịch tắt ở chế độ diễn tập phục hồi cũng tắt backup khởi động và shutdown. Không xóa bản backup local cũ theo retention lúc này, để tránh xóa bản cuối trước khi cloud được xác minh. Bộ tạo SQL V2 hiện vẫn dùng bộ nhớ theo kích thước dữ liệu và ảnh; cần tối ưu streaming trước khi dùng với dữ liệu rất lớn.
 
 [backup](../../../../../../../../frontend/src/features/backup/FEATURE.md)
 

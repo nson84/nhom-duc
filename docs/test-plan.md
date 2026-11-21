@@ -81,6 +81,9 @@ Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và b
 - Bootstrap: ba tài khoản mới trên bản production nhận mật khẩu ngẫu nhiên riêng trong tệp quyền chủ máy; môi trường dev vẫn dùng `1234567`; tài khoản cũ không bị cập nhật.
 # Kiểm thử backup mã hóa và R2
 
+- `BackupScheduleTest`: lần tick đầu sau khi mở ứng dụng tạo backup dù chưa đủ chu kỳ 4 giờ; mở lại trong 5 phút không tạo bản trùng; các tick tiếp theo vẫn tuân thủ chu kỳ.
+- `RecoveryRehearsalTest`: chế độ dựng thử không tạo bản khởi động hay bản khi đóng. Luồng đóng Tauri → stdin Java → backup → R2 cần kiểm tra thêm trên bộ cài Windows mới; Maven không kiểm thử mã Rust.
+
 - `EncryptedBackupCodecTest`: round-trip Unicode, GZIP, sai khóa và archive bị sửa.
 - `RecoveryKeyServiceTest`: khóa tồn tại sau khởi động lại, xuất/nhập máy mới, từ chối ghi đè.
 - `R2CloudServiceTest`: khóa không trả lại từ API/cấu hình và endpoint ngoài R2 bị chặn.
