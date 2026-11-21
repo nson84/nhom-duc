@@ -140,6 +140,13 @@ fn start_backend(active: Option<&ActiveRecovery>) -> Result<(), String> {
     if let (Some(selection), Some((path, profile))) = (active, profile.as_ref()) {
         let runtime = path.parent().ok_or("Hồ sơ không có thư mục")?.join("runtime");
         fs::create_dir_all(&runtime).map_err(|err| err.to_string())?;
+        let runtime_app = runtime.join("AluminumManager");
+        fs::create_dir_all(&runtime_app).map_err(|err| err.to_string())?;
+        let source_r2 = app_data_dir().join("r2-config.properties");
+        let target_r2 = runtime_app.join("r2-config.properties");
+        if source_r2.is_file() && !target_r2.exists() {
+            fs::copy(source_r2, target_r2).map_err(|err| format!("Không chuyển được cấu hình R2: {err}"))?;
+        }
         let password = crate::credentials::load_recovery_password(&profile.database_name)?
             .ok_or("Không tìm thấy mật khẩu MySQL của bản phục hồi trong Windows Credential Manager")?;
         let recovery_key = crate::credentials::load_recovery_key(&profile.database_name)?
