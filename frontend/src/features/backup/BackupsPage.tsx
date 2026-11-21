@@ -43,7 +43,7 @@ function formatBytes(bytes: number | null): string {
 export function BackupsPage() {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [logs, setLogs] = useState<BackupLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState<BackupLog | null>(null);
   const [editingSettings, setEditingSettings] = useState(false);
@@ -163,8 +163,9 @@ export function BackupsPage() {
         </Descriptions>
       ) : null}
 
-      <Alert type={cloud?.configured ? "info" : "warning"} showIcon style={{ marginBottom: 16 }}
-        message={cloud?.configured ? `R2 đã lưu cấu hình: ${cloud.bucket}` : "Chưa cấu hình Cloudflare R2"}
+      <Alert type={cloud === null || cloud.configured ? "info" : "warning"} showIcon style={{ marginBottom: 16 }}
+        message={cloud === null ? (loading ? "Đang kiểm tra cấu hình Cloudflare R2" : "Không tải được cấu hình Cloudflare R2")
+          : cloud.configured ? `R2 đã lưu cấu hình: ${cloud.bucket}` : "Chưa cấu hình Cloudflare R2"}
         description={<Space wrap>
           <span>Bản sao được mã hóa và kiểm tra toàn vẹn trước khi tải lên R2.</span>
           {cloud?.configured ? <Button loading={testingCloud} onClick={async () => {
