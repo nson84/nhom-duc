@@ -60,10 +60,14 @@ class RoleAccessFilterTest {
 	}
 
 	@Test
-	void adminOnlyUsesBackupSettingsAndAuth() throws Exception {
+	void adminUsesBackupSettingsQrAndAuth() throws Exception {
 		for (String path : new String[]{"/api/v1/admin/combined/years/2025", "/api/v1/annual-book/2025",
-				"/api/v1/reports/profit", "/api/v1/finance/transactions", "/api/v1/bank-accounts"}) {
+				"/api/v1/reports/profit", "/api/v1/finance/transactions", "/api/v1/bank-accounts-extra"}) {
 			assertEquals(403, status(UserRole.ADMIN, "GET", path, null), path);
+		}
+		for (String method : new String[]{"GET", "POST", "PUT", "DELETE"}) {
+			assertEquals(200, status(UserRole.ADMIN, method, "/api/v1/bank-accounts", null));
+			assertEquals(200, status(UserRole.ADMIN, method, "/api/v1/bank-accounts/1", null));
 		}
 		assertEquals(200, status(UserRole.ADMIN, "GET", "/api/v1/settings", null));
 		assertEquals(200, status(UserRole.ADMIN, "PUT", "/api/v1/settings", null));

@@ -13,7 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Admin chỉ dùng sao lưu và cài đặt.
+ * Admin chỉ dùng sao lưu, cài đặt và tài khoản QR nhận tiền.
  * Phân phối không dùng API nhân sự/chấm công/lương.
  */
 public class RoleAccessFilter extends OncePerRequestFilter {
@@ -32,8 +32,9 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		if (role == UserRole.ADMIN && path.startsWith("/api/v1/")
 				&& !path.startsWith("/api/v1/auth/")
 				&& !path.startsWith("/api/v1/settings")
-				&& !isBackupPath(path)) {
-			forbidden(response, "Tài khoản admin chỉ dùng sao lưu và cài đặt");
+				&& !isBackupPath(path)
+				&& !isBankAccountPath(path)) {
+			forbidden(response, "Tài khoản admin chỉ dùng sao lưu, cài đặt và tài khoản QR");
 			return;
 		}
 		if (isBackupPath(path) && role != UserRole.ADMIN) {
@@ -49,7 +50,7 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 			return;
 		}
 		if (!role.canWriteOperations() && isWrite(method) && !isAdminAllowedWrite(path, method)) {
-			forbidden(response, "Tài khoản admin chỉ dùng sao lưu và cài đặt");
+			forbidden(response, "Tài khoản admin chỉ dùng sao lưu, cài đặt và tài khoản QR");
 			return;
 		}
 		filterChain.doFilter(request, response);
@@ -80,7 +81,14 @@ public class RoleAccessFilter extends OncePerRequestFilter {
 		if (isBackupPath(path)) {
 			return true;
 		}
+		if (isBankAccountPath(path)) {
+			return true;
+		}
 		return false;
+	}
+
+	private static boolean isBankAccountPath(String path) {
+		return path.equals("/api/v1/bank-accounts") || path.startsWith("/api/v1/bank-accounts/");
 	}
 
 	private static boolean isBackupPath(String path) {

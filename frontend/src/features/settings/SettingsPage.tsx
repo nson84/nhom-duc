@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Link } from "react-router-dom";
 import { ApiError } from "../../services/error-handler";
 import { getSettings, updateSettings, type ShopSettings } from "./settings-api";
 
@@ -58,9 +59,7 @@ export function SettingsPage() {
   });
 
   return (
-    <Card
-      title="Cài đặt"
-    >
+    <Card title="Cài đặt" extra={<Link to="/tai-khoan-qr">Quản lý tài khoản QR nhận tiền</Link>}>
       <Form layout="vertical" onFinish={onSubmit} style={{ maxWidth: 720 }}>
         <Controller
           name="shopName"

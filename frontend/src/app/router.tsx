@@ -98,8 +98,8 @@ export const appRouter = createBrowserRouter(createRoutesFromElements(
           <Route path="bao-cao" element={<ReportsPage />} />
           <Route path="chot-so-thang" element={<MonthlyBookPage />} />
           <Route path="so-cuoi-nam" element={<AnnualBookPage />} />
-          <Route path="tai-khoan-qr" element={<BankAccountsPage />} />
           </Route>
+          <Route path="tai-khoan-qr" element={<BankAccountsPage />} />
           <Route path="sao-luu" element={<AdminOnly><BackupsPage /></AdminOnly>} />
           <Route path="cai-dat" element={<AdminOnly><SettingsPage /></AdminOnly>} />
           <Route path="*" element={<Navigate to="/" replace />} />

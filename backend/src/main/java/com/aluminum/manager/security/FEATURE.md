@@ -6,7 +6,7 @@ JWT mới mặc định không hết hạn theo thời gian. Phiên đã thu h�
 
 ## Chức năng hiện có
 
-`SecurityConfig`, `JwtAuthenticationFilter`, `RoleAccessFilter`: Admin chỉ dùng API xác thực, Sao lưu và Cài đặt; Phân phối không truy cập nhân sự/lương; Xưởng có quyền vận hành nhân sự. Đối chiếu router và menu khi thay đổi.
+`SecurityConfig`, `JwtAuthenticationFilter`, `RoleAccessFilter`: Admin chỉ dùng API xác thực, Sao lưu, Cài đặt và tài khoản QR nhận tiền; Phân phối không truy cập nhân sự/lương; Xưởng có quyền vận hành nhân sự. Đối chiếu router và menu khi thay đổi.
 
 Mọi phương thức ở chính xác `/api/v1/backups` và các đường dẫn con chỉ cho Admin; các vai trò Xưởng và Phân phối nhận 403. Truy cập chưa đăng nhập nhận 401 từ `SecurityConfig`.
 

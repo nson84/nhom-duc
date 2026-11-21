@@ -13,7 +13,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 **Chức năng**
 - Tên cửa hàng, địa chỉ, SĐT (feed landing công khai)
 - Giờ sao lưu, số ngày giữ, thư mục sao lưu
-- Admin chỉ dùng màn Cài đặt và Sao lưu. Tài khoản QR nhận tiền được quản lý bởi Xưởng hoặc Phân phối.
+- Admin mở quản lý tài khoản QR nhận tiền từ Cài đặt.
 
 ### `/tai-khoan-qr` — Tài khoản QR nhận tiền
 
@@ -22,7 +22,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 | File | `features/settings/BankAccountsPage.tsx` |
 | Ai dùng | Mọi role đăng nhập (Admin cũng ghi được) |
 | API | `/api/v1/bank-accounts` |
-| Vào từ | Menu avatar → **Tài khoản QR nhận tiền** |
+| Vào từ | Cài đặt (Admin) hoặc menu avatar → **Tài khoản QR nhận tiền** |
 
 **Chức năng**
 - Thêm nhiều tài khoản: tên gợi nhớ, ngân hàng (BIN), số TK, tên chủ TK, **ảnh thẻ QR** (upload ảnh như thẻ MB/VietQR)

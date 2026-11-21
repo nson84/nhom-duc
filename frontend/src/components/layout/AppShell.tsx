@@ -286,12 +286,12 @@ export function AppShell() {
                     </div>,
                   },
                   { type: "divider" },
-                  ...(role === "ADMIN" ? [] : [{
+                  {
                     key: "bank-qr",
                     icon: <QrcodeOutlined />,
                     label: "Tài khoản QR nhận tiền",
                     onClick: () => navigate("/tai-khoan-qr"),
-                  }]),
+                  },
                   ...(role === "ADMIN"
                     ? [
                         {

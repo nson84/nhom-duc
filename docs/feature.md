@@ -6,7 +6,7 @@ Mỗi thư mục chức năng có `FEATURE.md` mô tả hành vi hiện tại. T
 
 | Vai trò | Phạm vi hiện tại |
 | --- | --- |
-| Admin | Chỉ Sao lưu và Cài đặt; không truy cập nghiệp vụ, báo cáo gộp hoặc Sổ cuối năm. |
+| Admin | Sao lưu, Cài đặt và tài khoản QR nhận tiền; không truy cập nghiệp vụ, báo cáo gộp hoặc Sổ cuối năm. |
 | Phân phối | Vận hành sổ phân phối; không truy cập nhân viên, chấm công hay tiền công. |
 | Xưởng | Vận hành sổ xưởng, quyết toán và nhân sự xưởng. |
 
