@@ -142,9 +142,12 @@ fn start_backend(active: Option<&ActiveRecovery>) -> Result<(), String> {
         fs::create_dir_all(&runtime).map_err(|err| err.to_string())?;
         let password = crate::credentials::load_recovery_password(&profile.database_name)?
             .ok_or("Không tìm thấy mật khẩu MySQL của bản phục hồi trong Windows Credential Manager")?;
+        let recovery_key = crate::credentials::load_recovery_key(&profile.database_name)?
+            .ok_or("Không tìm thấy khóa phục hồi của bản sao R2 trong Windows Credential Manager")?;
         command.env("SPRING_DATASOURCE_URL", &profile.jdbc_url)
             .env("SPRING_DATASOURCE_USERNAME", &selection.database_username)
             .env("SPRING_DATASOURCE_PASSWORD", password)
+            .env("ALUMINUM_INITIAL_RECOVERY_KEY", recovery_key)
             .env("APPDATA", &runtime)
             .env("ALUMINUM_JWT_SECRET_FILE", runtime.join("jwt.key"))
             .env("ALUMINUM_IMAGE_DIR", &image_dir)
@@ -318,11 +321,13 @@ fn switch_to_inner(target: Option<ActiveRecovery>, save_previous: bool) -> Resul
 }
 
 #[tauri::command]
-pub async fn activate_recovery(profile_path: String, database_username: String, database_password: String) -> Result<ActivationResult, String> {
+pub async fn activate_recovery(profile_path: String, database_username: String, database_password: String, recovery_key: String) -> Result<ActivationResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let (path, profile) = validate_profile(&profile_path)?;
         if database_username.trim().is_empty() || database_password.is_empty() { return Err("Nhập tài khoản và mật khẩu MySQL".to_string()); }
+        if recovery_key.trim().is_empty() { return Err("Thiếu khóa phục hồi đã dùng để giải mã bản sao".to_string()); }
         crate::credentials::save_recovery_password(&profile.database_name, &database_password)?;
+        crate::credentials::save_recovery_key(&profile.database_name, &recovery_key)?;
         switch_to(Some(ActiveRecovery { profile_path: path.to_string_lossy().to_string(), database_username }), true)
     }).await.map_err(|err| err.to_string())?
 }
@@ -361,7 +366,7 @@ pub fn backup_after_start() {
 fn desktop_backup(reason: &str) -> Result<(), String> {
     let token_dir = read_active_recovery()?.map(|selection| {
         let (path, _) = validate_profile(&selection.profile_path)?;
-        Ok(path.parent().ok_or("Hồ sơ không có thư mục")?.join("runtime").join("AluminumManager"))
+        Ok::<PathBuf, String>(path.parent().ok_or("Hồ sơ không có thư mục")?.join("runtime").join("AluminumManager"))
     }).transpose()?.unwrap_or_else(app_data_dir);
     let token = fs::read_to_string(token_dir.join("desktop-backup-token"))
         .map_err(|err| format!("Không đọc được mã điều khiển backup: {err}"))?;

@@ -12,9 +12,9 @@ Dùng ứng dụng V44 trở lên. Cất riêng tệp .ndbak và khóa phục h�
 
 1. Trong khối kết quả dựng thử, bấm **Dùng dữ liệu này**. Ứng dụng sẽ sao lưu và dừng backend do nó khởi động, mở DB đã dựng và kiểm tra tên DB từ `/system/ready`. Nếu backend cổng 8080 được khởi động bên ngoài, nút từ chối chuyển để tránh đóng nhầm tiến trình.
 2. Nếu chuyển thành công, giao diện hiện mật khẩu đăng nhập lần đầu của các tài khoản mới. Cất mật khẩu, bấm xác nhận, đăng nhập lại rồi đổi mật khẩu. Tài khoản đăng nhập máy cũ không nằm trong backup.
-3. Đối chiếu dữ liệu trong ứng dụng. Backend của DB phục hồi có thư mục ảnh, khóa JWT và cấu hình riêng. Bản sao local tự động tiếp tục chạy. Mở **Khóa phục hồi** để cất khóa mới ngoài máy, sau đó cấu hình R2 lại và kiểm tra kết nối/đồng bộ.
+3. Đối chiếu dữ liệu trong ứng dụng. Backend của DB phục hồi có thư mục ảnh, khóa JWT và cấu hình riêng. Nó dùng lại khóa giải mã của bản R2 vừa chọn; bản sao local tự động tiếp tục chạy. Mở **Khóa phục hồi** để kiểm tra và cất khóa đó ngoài máy, sau đó cấu hình R2 lại và kiểm tra kết nối/đồng bộ.
 
-Tauri giữ lựa chọn DB và mật khẩu MySQL trong Windows Credential Manager để lần mở sau tự kết nối. Hồ sơ xác minh không chứa mật khẩu. DB cũ vẫn tồn tại. Khi backend mới không mở được, desktop thử mở lại backend cũ và báo lỗi. Nếu việc mở lại cũng thất bại, không tự xóa DB nào; xem `backend.log`.
+Tauri giữ lựa chọn DB, mật khẩu MySQL và khóa phục hồi trong Windows Credential Manager để lần mở sau tự kết nối. Hồ sơ xác minh không chứa các mã này. DB cũ vẫn tồn tại. Khi backend mới không mở được, desktop thử mở lại backend cũ và báo lỗi. Nếu việc mở lại cũng thất bại, không tự xóa DB nào; xem `backend.log`.
 
 ## Quay lại
 

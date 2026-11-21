@@ -66,6 +66,7 @@ export function BackupsPage() {
   const [checkingBackup, setCheckingBackup] = useState(false);
   const [prepared, setPrepared] = useState<PreparedBackup | null>(null);
   const [preparedMysql, setPreparedMysql] = useState<{ username: string; password: string } | null>(null);
+  const [preparedRecoveryKey, setPreparedRecoveryKey] = useState("");
   const [activeDatabase, setActiveDatabase] = useState<string | null>(null);
   const [switchingDatabase, setSwitchingDatabase] = useState(false);
 
@@ -95,6 +96,7 @@ export function BackupsPage() {
     setActiveDatabase(databaseName === "aluminum_app" ? null : databaseName);
     setPrepared(null);
     setPreparedMysql(null);
+    setPreparedRecoveryKey("");
     Modal.success({
       title: `Đã chuyển sang ${databaseName}`,
       width: 600,
@@ -160,10 +162,12 @@ export function BackupsPage() {
               onOk: async () => {
                 setSwitchingDatabase(true);
                 try {
+                  const recoveryKey = preparedRecoveryKey || await getRecoveryKey();
                   const result = await invoke<{ databaseName: string; firstRunCredentials: string | null }>("activate_recovery", {
                     profilePath: prepared.profilePath,
                     databaseUsername: preparedMysql.username,
                     databasePassword: preparedMysql.password,
+                    recoveryKey,
                   });
                   showSwitched(result.databaseName, result.firstRunCredentials);
                 } catch (error) { message.error(String(error)); }
@@ -363,6 +367,7 @@ export function BackupsPage() {
                 databaseUsername, databasePassword);
               setPrepared(result);
               setPreparedMysql({ username: databaseUsername, password: databasePassword });
+              setPreparedRecoveryKey(enteredRecoveryKey);
               message.success(`Đã dựng ${result.databaseName}: ${result.sqlStatements} câu lệnh, ${result.imagesVerified} ảnh`);
             } else {
               await verifyCloud(verifyingObject.key, enteredRecoveryKey);
@@ -387,6 +392,7 @@ export function BackupsPage() {
           try { const result = await prepareLocal(preparingLocal.id, databaseUsername, databasePassword);
             setPrepared(result);
             setPreparedMysql({ username: databaseUsername, password: databasePassword });
+            setPreparedRecoveryKey("");
             message.success(`Đã dựng ${result.databaseName}: ${result.sqlStatements} câu lệnh, ${result.imagesVerified} ảnh`);
             setPreparingLocal(null); setDatabasePassword(""); }
           catch (error) { message.error(toApiError(error).message); }
