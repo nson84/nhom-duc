@@ -35,6 +35,58 @@ static CHILD: Mutex<Option<Child>> = Mutex::new(None);
 static STOPPED: AtomicBool = AtomicBool::new(false);
 static SWITCHING: AtomicBool = AtomicBool::new(false);
 
+// Windows canonicalize() may produce verbatim paths (\\\\?\\C:\\...). The Windows
+// JVM rejects those strings when an application passes them to Path.of(), even
+// though Rust accepts them. Only simplify paths at the Java process boundary.
+#[cfg(windows)]
+fn java_compatible_path(path: &std::path::Path) -> PathBuf {
+    let value = path.to_string_lossy();
+    if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{}", unc));
+    }
+    if let Some(drive) = value.strip_prefix(r"\\?\") {
+        if drive.as_bytes().get(1) == Some(&b':')
+            && drive.as_bytes().get(2).is_some_and(|ch| *ch == b'\\' || *ch == b'/') {
+            return PathBuf::from(drive);
+        }
+    }
+    path.to_path_buf()
+}
+
+#[cfg(not(windows))]
+fn java_compatible_path(path: &std::path::Path) -> PathBuf {
+    path.to_path_buf()
+}
+
+#[cfg(test)]
+mod java_path_tests {
+    use super::java_compatible_path;
+    use std::path::Path;
+    #[test]
+    fn regular_paths_are_preserved() {
+        let path = Path::new(r"C:\Users\Test User\AppData\AluminumManager\jwt.key");
+        assert_eq!(java_compatible_path(path), path);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_drive_paths_are_accepted_by_java() {
+        let path = Path::new(r"\\?\C:\Users\Test User\AppData\AluminumManager\jwt.key");
+        assert_eq!(java_compatible_path(path), Path::new(r"C:\Users\Test User\AppData\AluminumManager\jwt.key"));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_unc_paths_become_standard_unc_paths() {
+        let path = Path::new(r"\\?\UNC\server\share\AluminumManager\jwt.key");
+        assert_eq!(java_compatible_path(path), Path::new(r"\\server\share\AluminumManager\jwt.key"));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn unicode_verbatim_paths_are_preserved_without_prefix() {
+        let path = Path::new(r"\\?\C:\Users\Nguyễn Sơn\AluminumManager\jwt.key");
+        assert_eq!(java_compatible_path(path), Path::new(r"C:\Users\Nguyễn Sơn\AluminumManager\jwt.key"));
+    }
+}
+
 fn active_file() -> PathBuf { app_data_dir().join("active-recovery.json") }
 fn previous_file() -> PathBuf { app_data_dir().join("previous-recovery.json") }
 
@@ -134,7 +186,7 @@ fn start_backend(active: Option<&ActiveRecovery>) -> Result<(), String> {
         .arg("-jar")
         .arg(&jar)
         .current_dir(&data_dir)
-        .env("ALUMINUM_IMAGE_DIR", &image_dir)
+        .env("ALUMINUM_IMAGE_DIR", java_compatible_path(&image_dir))
         .stdin(Stdio::piped());
 
     if let (Some(selection), Some((path, profile))) = (active, profile.as_ref()) {
@@ -155,10 +207,10 @@ fn start_backend(active: Option<&ActiveRecovery>) -> Result<(), String> {
             .env("SPRING_DATASOURCE_USERNAME", &selection.database_username)
             .env("SPRING_DATASOURCE_PASSWORD", password)
             .env("ALUMINUM_INITIAL_RECOVERY_KEY", recovery_key)
-            .env("APPDATA", &runtime)
-            .env("ALUMINUM_JWT_SECRET_FILE", runtime.join("jwt.key"))
+            .env("APPDATA", java_compatible_path(&runtime))
+            .env("ALUMINUM_JWT_SECRET_FILE", java_compatible_path(&runtime.join("jwt.key")))
             .env("ALUMINUM_IMAGE_DIR", &image_dir)
-            .env("ALUMINUM_FIRST_RUN_CREDENTIAL_DIR", runtime.join("credentials"))
+            .env("ALUMINUM_FIRST_RUN_CREDENTIAL_DIR", java_compatible_path(&runtime.join("credentials")))
             .env("ALUMINUM_BACKUP_SCHEDULED_ENABLED", "true");
     }
 
