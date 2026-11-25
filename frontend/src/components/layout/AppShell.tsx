@@ -50,6 +50,7 @@ const ALL_ITEMS = [
   { key: "/thu-chi", icon: <AccountBookOutlined />, label: "Thu chi" },
   { key: "/cong-no", icon: <DollarOutlined />, label: "Công nợ" },
   { key: "/chot-so-thang", icon: <CalendarOutlined />, label: "Chốt sổ tháng" },
+  { key: "/chot-nam", icon: <CalendarOutlined />, label: "Chốt năm" },
   { key: "/bao-cao", icon: <BarChartOutlined />, label: "Báo cáo" },
   { key: "/so-cuoi-nam", icon: <DatabaseOutlined />, label: "Sổ cuối năm" },
   { key: "/sao-luu", icon: <CloudUploadOutlined />, label: "Sao lưu" },
@@ -158,7 +159,12 @@ export function AppShell() {
       theme={dark ? "dark" : "light"}
       mode="inline"
       selectedKeys={[selected]}
-      items={menuItems}
+      defaultOpenKeys={["closing"]}
+      items={menuItems.filter(item => item.key !== "/chot-nam").map(item =>
+        item.key === "/chot-so-thang"
+          ? { key: "closing", icon: <CalendarOutlined />, label: "Kiểm kê & chốt sổ",
+            children: menuItems.filter(entry => entry.key === "/chot-so-thang" || entry.key === "/chot-nam") }
+          : item)}
       onClick={({ key }) => navigate(key)}
     />
   );

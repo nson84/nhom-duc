@@ -1,5 +1,12 @@
 # Việc triển khai: phục hồi R2 bằng giao diện desktop
 
+## Kế hoạch tiếp theo — thống kê từ đầu năm
+
+- [ ] Chốt nguồn và công thức từng chỉ tiêu theo `tasks/plan.md`, đối chiếu hai sổ và kỳ kinh doanh lệch năm dương lịch.
+- [ ] Bổ sung API báo cáo chỉ đọc, kiểm tra quyền shop, số dư công nợ tại mốc và tổng theo tháng trên DB thử riêng.
+- [ ] Thêm màn thống kê trong Báo cáo với khoảng mặc định 01/01 tới hôm nay, liên kết đối chiếu và nhãn dữ liệu thiếu.
+- [ ] Nghiệm thu các ca thanh toán phiếu cũ, chuyển nội bộ, đảo phiếu, thiếu giá vốn và ngày biên; cập nhật tài liệu chức năng/API/test.
+
 Chưa triển khai. Mọi thử nghiệm dùng DB/profile riêng, không ghi DB đang vận hành.
 
 ## R1 — ID và xác minh lần dựng thử

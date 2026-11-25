@@ -178,7 +178,8 @@ public class AttendanceService {
 					BigDecimal.valueOf(8),
 					orZero(request.initialOvertimeWeekdayRate()),
 					orZero(request.initialOvertimeRestdayRate()),
-					orZero(request.initialOvertimeHolidayRate())));
+					orZero(request.initialOvertimeHolidayRate()),
+					orZero(request.initialOvertimeSessionRate())));
 		}
 		audit.record(CurrentAdmin.get().id(), "CREATE_EMPLOYEE", "employees", String.valueOf(id), code);
 		return getEmployee(id);
@@ -252,7 +253,7 @@ public class AttendanceService {
 		getEmployee(employeeId);
 		return jdbc.query("""
 				SELECT id, employee_id, effective_from, effective_to, daily_rate, standard_hours_per_day,
-				       overtime_weekday_rate, overtime_restday_rate, overtime_holiday_rate
+				       overtime_weekday_rate, overtime_restday_rate, overtime_holiday_rate, overtime_session_rate
 				FROM employee_pay_rates
 				WHERE employee_id = ?
 				ORDER BY effective_from DESC, id DESC
@@ -262,8 +263,23 @@ public class AttendanceService {
 	@Transactional
 	public PayRateDto addPayRate(long employeeId, PayRateRequest request) {
 		getEmployee(employeeId);
+		jdbc.queryForObject("SELECT id FROM employees WHERE id = ? FOR UPDATE", Long.class, employeeId);
 		if (request.effectiveTo() != null && request.effectiveTo().isBefore(request.effectiveFrom())) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày kết thúc áp dụng phải sau hoặc bằng ngày bắt đầu", null);
+		}
+		var sameDate = jdbc.query("""
+				SELECT * FROM employee_pay_rates WHERE employee_id = ? AND effective_from = ?
+				ORDER BY id DESC LIMIT 1 FOR UPDATE
+				""", (rs, i) -> mapPayRate(rs), employeeId, Date.valueOf(request.effectiveFrom()));
+		if (!sameDate.isEmpty()) {
+			var existing = sameDate.get(0);
+			if (existing.dailyRate().compareTo(request.dailyRate()) == 0
+					&& existing.standardHoursPerDay().compareTo(request.standardHoursPerDay()) == 0
+					&& existing.overtimeWeekdayRate().compareTo(orZero(request.overtimeWeekdayRate())) == 0
+					&& existing.overtimeRestdayRate().compareTo(orZero(request.overtimeRestdayRate())) == 0
+					&& existing.overtimeHolidayRate().compareTo(orZero(request.overtimeHolidayRate())) == 0
+					&& existing.overtimeSessionRate().compareTo(orZero(request.overtimeSessionRate())) == 0
+					&& java.util.Objects.equals(existing.effectiveTo(), request.effectiveTo())) return existing;
 		}
 		jdbc.update("""
 				UPDATE employee_pay_rates
@@ -276,8 +292,8 @@ public class AttendanceService {
 				Date.valueOf(request.effectiveFrom()));
 		long id = insert("""
 				INSERT INTO employee_pay_rates (employee_id, effective_from, effective_to, daily_rate,
-				    standard_hours_per_day, overtime_weekday_rate, overtime_restday_rate, overtime_holiday_rate)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				    standard_hours_per_day, overtime_weekday_rate, overtime_restday_rate, overtime_holiday_rate, overtime_session_rate)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""",
 				employeeId,
 				Date.valueOf(request.effectiveFrom()),
@@ -286,9 +302,25 @@ public class AttendanceService {
 				request.standardHoursPerDay().setScale(2, RoundingMode.HALF_UP),
 				scaleMoney(orZero(request.overtimeWeekdayRate())),
 				scaleMoney(orZero(request.overtimeRestdayRate())),
-				scaleMoney(orZero(request.overtimeHolidayRate())));
+				scaleMoney(orZero(request.overtimeHolidayRate())),
+				scaleMoney(orZero(request.overtimeSessionRate())));
 		audit.record(CurrentAdmin.get().id(), "ADD_PAY_RATE", "employee_pay_rates", String.valueOf(id),
 				"Thiết lập mức công cho nhân viên #" + employeeId + " từ " + request.effectiveFrom());
+		var workingPeriod = yearEndBalances.selectedWorkingPeriod();
+		jdbc.query("""
+				SELECT p.id, p.period_year, p.period_month
+				FROM payroll_periods p JOIN shop_month_periods m
+				  ON YEAR(m.month_start) = p.period_year AND MONTH(m.month_start) = p.period_month
+				WHERE m.shop_id = ? AND m.closed_at IS NULL AND p.status = 'OPEN'
+				""", (rs, row) -> new PeriodHeader(rs.getLong(1), rs.getInt(2), rs.getInt(3), "OPEN"),
+				shops.currentId()).forEach(period -> {
+			YearMonth month = YearMonth.of(period.year(), period.month());
+			if (month.atEndOfMonth().isBefore(request.effectiveFrom())
+					|| (request.effectiveTo() != null && month.atDay(1).isAfter(request.effectiveTo()))) return;
+			if (workingPeriod != null && (month.atEndOfMonth().isBefore(workingPeriod.periodFrom())
+					|| month.atDay(1).isAfter(workingPeriod.periodTo()))) return;
+			calculatePayroll(period.id());
+		});
 		return jdbc.query("SELECT * FROM employee_pay_rates WHERE id = ?", (rs, i) -> mapPayRate(rs), id).get(0);
 	}
 
@@ -354,7 +386,8 @@ public class AttendanceService {
 				rs.getBigDecimal("standard_hours_per_day"),
 				rs.getBigDecimal("overtime_weekday_rate"),
 				rs.getBigDecimal("overtime_restday_rate"),
-				rs.getBigDecimal("overtime_holiday_rate"));
+				rs.getBigDecimal("overtime_holiday_rate"),
+				rs.getBigDecimal("overtime_session_rate"));
 	}
 
 	// ---------- Holidays & Attendance Policy ----------
@@ -885,7 +918,7 @@ public class AttendanceService {
 				if (item.overtimeHours().signum() == 0) {
 					overtime.ifPresent(ot -> jdbc.update("DELETE FROM overtime_records WHERE id = ?", ot.id()));
 				} else {
-					var overtimeRequest = new OvertimeRequest(null, null, item.overtimeHours(), true, source);
+					var overtimeRequest = new OvertimeRequest(null, null, item.overtimeHours(), null, "HOUR", true, source);
 					if (overtime.isEmpty()) {
 						addOvertime(saved.id(), overtimeRequest);
 					} else if (overtime.get().overtimeHours().compareTo(item.overtimeHours()) != 0) {
@@ -926,15 +959,18 @@ public class AttendanceService {
 		if (day.locked()) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED, "Ngày công đã khóa", null);
 		}
-		BigDecimal hourlyRate = resolveOvertimeHourlyRate(day.employeeId(), day.workDate());
-		BigDecimal hours = request.overtimeHours().setScale(3, RoundingMode.HALF_UP);
-		BigDecimal amount = hours.multiply(hourlyRate).setScale(4, RoundingMode.HALF_UP);
+		String payUnit = requireOvertimePayUnit(request.payUnit());
+		BigDecimal hourlyRate = request.hourlyRate() == null
+				? resolveOvertimeRate(day.employeeId(), day.workDate(), payUnit)
+				: scaleMoney(request.hourlyRate());
+		BigDecimal hours = payUnit.equals("SESSION") ? BigDecimal.ZERO : request.overtimeHours().setScale(3, RoundingMode.HALF_UP);
+		BigDecimal amount = AttendanceCalculator.overtimeAmount(payUnit, hours, hourlyRate);
 		boolean approved = Boolean.TRUE.equals(request.approved());
 		long otId = insert("""
 				INSERT INTO overtime_records (
 				    attendance_id, overtime_type, start_at, end_at, overtime_hours,
-				    hourly_rate_snapshot, amount, is_approved, notes)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				    hourly_rate_snapshot, amount, pay_unit, is_approved, notes)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""",
 				attendanceId,
 				"WEEKDAY",
@@ -943,6 +979,7 @@ public class AttendanceService {
 				hours,
 				hourlyRate,
 				amount,
+				payUnit,
 				approved,
 				blank(request.notes()));
 		audit.record(CurrentAdmin.get().id(), "ADD_OVERTIME", "overtime_records", String.valueOf(otId),
@@ -963,15 +1000,17 @@ public class AttendanceService {
 		if (day.locked()) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED, "Ngày công đã khóa", null);
 		}
-		BigDecimal hourlyRate = jdbc.queryForObject(
-				"SELECT hourly_rate_snapshot FROM overtime_records WHERE id = ?", BigDecimal.class, overtimeId);
-		BigDecimal hours = request.overtimeHours().setScale(3, RoundingMode.HALF_UP);
-		BigDecimal amount = hours.multiply(hourlyRate).setScale(4, RoundingMode.HALF_UP);
+		String payUnit = requireOvertimePayUnit(request.payUnit());
+		BigDecimal hourlyRate = request.hourlyRate() == null
+				? resolveOvertimeRate(day.employeeId(), day.workDate(), payUnit)
+				: scaleMoney(request.hourlyRate());
+		BigDecimal hours = payUnit.equals("SESSION") ? BigDecimal.ZERO : request.overtimeHours().setScale(3, RoundingMode.HALF_UP);
+		BigDecimal amount = AttendanceCalculator.overtimeAmount(payUnit, hours, hourlyRate);
 		boolean approved = Boolean.TRUE.equals(request.approved());
 		jdbc.update("""
 				UPDATE overtime_records
 				SET start_at = ?, end_at = ?, overtime_hours = ?,
-				    hourly_rate_snapshot = ?, amount = ?, is_approved = ?, notes = ?
+				    hourly_rate_snapshot = ?, amount = ?, pay_unit = ?, is_approved = ?, notes = ?
 				WHERE id = ?
 				""",
 				request.startAt() == null ? null : Timestamp.valueOf(request.startAt()),
@@ -979,6 +1018,7 @@ public class AttendanceService {
 				hours,
 				hourlyRate,
 				amount,
+				payUnit,
 				approved,
 				blank(request.notes()),
 				overtimeId);
@@ -1002,11 +1042,18 @@ public class AttendanceService {
 		return getAttendanceById(attendanceId);
 	}
 
-	private BigDecimal resolveOvertimeHourlyRate(long employeeId, LocalDate date) {
+	private static String requireOvertimePayUnit(String payUnit) {
+		if (payUnit == null || payUnit.equals("HOUR")) return "HOUR";
+		if (payUnit.equals("SESSION")) return "SESSION";
+		throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Đơn vị tăng ca không hợp lệ", null);
+	}
+
+	private BigDecimal resolveOvertimeRate(long employeeId, LocalDate date, String payUnit) {
 		PayRateDto rate = effectivePayRate(employeeId, date);
 		if (rate == null) {
 			return BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
 		}
+		if (payUnit.equals("SESSION")) return rate.overtimeSessionRate();
 		BigDecimal configured = rate.overtimeWeekdayRate();
 		if (configured != null && configured.signum() > 0) {
 			return configured.setScale(4, RoundingMode.HALF_UP);
@@ -1063,6 +1110,7 @@ public class AttendanceService {
 				rs.getBigDecimal("overtime_hours"),
 				rs.getBigDecimal("hourly_rate_snapshot"),
 				rs.getBigDecimal("amount"),
+				rs.getString("pay_unit"),
 				rs.getBoolean("is_approved"),
 				rs.getString("notes"));
 	}

@@ -30,8 +30,16 @@ public final class StockDtos {
 			@DecimalMin(value = "0", inclusive = false, message = "Chiều rộng phải lớn hơn 0") BigDecimal heightM,
 			/** Bán m²: khối lượng thực tế (kg) để trừ tồn — tách với diện tích tính tiền. */
 			@DecimalMin(value = "0", inclusive = false, message = "Khối lượng trừ tồn phải lớn hơn 0") BigDecimal stockQuantityKg,
-			Long factoryPurchaseItemId
+			Long factoryPurchaseItemId,
+			@DecimalMin(value = "0", inclusive = false)
+			@jakarta.validation.constraints.Digits(integer = 12, fraction = 6) BigDecimal enteredCostPerKg
 	) {
+		public ItemRequest(Long productId, Long categoryId, Long unitId, BigDecimal quantityDocument,
+				BigDecimal unitPrice, BigDecimal lineDiscount, String billingUnit, BigDecimal widthM,
+				BigDecimal heightM, BigDecimal stockQuantityKg, Long factoryPurchaseItemId) {
+			this(productId, categoryId, unitId, quantityDocument, unitPrice, lineDiscount, billingUnit,
+					widthM, heightM, stockQuantityKg, factoryPurchaseItemId, null);
+		}
 	}
 
 	public record DocumentRequest(
@@ -47,8 +55,15 @@ public final class StockDtos {
 			String notes,
 			@Size(max = 80) String idempotencyKey,
 			@NotEmpty(message = "Phiếu cần ít nhất một dòng hàng") List<@Valid ItemRequest> items,
-			Boolean internal
+			Boolean internal,
+			Boolean paperSource
 	) {
+		public DocumentRequest(String documentType, LocalDateTime documentDate, String counterpartyName,
+				Long customerId, String issuedBy, String receivedBy, String reason, BigDecimal discountAmount,
+				String paymentMethod, String notes, String idempotencyKey, List<ItemRequest> items, Boolean internal) {
+			this(documentType, documentDate, counterpartyName, customerId, issuedBy, receivedBy, reason,
+					discountAmount, paymentMethod, notes, idempotencyKey, items, internal, null);
+		}
 	}
 
 	public record ReverseRequest(@NotBlank(message = "Nhập lý do đảo phiếu") @Size(max = 500) String reason) {
@@ -92,7 +107,8 @@ public final class StockDtos {
 			BigDecimal standardCostPerBase,
 			BigDecimal standardCostTotal,
 			Long factoryPurchaseItemId,
-			BigDecimal factoryReferenceCostPerKg
+			BigDecimal factoryReferenceCostPerKg,
+			BigDecimal enteredCostPerKg
 	) {
 	}
 
@@ -133,7 +149,8 @@ public final class StockDtos {
 			boolean internal,
 			Long internalPairDocumentId,
 			String internalPairDocumentCode,
-			LocalDateTime trashedAt
+			LocalDateTime trashedAt,
+			boolean paperSource
 	) {
 	}
 
@@ -192,6 +209,7 @@ public final class StockDtos {
 			Long id,
 			LocalDateTime movementAt,
 			String documentCode,
+			boolean internal,
 			String movementType,
 			BigDecimal quantityDeltaBase,
 			BigDecimal unitCost

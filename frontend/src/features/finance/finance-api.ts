@@ -6,6 +6,7 @@ export type FinanceTransaction = {
   id: number;
   transactionCode: string;
   transactionDate: string;
+  monthlySummary: boolean;
   transactionType: "INCOME" | "EXPENSE";
   category:
     | "SALE_RECEIPT"
@@ -166,14 +167,18 @@ export async function getFinanceSummary(from: string, to: string, scope?: "all")
 
 export async function createFinanceTransaction(input: {
   transactionDate?: string;
+  monthlySummary?: boolean;
   transactionType: "INCOME" | "EXPENSE";
   category: string;
   amount: number;
   description?: string;
   spentBy?: string;
-  idempotencyKey: string;
-}): Promise<FinanceTransaction> {
-  return (await api.post<Envelope<FinanceTransaction>>("/api/v1/finance/transactions", input)).data.data;
+  idempotencyKey?: string;
+}, id?: number): Promise<FinanceTransaction> {
+  const response = id == null
+    ? await api.post<Envelope<FinanceTransaction>>("/api/v1/finance/transactions", input)
+    : await api.put<Envelope<FinanceTransaction>>(`/api/v1/finance/transactions/${id}`, input);
+  return response.data.data;
 }
 
 export async function voidFinanceTransaction(id: number, reason: string): Promise<FinanceTransaction> {
@@ -182,6 +187,18 @@ export async function voidFinanceTransaction(id: number, reason: string): Promis
 
 export async function getProfitReport(from: string, to: string, scope?: "all"): Promise<ProfitReport> {
   return (await api.get<Envelope<ProfitReport>>("/api/v1/reports/profit", { params: { from, to, scope } })).data.data;
+}
+
+export type MonthlyMargin = {
+  month: string;
+  grossProfit: number | null;
+  operatingCost: number;
+  payrollCost: number;
+  profitAfterExpenses: number | null;
+};
+
+export async function getMonthlyMargins(from: string, to: string): Promise<MonthlyMargin[]> {
+  return (await api.get<Envelope<MonthlyMargin[]>>("/api/v1/reports/monthly-margins", { params: { from, to } })).data.data;
 }
 
 export async function getInvoiceMargins(from: string, to: string): Promise<InvoiceGrossMargin[]> {

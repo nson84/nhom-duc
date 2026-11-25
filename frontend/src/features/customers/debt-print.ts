@@ -40,7 +40,7 @@ function receiptDetail(doc: StockDocument): string {
   }
   const lines = payments
     .map((payment) => {
-      const when = dayjs(payment.paymentDate).format("DD/MM/YYYY HH:mm");
+      const when = dayjs(payment.paymentDate).format("DD/MM/YYYY");
       const method = paymentMethodLabel(payment.paymentMethod) || "—";
       return `<tr>
         <td class="when">${when}</td>
@@ -56,7 +56,7 @@ function receiptDetail(doc: StockDocument): string {
     </colgroup>
     <thead>
       <tr>
-        <th>Ngày giờ</th>
+        <th>Ngày</th>
         <th>Số tiền</th>
         <th>Hình thức thanh toán</th>
         <th>Người thu</th>
@@ -154,7 +154,7 @@ export async function buildDebtListHtml(params: {
       return `<section class="invoice">
         <div class="invoice-head">
           <div>
-            <b>Hóa đơn ${index + 1} · ${dayjs(doc.documentDate).format("DD/MM/YYYY HH:mm")}</b>
+            <b>Hóa đơn ${index + 1} · ${dayjs(doc.documentDate).format("DD/MM/YYYY")}</b>
             <div class="people">Người xuất: <b>${escapeHtml(doc.issuedBy) || "—"}</b> · Người nhận: <b>${escapeHtml(doc.receivedBy) || "—"}</b></div>
           </div>
           ${paymentBadge(doc)}

@@ -2,6 +2,10 @@
 
 Prefix `/api/v1`. Mọi phản hồi có `success`. Lỗi có `code` và `message`.
 
+`POST /attendance/{id}/overtime` và `PUT /overtime/{id}` nhận `overtimeHours`, `approved`, `notes` và `hourlyRate` tùy chọn (đồng theo đơn vị đã chọn, không âm). Bỏ trống `hourlyRate` dùng mức cấu hình hiệu lực theo ngày công; response trả `hourlyRateSnapshot` và `amount` đã lưu.
+
+Hai API tăng ca nhận thêm `payUnit: HOUR | SESSION` (thiếu thì mặc định HOUR). Với SESSION, gửi `overtimeHours: 1` để qua kiểm tra đầu vào; hệ thống lưu 0 giờ và tính đúng một mức tiền buổi. `hourlyRate` là đơn giá theo đơn vị đã chọn. API thêm nhân viên và mức công nhận `initialOvertimeSessionRate` hoặc `overtimeSessionRate`; response mức công trả `overtimeSessionRate`. Dữ liệu tăng ca trả `payUnit`.
+
 | Method | Đường dẫn | Ghi chú |
 | --- | --- | --- |
 | POST | `/auth/login` | Công khai |
@@ -21,7 +25,8 @@ Prefix `/api/v1`. Mọi phản hồi có `success`. Lỗi có `code` và `messag
 | GET | `/dashboard/summary?from&to` | Doanh thu, tiền thu, lãi gộp, chi phí, tồn, tiền công |
 | POST | `/dashboard/distribution-close?from&to&annual=true&year=2026` | Chốt năm Phân phối theo khoảng ngày tự chọn; `year` là tên kỳ. Kỳ liền sau phải bắt đầu ngày tiếp theo. |
 | GET | `/dashboard/year-end?year` | Bản số dư chốt năm theo sổ đang chọn; `data: null` nếu chưa chốt. Gồm `periodFrom`, `periodTo`, `inventoryKg`, `inventoryValue`, `customerDebt`, `supplierDebt`, `profit`, `closedAt` |
-| GET | `/reports/annual-book?year&shopCode` | Dữ liệu cho sổ cuối năm: khách, phiếu bán/nhập, thanh toán, thu chi, công thợ, tồn kho. Xưởng/Phân phối chỉ xem `shopCode` của mình; Admin bị từ chối. |
+| GET | `/reports/annual-book?year&shopCode` | Dữ liệu sổ cuối năm: khách, phiếu bán/nhập, thanh toán, thu chi, công thợ, tồn kho. `transfersOut`/`transferItems` chứa phiếu xuất nội bộ Phân phối trong kỳ; `purchases` của Xưởng gồm phiếu nhập nội bộ trước kỳ để đối chiếu. Xưởng/Phân phối chỉ xem sổ của mình; Admin bị từ chối. |
+| GET | `/stock-movements?productId` | Biến động tồn của sản phẩm trong sổ hiện tại; mỗi dòng trả `internal` để nhận biết phiếu chuyển nội bộ. |
 | GET | `/dashboard/charts?from&to` | Theo ngày, múi giờ Việt Nam, `to` tính đến hết ngày |
 
 ## Landing page công khai (khách xem, để lại thông tin)
@@ -67,6 +72,7 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 | GET | `/dashboard/month-status` | Nhận `month=YYYY-MM`, trả `NOT_OPEN` / `OPEN` / `CLOSED` cho cửa hàng đang chọn |
 | POST | `/dashboard/month-open` | Nhận `year`, `month`; mở tháng đầu hoặc tháng kế tiếp sau khi tháng trước đã khóa |
 | POST | `/dashboard/month-close` | Nhận `year`, `month`; khóa tháng đã mở sau khi hết tháng (Xưởng cần chốt kỳ công trước) |
+| POST | `/dashboard/month-reopen` | Nhận `year`, `month=YYYY-MM`; mở lại tháng đã khóa của sổ đăng nhập nếu không có bản chốt liên quan |
 | GET | `/products` | SP: mã, tên, ảnh, trạng thái, tổng tồn gộp |
 | POST / PUT | `/products` / `/products/{id}` | Chỉ mã/tên/ảnh/trạng thái; đơn vị kg/tạ/tấn tự tạo |
 | POST/PUT | stock documents items | Bắt buộc `categoryId`; phiếu bán xưởng nhận kg/tạ/tấn, lưu `quantityBase` là kg nhôm thành phẩm |
@@ -139,3 +145,29 @@ POST /dashboard/monthly-book: rawKg phải có; scrapKg có thể null/không g�
 GET /api/v1/system/ready giữ application/status/database/schemaVersion/version/revision và trả thêm databaseName từ `SELECT DATABASE()`. Desktop dùng tên này để xác nhận chuyển DB; API không trả thông tin xác thực.
 
 POST /api/v1/backups/{id}/prepare và /api/v1/backups/cloud/prepare trả databaseName, sqlStatements, imagesVerified, imageDirectory, profilePath. Hồ sơ sinh sau xác minh staging, không có tài khoản/mật khẩu MySQL. Quyền Admin giữ nguyên; restore trực tiếp vẫn503. Lệnh Tauri `activate_recovery`, `rollback_recovery`, `recovery_status` phục vụ chuyển/quay lại trong desktop, không mở thành HTTP API. Quy trình: recovery-runbook.md.
+
+
+## Chuyển sổ giấy
+
+- Stock document request nhận paperSource và items[].enteredCostPerKg. Chi tiết phiếu trả các trường này.
+- PUT /api/v1/stock-documents/{id}/payments/{paymentId}/date nhận date dạng YYYY-MM-DD, trả phiếu đã cập nhật.
+- API ghi và sửa ngày thanh toán từ chối ngày trước ngày lập phiếu. API sửa phiếu từ chối dời ngày lập qua ngày đã thanh toán.
+- Finance transaction request và response có monthlySummary. transactionDate dùng mốc phân kỳ khi monthlySummary là true.
+- GET /api/v1/reports/monthly-margins?from=YYYY-MM-DD&to=YYYY-MM-DD trả month, grossProfit, operatingCost, payrollCost, profitAfterExpenses. Lãi null khi thiếu giá vốn. Bản in năm trả monthlySummary trên các dòng thu chi.
+
+POST /api/v1/dashboard/monthly-book/reconcile nhận year, month và items gồm productId, categoryId, countedQuantityKg, scrapKg tùy chọn. Chỉ Phân phối có tháng đang mở được dùng. Trả bản chốt tháng sau khi cập nhật kho trong cùng giao dịch.
+
+
+DELETE /api/v1/dashboard/year-period?year=2025&from=2026-02-22 trả trạng thái kỳ sau khi xóa thiết lập. Chỉ Xưởng và Phân phối trong sổ tương ứng. Kỳ đã sử dụng hoặc ngày bắt đầu đã đổi trả lỗi kiểm tra.
+
+
+Lưu ngày kết thúc dự kiến từ chối khi mốc mới loại tháng đã mở hoặc chứng từ, thu chi trong kỳ.
+
+
+POST /api/v1/system/desktop-backup/dev-handoff-check và /dev-handoff chỉ gọi từ desktop qua loopback với X-Desktop-Backup-Token. Lệnh check trả imageDirectory. Lệnh bàn giao sao lưu thành công trước khi yêu cầu JVM dừng.
+
+
+GET /api/v1/stock-documents?filter=internal-history và GET /api/v1/stock-documents/{id}?internalHistory=true cho Xưởng tra phiếu nhập nội bộ ngoài bộ lọc kỳ. Quyền ghi và số liệu kỳ giữ nguyên.
+
+
+PUT /api/v1/finance/transactions/{id} dùng các trường của yêu cầu lập phiếu chi. Chỉ sửa khoản EXPENSE, MANUAL, CONFIRMED của sổ hiện tại, ngoài PAYROLL. Ngày gốc và ngày mới phải thuộc tháng mở chưa chốt sổ.

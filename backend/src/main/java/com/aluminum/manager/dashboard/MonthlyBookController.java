@@ -3,6 +3,9 @@ package com.aluminum.manager.dashboard;
 import com.aluminum.manager.common.ApiResponse;
 import com.aluminum.manager.common.BusinessException;
 import com.aluminum.manager.common.ErrorCode;
+import com.aluminum.manager.inventory.StockDocumentService;
+import com.aluminum.manager.inventory.StockDtos.InventoryCountItemRequest;
+import com.aluminum.manager.inventory.InventoryMath;
 import com.aluminum.manager.shop.ShopAccess;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -11,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +29,15 @@ public class MonthlyBookController {
     private final YearEndBalanceService periods;
     private final ObjectMapper mapper;
     private final MonthlyInventoryValuation valuation;
+    private final StockDocumentService stock;
 
-    public MonthlyBookController(JdbcTemplate jdbc, ShopAccess shops, YearEndBalanceService periods, ObjectMapper mapper, MonthlyInventoryValuation valuation) {
+    public MonthlyBookController(JdbcTemplate jdbc, ShopAccess shops, YearEndBalanceService periods, ObjectMapper mapper, MonthlyInventoryValuation valuation, StockDocumentService stock) {
         this.jdbc = jdbc;
         this.shops = shops;
         this.periods = periods;
         this.mapper = mapper;
         this.valuation = valuation;
+        this.stock = stock;
     }
 
     public record Count(long categoryId, String category, @NotNull @DecimalMin("0") BigDecimal rawKg,
@@ -40,6 +46,65 @@ public class MonthlyBookController {
                            BigDecimal sales, BigDecimal purchases, BigDecimal expenses, boolean closed, BigDecimal openingValue, BigDecimal endingValue,
                            BigDecimal internalOut, BigDecimal profit) {}
     public record Input(int year, String month, @NotNull List<@NotNull @Valid Count> counts, @DecimalMin("0") BigDecimal openingValue) {}
+    public record ReconcileInput(int year, String month, @NotNull List<@NotNull @Valid InventoryCountItemRequest> items) {}
+    private record StockKey(long productId, long categoryId) {}
+
+    @PostMapping("/reconcile")
+    @Transactional
+    public ApiResponse<Snapshot> reconcile(@Valid @RequestBody ReconcileInput input) {
+        if (!shops.isDistribution()) throw invalid("Chỉ Phân phối cập nhật tồn kho theo số cân tháng");
+        long shopId = shops.currentId();
+        jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shopId);
+        Snapshot current = get(input.year(), input.month()).data();
+        if (current.closed()) throw invalid("Tháng đã có bản chốt sổ");
+        if (current.to().isAfter(LocalDate.now())) throw invalid("Chỉ chốt sổ tháng đã kết thúc");
+        var countDate = current.to().atTime(23, 59, 59);
+        periods.requireWorkingDate(countDate);
+        Integer later = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM stock_movements m JOIN products p ON p.id = m.product_id
+                WHERE p.shop_id = ? AND m.movement_at >= ?
+                """, Integer.class, shopId, current.to().plusDays(1).atStartOfDay());
+        if (later != null && later > 0) throw invalid("Kho đã biến động sau cuối tháng. Không thể dùng số cân tháng cũ để cập nhật kho hiện tại.");
+
+        var counts = new HashMap<StockKey, InventoryCountItemRequest>();
+        for (var item : input.items()) {
+            if (counts.put(new StockKey(item.productId(), item.categoryId()), item) != null)
+                throw invalid("Dòng kiểm kê bị trùng");
+        }
+        var adjustments = new java.util.ArrayList<InventoryCountItemRequest>();
+        var totals = new HashMap<Long, BigDecimal>();
+        var scraps = new HashMap<Long, BigDecimal>();
+        for (var balance : stock.balances(null, false)) {
+            var item = counts.remove(new StockKey(balance.productId(), balance.categoryId()));
+            if (item == null) throw invalid("Nhập số cân cho tất cả dòng tồn kho. Nhập 0 nếu đã cân và kho hết hàng.");
+            BigDecimal counted = item.countedQuantityKg().setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
+            BigDecimal scrap = item.scrapKg() == null ? BigDecimal.ZERO : item.scrapKg();
+            boolean unchanged = counted.compareTo(balance.quantityBase()) == 0;
+            boolean alreadyCounted = unchanged && Boolean.TRUE.equals(jdbc.queryForObject("""
+                    SELECT EXISTS(SELECT 1 FROM distribution_inventory_count_evidence e
+                       WHERE e.shop_id = ? AND e.product_id = ? AND e.category_id = ?
+                         AND e.counted_quantity_kg = ? AND e.counted_at >= ?
+                         AND NOT EXISTS (SELECT 1 FROM stock_movements m
+                             WHERE m.product_id = e.product_id AND m.category_id = e.category_id
+                               AND (m.created_at > e.counted_at OR m.movement_at > e.counted_at)))
+                    """, Boolean.class, shopId, item.productId(), item.categoryId(), counted, current.to().atStartOfDay()));
+            if (alreadyCounted) {
+                if (item.scrapKg() != null && scrap.compareTo(balance.latestCountScrapKg()) != 0)
+                    throw invalid("Dòng đã kiểm kê có số vụn khác. Hãy đối chiếu số vụn đã lưu trước khi chốt.");
+                scrap = balance.latestCountScrapKg();
+            } else {
+                adjustments.add(item);
+            }
+            totals.merge(item.categoryId(), counted, BigDecimal::add);
+            scraps.merge(item.categoryId(), scrap, BigDecimal::add);
+        }
+        if (!counts.isEmpty()) throw invalid("Danh sách tồn kho đã thay đổi. Hãy tải lại màn hình.");
+        stock.applyPhysicalCount(adjustments, countDate);
+        var snapshotCounts = current.counts().stream().map(row -> new Count(row.categoryId(), row.category(),
+                totals.getOrDefault(row.categoryId(), BigDecimal.ZERO),
+                scraps.getOrDefault(row.categoryId(), BigDecimal.ZERO), null, null)).toList();
+        return close(new Input(input.year(), input.month(), snapshotCounts, null));
+    }
 
     @GetMapping
     @Transactional(readOnly = true)

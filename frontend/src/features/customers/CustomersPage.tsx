@@ -133,13 +133,13 @@ export function CustomersPage() {
       </Space>
 
       <Row className="customer-summary-row" gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={6}><Card size="small"><Statistic title="Khối lượng đã giao" value={rows.reduce((sum, row) => sum + (row.deliveredKg ?? 0), 0)} precision={3} suffix="kg" />
+        <Col xs={24} sm={12} xl={6}><Card size="small"><Statistic title="Khối lượng đã giao" value={rows.reduce((sum, row) => sum + (row.deliveredKg ?? 0), 0)} precision={3} suffix="kg" />
           <DeliveredByCategory from={range?.[0]?.format("YYYY-MM-DD")} to={range?.[1]?.format("YYYY-MM-DD")}
             customerIds={rows.map((row) => row.id)} scope={scope} shopKey={scope} />
         </Card></Col>
-        <Col xs={24} md={6}><Card size="small"><Statistic title="Tiền hàng phải thu" value={formatMoney(rows.reduce((sum, row) => sum + row.totalSales, 0))} /></Card></Col>
-        <Col xs={24} md={6}><Card size="small"><Statistic title="Đã thu từ các hóa đơn đã lọc (tính đến nay)" value={formatMoney(rows.reduce((sum, row) => sum + (row.receivedAmount ?? 0), 0))} /></Card></Col>
-        <Col xs={24} md={6}><Card size="small"><Statistic title="Khách còn nợ" value={formatMoney(rows.reduce((sum, row) => sum + row.outstandingDebt, 0))} /></Card></Col>
+        <Col xs={24} sm={12} xl={6}><Card size="small"><Statistic title="Tiền hàng phải thu" value={formatMoney(rows.reduce((sum, row) => sum + row.totalSales, 0))} /></Card></Col>
+        <Col xs={24} sm={12} xl={6}><Card size="small"><Statistic title={<span title="Tổng đã thu đến nay của các hóa đơn đang lọc">Đã thu đến nay</span>} value={formatMoney(rows.reduce((sum, row) => sum + (row.receivedAmount ?? 0), 0))} /></Card></Col>
+        <Col xs={24} sm={12} xl={6}><Card size="small"><Statistic title="Khách còn nợ" value={formatMoney(rows.reduce((sum, row) => sum + row.outstandingDebt, 0))} /></Card></Col>
       </Row>
       <PagedTable<Customer>
         rowKey="id"
@@ -207,10 +207,12 @@ export function CustomersPage() {
 
 function CustomerFormModal({
   initialName,
+  customer,
   onClose,
   onSaved,
 }: {
   initialName?: string;
+  customer?: Pick<Customer, "id" | "name" | "phone" | "note" | "active">;
   onClose: () => void;
   onSaved: (customer: Customer) => void;
 }) {
@@ -222,7 +224,7 @@ function CustomerFormModal({
       title={
         <Space>
           <UserOutlined />
-          Thêm khách hàng
+          {customer ? "Sửa thông tin khách" : "Thêm khách hàng"}
         </Space>
       }
       open
@@ -235,17 +237,22 @@ function CustomerFormModal({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ name: initialName ?? "", active: true }}
+        initialValues={{
+          name: customer?.name ?? initialName ?? "",
+          phone: customer?.phone ?? "",
+          note: customer?.note ?? "",
+          active: customer?.active ?? true,
+        }}
         onFinish={async (values) => {
           setSaving(true);
           try {
-            const saved = await saveCustomer(undefined, {
+            const saved = await saveCustomer(customer?.id, {
               name: values.name.trim(),
               phone: values.phone?.trim() || undefined,
               note: values.note?.trim() || undefined,
               active: values.active,
             });
-            message.success("Đã thêm khách hàng");
+            message.success(customer ? "Đã cập nhật thông tin khách" : "Đã thêm khách hàng");
             onSaved(saved);
           } catch (error) {
             message.error(toApiError(error).message);

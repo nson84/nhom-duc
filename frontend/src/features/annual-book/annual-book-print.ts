@@ -3,14 +3,15 @@ import { expenseLabelFromDescription } from "../finance/expense-kinds";
 
 const money = (value: number | null | undefined) => value == null ? "—" : new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value) + " đ";
 const qty = (value: number | null | undefined) => value == null ? "—" : new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(value);
-const date = (value: string) => `${day(value.slice(0, 10))} ${value.slice(11, 16)}`;
+const tonnes = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 6 });
+const date = (value: string) => day(value.slice(0, 10));
 const day = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("vi-VN");
 const esc = (value: string | number | null | undefined) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 })[char] ?? char);
 const sum = (values: number[]) => values.reduce((total, value) => total + Number(value), 0);
 const row = (values: (string | number)[], cells = "td") => `<tr>${values.map((value) => `<${cells}>${value}</${cells}>`).join("")}</tr>`;
-const table = (headers: string[], rows: string[][], empty = "Không có dữ liệu") => `<table><thead>${row(headers.map(esc), "th")}</thead><tbody>${rows.length ? rows.map((cells) => row(cells)).join("") : `<tr><td colspan="${headers.length}">${empty}</td></tr>`}</tbody></table>`;
+const table = (headers: string[], rows: string[][], empty = "Không có dữ liệu", className?: string) => `<table${className ? ` class="${className}"` : ""}><thead>${row(headers.map(esc), "th")}</thead><tbody>${rows.length ? rows.map((cells) => row(cells)).join("") : `<tr><td colspan="${headers.length}">${empty}</td></tr>`}</tbody></table>`;
 const categoryNames: Record<string, string> = {
   SALE_RECEIPT: "Thu tiền bán hàng", OTHER_INCOME: "Thu khác / bán phế liệu",
   PURCHASE_PAYMENT: "Trả tiền nhập hàng", PAYROLL: "Chi công thợ",
@@ -25,16 +26,16 @@ function saleBlock(book: AnnualBook, sale: AnnualBook["sales"][number]) {
   const paid = remaining <= 0;
   return `<div class="invoice ${paid ? "invoice-paid" : "invoice-unpaid"}">
     <div class="invoice-heading"><h4>${esc(sale.code)} · ${esc(date(sale.date))}</h4><span class="payment-status ${paid ? "status-paid" : "status-unpaid"}">${paid ? "✓ Đã thanh toán" : sale.paidNow > 0 ? "⚠ Thanh toán một phần" : "⚠ Chưa thanh toán"}</span></div>
-    <p>Khách: ${esc(sale.customerName || "Chưa gắn khách")} · Người bán: ${esc(sale.seller || "—")} · Người nhận: ${esc(sale.receiver || "—")}</p>
     ${table(["Sản phẩm", "Loại nhôm", "Số lượng", "Đơn giá", "Thành tiền"], items.map((item) => [
       esc(item.product), esc(item.category), `${qty(item.quantity)} ${esc(item.unit)}`, money(item.unitPrice), money(item.amount),
     ]))}
-    ${table(["Khối lượng nhôm", "Tiền hóa đơn", "Đã thu đến lúc in", "Còn phải thu hiện tại"], [[`${qty(sum(items.map((item) => item.quantityKg)))} kg`, money(sale.total), money(sale.paidNow), money(remaining)]])}
-    ${sale.paidNow !== sale.paidAsOf ? `<p class="period-note">Tại ngày chốt ${day(book.periodTo)}: đã thu ${money(sale.paidAsOf)}, còn nợ ${money(Math.max(0, sale.total - sale.paidAsOf))}. Các lần trả sau kỳ được ghi riêng bên dưới.</p>` : ""}
-    ${sale.notes ? `<p>Ghi chú: ${esc(sale.notes)}</p>` : ""}
-    ${table(["Lần thu", "Số tiền", "Hình thức", "Người thu", "Ghi chú"], payments.map((payment) => [
-      esc(date(payment.date)), money(payment.amount), esc(({ CASH: "Tiền mặt", TRANSFER: "Chuyển khoản", OTHER: "Khác" } as Record<string, string>)[payment.method] ?? payment.method), esc(payment.collector || "—"), esc(payment.note || ""),
-    ]), "Chưa ghi thu")}
+    <p><strong>Đã trả: ${money(sale.paidNow)}</strong></p>
+    ${payments.length ? `<ul class="invoice-payments">${payments.map((payment) => {
+      const method = ({ CASH: "Tiền mặt", TRANSFER: "Chuyển khoản", OTHER: "Khác" } as Record<string, string>)[payment.method] ?? payment.method;
+      return `<li>${esc(date(payment.date))} · ${money(payment.amount)}${method ? ` <span class="payment-method">${esc(method)}</span>` : ""}</li>`;
+    }).join("")}</ul>` : ""}
+    <p><strong>Còn nợ: ${money(remaining)}</strong></p>
+    ${sale.paidNow !== sale.paidAsOf ? `<p class="period-note">Tại ngày chốt ${day(book.periodTo)}: đã trả ${money(sale.paidAsOf)}, còn nợ ${money(Math.max(0, sale.total - sale.paidAsOf))}.</p>` : ""}
   </div>`;
 }
 
@@ -48,10 +49,32 @@ function transactions(book: AnnualBook, kind: "receipts" | "expenses") {
     ${groups.map((category) => {
       const rows = entries.filter((entry) => groupOf(entry) === category);
       return `<h3>${esc(categoryNames[category] ?? category)} · ${money(sum(rows.map((entry) => entry.amount)))}</h3>`
-        + table(["Ngày giờ", "Mã", kind === "expenses" ? "Người chi" : "Người thu", "Nội dung", "Số tiền"], rows.map((entry) => [
-          esc(date(entry.date)), esc(entry.code),
-          esc(entry.spentBy || ""), esc(entry.description || ""), money(entry.amount),
-        ]));
+        + table(["Ngày / tháng", "Mã", ...(kind === "expenses" ? ["Người trả", "Người thu"] : ["Người thu"]), "Nội dung", "Số tiền"], rows.map((entry) => {
+          let description = entry.description ?? "";
+          let person = entry.spentBy ?? "";
+          let receiver = "";
+          if (kind === "receipts" || entry.category === "PURCHASE_PAYMENT") {
+            const noteIndex = description.indexOf(". Ghi chú:");
+            let details = noteIndex < 0 ? description : description.slice(0, noteIndex);
+            const collector = /\. Người thu:\s*(.+)$/u.exec(details);
+            if (collector) {
+              receiver = collector[1].trim();
+              details = details.slice(0, collector.index);
+            }
+            if (kind === "expenses") {
+              const payer = /\. Người trả:\s*(.+)$/u.exec(details);
+              if (payer) {
+                person = payer[1].trim();
+                details = details.slice(0, payer.index);
+              }
+            } else if (receiver) person = receiver;
+            description = details + (noteIndex < 0 ? "" : description.slice(noteIndex));
+          }
+          return [
+            esc(entry.monthlySummary ? `Tổng tháng ${entry.date.slice(5, 7)}/${entry.date.slice(0, 4)}` : day(entry.date.slice(0, 10))),
+            esc(entry.code), esc(person), ...(kind === "expenses" ? [esc(receiver)] : []), esc(description), money(entry.amount),
+          ];
+        }), undefined, kind === "receipts" ? "receipt-table" : "expense-table");
     }).join("") || "<p>Không có giao dịch.</p>"}
     <p class="grand">Tổng ${kind === "receipts" ? "thu" : "chi"}: ${money(sum(entries.map((entry) => entry.amount)))}</p>
   </section>`;
@@ -65,6 +88,7 @@ function shopHtml(book: AnnualBook) {
   const debtors = customerSales.filter((sale) => currentDebt(sale) > 0);
   const externalPurchases = book.purchases.filter((purchase) => !purchase.internal);
   const internalPurchases = book.purchases.filter((purchase) => purchase.internal);
+  const periodInternalPurchases = internalPurchases.filter((purchase) => purchase.date.slice(0, 10) >= book.periodFrom);
   const customerAnchor = (id: number) => `customer-${book.shopCode}-${id}`;
   return `<section class="shop-cover"><h1>${esc(book.shopName)}</h1><h2>Sổ tổng hợp ${esc(book.periodName)}</h2>
     <p>Kỳ từ ${day(book.periodFrom)} đến hết ngày ${day(book.periodTo)}</p>
@@ -77,7 +101,7 @@ function shopHtml(book: AnnualBook) {
       <div>Còn nợ nhà cung cấp tại ngày chốt <b>${money(sum(externalPurchases.map((p) => Math.max(0, p.total - p.paidAsOf))))}</b></div>
       <div>Lãi đã chốt <b>${money(book.profit)}</b></div></div>
     <h3>Nội dung</h3><ol><li>Tổng hợp khách mua</li><li>Mỗi khách một mục chi tiết phiếu bán</li>
-      <li>Khách còn nợ đến lúc in</li><li>Sổ thu</li><li>Sổ chi</li><li>Phiếu nhập và nợ nhà cung cấp</li>${book.shopCode === "MANUFACTURING" ? "<li>Nhập nhôm nội bộ từ Phân phối</li><li>Công thợ theo tháng</li>" : ""}<li>Tồn kho cuối năm</li></ol>
+      <li>Khách còn nợ đến lúc in</li><li>Sổ thu</li><li>Sổ chi</li><li>Phiếu nhập và nợ nhà cung cấp</li>${book.shopCode === "MANUFACTURING" ? "<li>Nhập nhôm nội bộ từ Phân phối</li><li>Công thợ theo tháng</li>" : "<li>Xuất nhôm nội bộ sang Xưởng</li>"}<li>Tồn kho cuối năm</li></ol>
   </section>
   <section class="chapter"><h2>Tổng hợp khách mua · ${esc(book.shopName)}</h2>
     ${table(["Khách hàng", "Điện thoại", "Khối lượng đã lấy", "Tiền hàng trong sổ", "Đã trả đến lúc in", "Còn nợ hiện tại"],
@@ -91,12 +115,21 @@ function shopHtml(book: AnnualBook) {
   ${book.customers.map((customer) => {
       const sales = book.sales.filter((sale) => sale.customerId === customer.id);
       const items = book.saleItems.filter((item) => sales.some((sale) => sale.id === item.documentId));
+      const kilogramsByCategory = new Map<string, number>();
+      for (const item of items) {
+        const category = item.category || "Chưa rõ loại";
+        kilogramsByCategory.set(category, (kilogramsByCategory.get(category) ?? 0) + Number(item.quantityKg));
+      }
+      const weightSummary = [
+        `<strong>${tonnes.format(sum(items.map(item => item.quantityKg)) / 1000)} tấn</strong>`,
+        ...Array.from(kilogramsByCategory, ([category, kg]) => `${esc(category)}: ${tonnes.format(kg / 1000)} tấn`),
+      ].join("<br>");
       return `<section class="chapter customer-page" id="${customerAnchor(customer.id)}"><h2>Khách hàng: ${esc(customer.name)}</h2>
         <p>Điện thoại: ${esc(customer.phone || "—")} · Ghi chú: ${esc(customer.note || "—")}</p>
         ${sales.length ? sales.map((sale) => saleBlock(book, sale)).join("") : "<p>Không có phiếu bán còn liên quan trong năm.</p>"}
         <h4>Tổng kết khách hàng ${esc(customer.name)}</h4>
-        ${table(["Khối lượng nhôm", "Tổng tiền các phiếu", "Đã trả đến lúc in", "Còn nợ hiện tại"], [[
-          `${qty(sum(items.map((item) => item.quantityKg)))} kg`, money(sum(sales.map((sale) => sale.total))),
+        ${table(["Tổng khối lượng nhôm", "Tổng tiền các phiếu", "Tổng tiền đã trả", "Tổng còn nợ"], [[
+          weightSummary, money(sum(sales.map((sale) => sale.total))),
           money(sum(sales.map((sale) => sale.paidNow))), money(sum(sales.map(currentDebt))),
         ]])}
       </section>`;
@@ -129,14 +162,15 @@ function shopHtml(book: AnnualBook) {
   </section>
   ${book.shopCode === "MANUFACTURING" ? `<section class="chapter"><h2>Nhập nhôm nội bộ từ Phân phối · ${esc(book.shopName)}</h2>
     <p>Giá trị phiếu nội bộ là giá chuyển/giá vốn quản trị; không phải nợ nhà cung cấp bên ngoài.</p>
-    ${internalPurchases.map((purchase) => `<div class="invoice"><h3>${esc(purchase.code)} · ${esc(date(purchase.date))}</h3>
+    ${internalPurchases.map((purchase) => `<div class="invoice"><h3>${esc(purchase.code)} · ${esc(date(purchase.date))} · Nội bộ${purchase.date.slice(0, 10) < book.periodFrom ? " · Trước kỳ" : ""}</h3>
       ${table(["Sản phẩm", "Loại nhôm", "Số lượng", "Giá chuyển / đơn vị", "Thành tiền"],
         book.purchaseItems.filter((item) => item.documentId === purchase.id).map((item) => [
           esc(item.product), esc(item.category), `${qty(item.quantity)} ${esc(item.unit)}`, money(item.unitPrice), money(item.amount),
         ]))}
       <p class="total">Tổng khối lượng: ${qty(sum(book.purchaseItems.filter((item) => item.documentId === purchase.id).map((item) => item.quantityKg)))} kg · Giá trị chuyển: ${money(purchase.total)}</p>
     </div>`).join("") || "<p>Không có phiếu nhập nội bộ trong kỳ.</p>"}
-    <p class="grand">Tổng nhôm nhập nội bộ: ${qty(sum(book.purchaseItems.filter((item) => internalPurchases.some((p) => p.id === item.documentId)).map((item) => item.quantityKg)))} kg · ${money(sum(internalPurchases.map((p) => p.total)))}</p>
+    <p class="grand">Tổng nhôm nhập nội bộ trong kỳ: ${qty(sum(book.purchaseItems.filter((item) => periodInternalPurchases.some((p) => p.id === item.documentId)).map((item) => item.quantityKg)))} kg · ${money(sum(periodInternalPurchases.map((p) => p.total)))}</p>
+    ${internalPurchases.length > periodInternalPurchases.length ? "<p class=\"period-note\">Phiếu trước kỳ chỉ để đối chiếu nguồn hàng, không cộng vào tổng chuyển trong kỳ.</p>" : ""}
   </section>
   <section class="chapter"><h2>Công thợ theo tháng · ${esc(book.shopName)}</h2>
     <p>Mỗi tháng ghi riêng từng nhân viên. Tiền đã chi thực tế nằm trong Sổ chi; không cộng hai bảng thành một khoản chi.</p>
@@ -157,7 +191,17 @@ function shopHtml(book: AnnualBook) {
           ])) : ""}
         </div>`;
       }).join("")}`).join("") || "<p>Chưa có kỳ công nhân viên trong khoảng này.</p>"}
-  </section>` : ""}
+  </section>` : `<section class="chapter"><h2>Xuất nhôm nội bộ sang Xưởng · ${esc(book.shopName)}</h2>
+    <p>Các phiếu chuyển nội bộ trong kỳ chỉ để đối chiếu khối lượng và giá chuyển; không cộng vào doanh thu, tiền thu hoặc công nợ khách.</p>
+    ${book.transfersOut.map((transfer) => `<div class="invoice"><h3>${esc(transfer.code)} · ${esc(date(transfer.date))} · Nội bộ</h3>
+      ${table(["Sản phẩm", "Loại nhôm", "Số lượng", "Giá chuyển / đơn vị", "Thành tiền"],
+        book.transferItems.filter((item) => item.documentId === transfer.id).map((item) => [
+          esc(item.product), esc(item.category), `${qty(item.quantity)} ${esc(item.unit)}`, money(item.unitPrice), money(item.amount),
+        ]))}
+      <p class="total">Tổng khối lượng: ${qty(sum(book.transferItems.filter((item) => item.documentId === transfer.id).map((item) => item.quantityKg)))} kg · Giá trị chuyển: ${money(transfer.total)}</p>
+    </div>`).join("") || "<p>Không có phiếu xuất nội bộ trong kỳ.</p>"}
+    <p class="grand">Tổng nhôm xuất nội bộ trong kỳ: ${qty(sum(book.transferItems.map((item) => item.quantityKg)))} kg · ${money(sum(book.transfersOut.map((transfer) => transfer.total)))}</p>
+  </section>`}
   <section class="chapter"><h2>Tồn kho cuối năm · ${esc(book.shopName)}</h2>
     <p>Khối lượng theo mốc ${day(book.periodTo)}. Xưởng lấy số kiểm kê kỳ; Phân phối lấy biến động kho đến cuối kỳ.</p>
     ${table(["Sản phẩm / nhóm", "Loại nhôm", "Số lượng (kg)", "Giá trị kiểm kê"], book.stock.map((s) => [
@@ -177,6 +221,13 @@ export function buildAnnualBookHtml(books: AnnualBook[]) {
     p { margin: 2mm 0; } table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 8.5pt; }
     th, td { border: 0.5pt solid #aab6c1; padding: 1.8mm 2mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
     th { background: #e8eef4; } thead { display: table-header-group; } tr, .invoice { break-inside: avoid; }
+    .receipt-table, .expense-table { table-layout: fixed; }
+    :is(.receipt-table, .expense-table) th:nth-child(1) { width: 12%; }
+    :is(.receipt-table, .expense-table) th:nth-child(2) { width: 17%; }
+    .receipt-table th:nth-child(3) { width: 14%; }
+    .expense-table th:nth-child(3), .expense-table th:nth-child(4) { width: 12%; }
+    :is(.receipt-table, .expense-table) th:last-child { width: 20%; text-align: center; }
+    :is(.receipt-table, .expense-table) td:last-child { text-align: center; white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
     .shop-cover { break-before: page; min-height: 230mm; padding-top: 25mm; }
     .shop-cover:first-child { break-before: auto; } .chapter { break-before: page; }
     .customer-page { break-before: page; } .customer-page > h2 { margin-top: 0; }
@@ -188,6 +239,9 @@ export function buildAnnualBookHtml(books: AnnualBook[]) {
     .invoice-paid { border-left: 3pt solid #198754; }
     .invoice-unpaid { border: 1.2pt solid #c83c3c; border-left: 3pt solid #c83c3c; background: #fff4f2; }
     .payment-status { font-weight: bold; padding: 1.5mm 2mm; border-radius: 1mm; white-space: nowrap; }
+    .invoice-payments { margin: 1mm 0 2mm; padding-inline-start: 5mm; }
+    .invoice-payments li { margin-block: 1mm; }
+    .payment-method { display: inline-block; padding: 0.3mm 1.5mm; border: 0.5pt solid #aab6c1; border-radius: 1mm; font-size: 8pt; }
     .status-paid { color: #166534; background: #dcfce7; }
     .status-unpaid { color: #991b1b; background: #fee2e2; }
     .period-note { color: #4b5563; font-size: 8.5pt; }

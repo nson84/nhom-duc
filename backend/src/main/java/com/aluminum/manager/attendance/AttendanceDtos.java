@@ -28,7 +28,8 @@ public final class AttendanceDtos {
 			BigDecimal standardHoursPerDay,
 			BigDecimal overtimeWeekdayRate,
 			BigDecimal overtimeRestdayRate,
-			BigDecimal overtimeHolidayRate
+			BigDecimal overtimeHolidayRate,
+			BigDecimal overtimeSessionRate
 	) {
 	}
 
@@ -41,7 +42,8 @@ public final class AttendanceDtos {
 			@DecimalMin(value = "0.5", message = "Giờ chuẩn phải lớn hơn 0") BigDecimal standardHoursPerDay,
 			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal overtimeWeekdayRate,
 			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal overtimeRestdayRate,
-			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal overtimeHolidayRate
+			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal overtimeHolidayRate,
+			@DecimalMin(value = "0", message = "Đơn giá tăng ca theo buổi không được âm") BigDecimal overtimeSessionRate
 	) {
 	}
 
@@ -70,7 +72,8 @@ public final class AttendanceDtos {
 			@DecimalMin(value = "0", message = "Mức công ngày không được âm") BigDecimal initialDailyRate,
 			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal initialOvertimeWeekdayRate,
 			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal initialOvertimeRestdayRate,
-			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal initialOvertimeHolidayRate
+			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal initialOvertimeHolidayRate,
+			@DecimalMin(value = "0", message = "Đơn giá tăng ca theo buổi không được âm") BigDecimal initialOvertimeSessionRate
 	) {
 	}
 
@@ -164,6 +167,7 @@ public final class AttendanceDtos {
 			BigDecimal overtimeHours,
 			BigDecimal hourlyRateSnapshot,
 			BigDecimal amount,
+			String payUnit,
 			boolean approved,
 			String notes
 	) {
@@ -174,6 +178,8 @@ public final class AttendanceDtos {
 			LocalDateTime endAt,
 			@NotNull(message = "Nhập số giờ tăng ca")
 			@DecimalMin(value = "0", inclusive = false, message = "Số giờ tăng ca phải lớn hơn 0") BigDecimal overtimeHours,
+			@DecimalMin(value = "0", message = "Đơn giá tăng ca không được âm") BigDecimal hourlyRate,
+			String payUnit,
 			Boolean approved,
 			@Size(max = 500) String notes
 	) {

@@ -31,6 +31,7 @@ export type DocumentItem = {
   standardCostTotal?: number | null;
   factoryPurchaseItemId?: number | null;
   factoryReferenceCostPerKg?: number | null;
+  enteredCostPerKg?: number | null;
 };
 
 export type Payment = {
@@ -64,6 +65,7 @@ export type StockDocument = {
   reversedByDocumentId: number | null;
   confirmedAt: string | null;
   notes: string | null;
+  paperSource?: boolean;
   items: DocumentItem[];
   payments: Payment[];
   internal?: boolean;
@@ -89,7 +91,7 @@ export type DocumentSummary = {
 };
 
 /** Bộ lọc danh sách phiếu bán / nhập. */
-export type DocumentListFilter = "all" | "unpaid" | "partial" | "paid" | "draft" | "voided" | "trash";
+export type DocumentListFilter = "all" | "unpaid" | "partial" | "paid" | "draft" | "voided" | "trash" | "internal-history";
 
 export type DocumentInput = {
   documentType: "PURCHASE" | "SALE";
@@ -104,7 +106,9 @@ export type DocumentInput = {
   notes?: string;
   idempotencyKey?: string;
   internal?: boolean;
+  paperSource?: boolean;
   items: {
+    enteredCostPerKg?: number;
     productId: number;
     categoryId: number;
     unitId: number;
@@ -148,6 +152,7 @@ export type Movement = {
   id: number;
   movementAt: string;
   documentCode: string;
+  internal: boolean;
   movementType: "IN" | "OUT";
   quantityDeltaBase: number;
   unitCost: number;
@@ -172,8 +177,8 @@ export async function restoreDocument(id: number) {
   return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/restore`)).data.data;
 }
 
-export async function getDocument(id: number) {
-  return (await api.get<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`)).data.data;
+export async function getDocument(id: number, internalHistory = false) {
+  return (await api.get<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`, { params: internalHistory ? { internalHistory } : undefined })).data.data;
 }
 
 export async function saveDocument(id: number | undefined, input: DocumentInput, confirm = false) {
@@ -208,6 +213,10 @@ export async function addPayment(
   },
 ) {
   return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/payments`, input)).data.data;
+}
+
+export async function editPaymentDate(id: number, paymentId: number, date: string) {
+  return (await api.put<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/payments/${paymentId}/date`, { date })).data.data;
 }
 
 export async function listBalances(params: { q?: string; onlyInStock?: boolean }) {

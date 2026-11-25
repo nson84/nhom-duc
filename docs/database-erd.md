@@ -56,3 +56,8 @@ Chỉ thay CHECK chk_payroll_total để khớp công thức AttendanceService �
 ## V44 — tác giả lịch sử
 
 admin_users thêm historical_username VARCHAR(80) NULL. CHECK chk_historical_actor_inactive yêu cầu bản ghi có historical_username luôn inactive và password_hash=!HISTORICAL_ACTOR. Tài khoản hiện hữu có historical_username=NULL giữ nguyên; không UPDATE dữ liệu cũ. Backup mới xuất tác giả để giữ ID/tên và FK hiện hữu; không mang hash/role/shop/phiên cũ. Username __historical_ID không chiếm tên admin/phanphoi/xuong. audit_logs được sao lưu.
+
+
+V45 thêm stock_documents.paper_source và financial_transactions.monthly_summary mặc định false, cùng stock_document_items.entered_cost_per_kg nullable. Không cập nhật số tiền của dòng cũ.
+
+V46 thêm đơn giá tăng ca buổi vào `employee_pay_rates` (mặc định 0) và đơn vị tính vào `overtime_records` (mặc định HOUR cho bản ghi cũ). Bản ghi SESSION lưu 0 giờ, đơn giá buổi trong `hourly_rate_snapshot`, thành tiền trong `amount`; không sửa số tiền tăng ca lịch sử.

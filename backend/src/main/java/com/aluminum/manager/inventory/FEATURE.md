@@ -6,6 +6,8 @@
 
 `StockDocumentService` quản lý nháp/xác nhận/đảo/thu chi, theo dõi tồn Phân phối theo số lượng và chuyển nội bộ. Phiếu bán xưởng không trừ tồn; có giá nhập tham chiếu riêng, không phải giá vốn hằng ngày.
 
+`GET /stock-balances` cộng cả phiếu nhập Xưởng nội bộ và ngoài vào tồn sổ hiện tại; ngày đầu kỳ không lọc tồn hiện tại. `GET /stock-movements` trả `internal` từ phiếu gốc để màn Tồn kho gắn nhãn trên dòng biến động.
+
 Phiếu nhập/bán đã xác nhận (không phải chuyển nội bộ) được sửa trong 24 giờ tính từ `confirmed_at`. Dịch vụ hoàn tác biến động kho cũ, cập nhật dòng hàng rồi xác nhận lại trong một transaction, giữ nguyên mã phiếu, thời điểm xác nhận gốc và các khoản thanh toán. Tổng mới phải không nhỏ hơn tiền đã thanh toán; kỳ đã chốt bị khóa. Phiếu chuyển nội bộ phải đảo cả cặp trước khi lập lại.
 
 Phiếu Xưởng bị khóa khi ngày phiếu thuộc khoảng ngày của kỳ kiểm kê đã chốt, kể cả khi kỳ chốt đi qua 31/12. Giao dịch sau ngày chốt vẫn ghi được trong cùng năm dương lịch.
@@ -15,6 +17,7 @@ Phiếu đã hủy hoặc đã đảo được chuyển vào thùng rác. Giá t
 Khi request mang tham số `workingYear`, API chỉ liệt kê/mở phiếu trong kỳ của cửa hàng đó. Tạo, sửa và xác nhận phiếu phải có ngày từ mốc đầu kỳ đến mốc cuối đã lưu; kỳ đã chốt không cho ghi thêm. Kiểm tra server áp dụng cả khi nhập ngày bằng tay.
 
 Tham số `workingMonth` thu hẹp ngày tạo/sửa phiếu vào tháng đang chọn. `shop_month_periods` chỉ cho tạo, sửa, xác nhận, hủy, đảo phiếu thuộc tháng đã mở và chưa khóa; thanh toán nợ cũ vẫn được ghi ở ngày thuộc tháng đang mở.
+Ghi thanh toán mới từ chối ngày trước ngày lập phiếu. Sửa phiếu đã xác nhận không cho dời ngày lập qua ngày của bất kỳ khoản thanh toán đã ghi nào.
 
 ## Màn hình liên quan
 
@@ -37,3 +40,11 @@ Audit b290e3c bổ sung ca MySQL: thanh toán đủ rồi retry không nhân đ�
 20/11: đảo phiếu dùng chung requireWorkingDate cho từng đầu nội bộ, giữ khóa tháng đến commit. Khóa shop rồi các phiếu theo ID tăng dần để hai bên đảo cùng lúc không deadlock. Ngày phiếu đảo/biến động nằm ở ngày gốc trong tháng đang mở, còn ngày xác nhận/hủy/nhật ký là lúc thao tác thật. Test mô phỏng máy 2026 đảo phiếu 2025, chờ chốt tháng và đảo đồng thời từ hai đầu.
 
 Pair ID được đọc hiện hành bằng FOR UPDATE và so với tập phiếu đã khóa. Nếu snapshot cũ thấy nháp chưa ghép cặp nhưng giao dịch khác vừa xác nhận nội bộ, trả lỗi yêu cầu tải lại trước khi ghi, không đảo riêng một đầu.
+
+
+V45 lưu nguồn Ghi từ sổ trên phiếu và giá vốn nhập tay theo kg ở dòng bán ngoài. Endpoint PUT /api/v1/stock-documents/{id}/payments/{paymentId}/date sửa ngày theo phạm vi sổ, cập nhật thanh toán và thu chi trong một giao dịch, ghi nhật ký ngày cũ/mới và tác giả. Không thay số tiền. Chỉ sửa khoản còn hiệu lực trong kỳ năm chưa chốt.
+
+Chốt sổ tháng Phân phối gọi lại luồng kiểm kê hao hụt để điều chỉnh từng cặp sản phẩm và loại nhôm trước khi lưu bản chốt tháng. Thao tác từ chối khi kho có biến động sau ngày chốt tháng.
+
+
+Bộ lọc internal-history chỉ truy vấn phiếu nhập nội bộ đã xác nhận, chưa vào thùng rác của Xưởng. Chi tiết internalHistory chỉ đọc đúng loại phiếu và phạm vi sổ.

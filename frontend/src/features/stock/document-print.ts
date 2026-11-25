@@ -90,7 +90,7 @@ function buildHtml(params: {
   const whoLabel = kind === "SALE" ? "Người thu" : "Người chi";
   const receiptLines = (doc.payments ?? [])
     .map((payment) => {
-      const paidAt = dayjs(payment.paymentDate).format("DD/MM/YYYY HH:mm");
+      const paidAt = dayjs(payment.paymentDate).format("DD/MM/YYYY");
       return `<tr>
         <td class="when">${paidAt}</td>
         <td class="money">${formatMoney(payment.amount)}</td>
@@ -106,7 +106,7 @@ function buildHtml(params: {
         </colgroup>
         <thead>
           <tr>
-            <th>Ngày giờ</th>
+            <th>Ngày</th>
             <th>Số tiền</th>
             <th>Hình thức thanh toán</th>
             <th>${whoLabel}</th>
@@ -517,7 +517,7 @@ export async function buildSaleInvoiceHtml(params: {
       ${shop?.shopPhone ? `<div>Điện thoại: ${escapeHtml(shop.shopPhone)}</div>` : ""}
     </div>
     <h1 class="title">HÓA ĐƠN BÁN HÀNG</h1>
-    <div class="sub">${dayjs(doc.documentDate).format("HH:mm [ngày] DD/MM/YYYY")}</div>
+    <div class="sub">${dayjs(doc.documentDate).format("DD/MM/YYYY")}</div>
     <table class="meta">
       <tr><td>Người bán:</td><td><b>${escapeHtml(seller)}</b></td></tr>
       <tr><td>Khách hàng:</td><td><b>${escapeHtml(buyer)}</b></td></tr>

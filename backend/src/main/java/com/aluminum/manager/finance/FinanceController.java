@@ -59,6 +59,11 @@ public class FinanceController {
 		return ApiResponse.ok(service.voidTransaction(id, request.reason()), "Đã hủy phiếu thu/chi");
 	}
 
+	@org.springframework.web.bind.annotation.PutMapping("/finance/transactions/{id}")
+	public ApiResponse<TransactionDto> updateExpense(@PathVariable long id, @Valid @RequestBody CreateTransactionRequest request) {
+		return ApiResponse.ok(service.updateManualExpense(id, request), "Đã sửa phiếu chi");
+	}
+
 	@GetMapping("/finance/summary")
 	public ApiResponse<FinanceSummaryDto> summary(
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -78,6 +83,13 @@ public class FinanceController {
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 		return ApiResponse.ok(service.invoiceGrossMargins(from, to), null);
+	}
+
+	@GetMapping("/reports/monthly-margins")
+	public ApiResponse<List<FinanceService.MonthlyMargin>> monthlyMargins(
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+		return ApiResponse.ok(service.monthlyMargins(from, to), null);
 	}
 
 	@GetMapping("/reports/sales-by-product")

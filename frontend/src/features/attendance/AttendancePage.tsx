@@ -206,7 +206,7 @@ export function AttendancePage() {
             align: "center" as const,
             width: 140,
             render: (_, r) =>
-              r.approvedOvertimeHours > 0 ? `${r.approvedOvertimeHours}h (${formatMoney(r.approvedOvertimePay)})` : "0h",
+              r.approvedOvertimePay > 0 || r.approvedOvertimeHours > 0 ? `${r.approvedOvertimeHours}h (${formatMoney(r.approvedOvertimePay)})` : "0h",
           },
           ...dayNumbers.map((d) => ({
             title: (
@@ -334,6 +334,8 @@ function DayAttendanceModal({
   const [bonusForm] = Form.useForm<{ amount: number; notes?: string }>();
   const [otForm] = Form.useForm<{
     overtimeHours: number;
+    hourlyRate?: number | null;
+    payUnit: "HOUR" | "SESSION";
     approved: boolean;
     notes?: string;
   }>();
@@ -341,6 +343,7 @@ function DayAttendanceModal({
   const locked = periodClosed || rollLocked || day.locked;
   const payLocked = periodClosed || day.locked;
   const selectedStatus = Form.useWatch("status", form);
+  const overtimePayUnit = Form.useWatch("payUnit", otForm);
 
   return (
     <Modal
@@ -451,8 +454,8 @@ function DayAttendanceModal({
               pagination={false}
               dataSource={day.overtimes}
               columns={[
-                { title: "Số giờ", dataIndex: "overtimeHours", align: "right" },
-                { title: "Đơn giá / giờ", dataIndex: "hourlyRateSnapshot", align: "right", render: (v: number) => formatMoney(v) },
+                { title: "Số lượng", align: "right", render: (_, ot) => ot.payUnit === "SESSION" ? "1 buổi" : `${ot.overtimeHours} giờ` },
+                { title: "Đơn giá", dataIndex: "hourlyRateSnapshot", align: "right", render: (v: number, ot) => `${formatMoney(v)}/${ot.payUnit === "SESSION" ? "buổi" : "giờ"}` },
                 { title: "Thành tiền", dataIndex: "amount", align: "right", render: (v: number) => formatMoney(v) },
                 {
                   title: "Xác nhận",
@@ -467,7 +470,9 @@ function DayAttendanceModal({
                         onClick={() => {
                           setEditingOt(ot);
                           otForm.setFieldsValue({
-                            overtimeHours: ot.overtimeHours,
+                            overtimeHours: ot.payUnit === "SESSION" ? 2 : ot.overtimeHours,
+                            payUnit: ot.payUnit,
+                            hourlyRate: ot.hourlyRateSnapshot,
                             approved: ot.approved,
                             notes: ot.notes ?? undefined,
                           });
@@ -484,10 +489,10 @@ function DayAttendanceModal({
                 form={otForm}
                 layout="vertical"
                 style={{ marginTop: 12 }}
-                initialValues={{ overtimeHours: 2, approved: true }}
+                initialValues={{ overtimeHours: 2, payUnit: "HOUR", approved: true }}
                 onFinish={async (values) => {
                   try {
-                    const updated = await saveOvertime(day.id!, editingOt?.id, values);
+                    const updated = await saveOvertime(day.id!, editingOt?.id, { ...values, overtimeHours: values.payUnit === "SESSION" ? 1 : values.overtimeHours });
                     setDay(updated);
                     setEditingOt(null);
                     otForm.resetFields();
@@ -499,8 +504,14 @@ function DayAttendanceModal({
                 }}
               >
                 <Space align="start" wrap size={[16, 32]}>
-                  <Form.Item name="overtimeHours" label="Số giờ" rules={[{ required: true }]}>
+                  <Form.Item name="payUnit" label="Tính tăng ca theo" rules={[{ required: true }]}>
+                    <Select style={{ width: 140 }} onChange={() => otForm.setFieldValue("hourlyRate", null)} options={[{ value: "HOUR", label: "Giờ" }, { value: "SESSION", label: "Buổi" }]} />
+                  </Form.Item>
+                  {overtimePayUnit !== "SESSION" ? <Form.Item name="overtimeHours" label="Số giờ" rules={[{ required: true }]}>
                     <InputNumber min={0.25} max={24} step={0.5} style={{ width: 110 }} />
+                  </Form.Item> : null}
+                  <Form.Item name="hourlyRate" label={`Tiền tăng ca / ${overtimePayUnit === "SESSION" ? "buổi" : "giờ"}`} extra="Để trống dùng đơn giá đã cấu hình" rules={[{ type: "number", min: 0 }]}>
+                    <InputNumber {...vndInputNumberProps} style={{ width: 190 }} />
                   </Form.Item>
                   <Form.Item name="notes" label="Ghi chú">
                     <Input style={{ width: 200 }} />

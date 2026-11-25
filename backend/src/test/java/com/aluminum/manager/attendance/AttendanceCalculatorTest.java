@@ -67,6 +67,12 @@ class AttendanceCalculatorTest {
 		assertBd("80000", pay);
 	}
 
+	@Test
+	void overtimeSessionPaysOneFixedRateWhileHourlyUsesHours() {
+		assertBd("100000", AttendanceCalculator.overtimeAmount("SESSION", BigDecimal.ZERO, new BigDecimal("100000")));
+		assertBd("75000", AttendanceCalculator.overtimeAmount("HOUR", new BigDecimal("1.5"), new BigDecimal("50000")));
+	}
+
 	private static void assertBd(String expected, BigDecimal actual) {
 		assertEquals(0, new BigDecimal(expected).compareTo(actual), actual::toPlainString);
 	}

@@ -48,3 +48,6 @@ Sau xác minh staging, trả thêm profilePath và ghi hồ sơ JSON chỉ chủ
 BackupSqlPolicy giới hạn câu lệnh staging vào SET FOREIGN_KEY_CHECKS, DELETE và INSERT chỉ có literal đúng định dạng dump. Không cho USE, DDL, bảng có schema, hàm/biểu thức hoặc nhiều câu lệnh. Kiểm tra trước khi tạo DB; import dùng MySQL backslash escaping theo writer kể cả khi server bật NO_BACKSLASH_ESCAPES. Không thay định dạng V2 hoặc thực thi SQL tự do từ archive.
 
 R2LiveRecoveryIT là test opt-in riêng với ALUMINUM_TEST_R2_CONFIG_FILE trỏ cấu hình DPAPI có sẵn và MySQL thử loopback. Không chạy trong CI thường. Chỉ thử fixture AES riêng dưới verification/UUID, kiểm tra PUT/HEAD/GET, so byte, giải mã/dựng DB rồi xóa chính object mới tạo. Cấu hình R2 không đổi; không dùng dữ liệu/khóa giải mã backup nghiệp vụ. Đã chạy đạt trong lượt20/11.
+
+
+Backend local chạy bằng dev-backend.ps1 với cấu hình MySQL mặc định có thể bàn giao cho desktop. dev-handoff-check trả đường dẫn ảnh sau xác thực loopback và token; dev-handoff chỉ dừng JVM sau khi sao lưu thành công.

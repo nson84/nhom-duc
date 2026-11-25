@@ -8,6 +8,8 @@
 
 `FinanceService` ghi thu/chi, báo cáo và xuất CSV; thanh toán bán/nhập gắn chứng từ gốc. Phân phối không được tạo chi lương, vẫn ghi chi phí hoạt động.
 
+PUT /api/v1/finance/transactions/{id} sửa phiếu chi tự lập đã xác nhận của sổ hiện tại, ngoài công thợ. Kiểm tra ngày cũ và ngày mới, chỉ sửa khi tháng mở và chưa có bản chốt sổ. Giữ mã phiếu và ghi nhật ký thay đổi.
+
 Sổ Thu chi lọc theo ngày thực thu/chi trong financial_transactions.transaction_date, kể cả thu/trả nợ của phiếu kỳ cũ. Tổng quan/Báo cáo theo phiếu có chỉ tiêu đã thu từ các hóa đơn lập trong kỳ, có thể gồm lần trả sau kỳ; không đồng nghĩa tiền nhận trong kỳ. Bản chụp công nợ khi chốt năm vẫn theo mốc chốt.
 
 Khi giao diện chọn tháng, khoảng ngày lọc Thu chi/Báo cáo là phần giao của tháng và kỳ năm. Phiếu chi thủ công và việc hủy giao dịch kiểm tra ngày gốc không thuộc tháng đã chốt; thanh toán nợ cũ có thể ghi vào tháng mới đang mở.
@@ -19,6 +21,7 @@ Khoảng báo cáo cho phép tối đa 400 ngày, khớp kỳ làm việc có th
 Báo cáo lãi gộp hóa đơn chỉ dùng giá nhập tham khảo theo ngày bán. Giá tham khảo bằng 0 hoặc thiếu được coi là chưa đủ dữ liệu; lãi hóa đơn và tổng tháng tương ứng để trống, không coi giá vốn là 0. Lãi này không phải giá vốn thực tế hoặc lãi quyết toán cuối kỳ.
 
 `AnnualBookService` đọc dữ liệu theo từng sổ/năm cho bản in A4: khách, phiếu bán/nhập và dòng hàng, thanh toán, thu chi, công thợ Xưởng, tồn kho. Endpoint chỉ đọc và chỉ cho role vận hành xem sổ của mình; Admin không được xem. Mỗi phiếu bán trả cả tiền đã thu tại mốc chốt và tiền đã thu đến hiện tại để bản in phân biệt nợ lịch sử với nợ hiện tại. Phiếu nhập nội bộ Xưởng được trả riêng và không tính vào nợ nhà cung cấp. Giá trị tồn và lãi chỉ có khi đã chốt năm; không cộng tiền thu/trả nợ cũ vào lãi lần hai.
+Sổ Xưởng trả phiếu nhập nội bộ trước ngày đầu kỳ để đối chiếu, nhưng tổng chuyển trong kỳ chỉ cộng phiếu có ngày thuộc kỳ. Sổ Phân phối trả phiếu xuất nội bộ trong kỳ và dòng hàng qua `transfersOut`/`transferItems`; những phiếu này không đi vào khách, doanh thu hoặc công nợ.
 
 Khách có phiếu bán được nhập lùi ngày vẫn xuất hiện trong Sổ cuối năm dù hồ sơ khách được tạo sau ngày kết thúc kỳ; ngày phiếu bán quyết định kỳ của giao dịch, không dùng `customers.created_at` để loại khách đó.
 
@@ -42,3 +45,6 @@ Giao dịch Thu chi Xưởng chỉ bị khóa khi ngày giao dịch thuộc kho�
 Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
 
 Báo cáo ngày trả đủ cột missing_standard; giá tham khảo NULL hoặc 0 không tạo lãi tham khảo ở tổng kỳ/ngày/sản phẩm. Test bằng dữ liệu MySQL thử, không chỉ mock JDBC.
+
+
+Khoản chi tổng hợp tháng dùng mốc phân kỳ nội bộ, hiển thị tháng thay vì ngày thực chi và không đưa vào bảng chi theo ngày. Báo cáo /reports/monthly-margins lấy doanh thu bán ngoài, giá vốn nhập tay hoặc tham chiếu, chi hoạt động và công thợ. Công thợ lấy công theo kỳ và thưởng lễ theo ngày, cộng phiếu chi lương thủ công. Ứng và trả lương qua kỳ công không được cộng lần nữa vào chi phí.

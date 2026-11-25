@@ -1,4 +1,4 @@
-import { Alert, Card, Col, DatePicker, InputNumber, Modal, Row, Space, Statistic, Tag, message } from "antd";
+import { Alert, Card, DatePicker, InputNumber, Modal, Space, Statistic, Tag, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import dayjs from "dayjs";
@@ -147,28 +147,33 @@ export function StockPage() {
         <Statistic title={`Đã giao trong tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")} (kg)`} value={qtyFormat.format(monthDeliveredKg ?? 0)} />
         <DeliveredByCategory from={monthRange[0]} to={monthRange[1]} shopKey={shop} />
       </Card>}
-      {asTon ? <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng tiền hàng đã nhập" value={formatMoney(total.purchasedValue)} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã nhập (kg)" value={qtyFormat.format(total.purchased)} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tổng đã giao tích lũy (kg)" value={qtyFormat.format(total.delivered)} />
+      {asTon ? <div className="stock-stat-grid">
+        <Card size="small"><Statistic title="Tổng tiền hàng đã nhập" value={formatMoney(total.purchasedValue)} /></Card>
+        <Card size="small"><Statistic title="Tổng đã nhập (kg)" value={qtyFormat.format(total.purchased)} /></Card>
+        <Card size="small"><Statistic title="Tổng đã giao tích lũy (kg)" value={qtyFormat.format(total.delivered)} />
           <DeliveredByCategory shopKey={shop} />
-        </Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Tồn sổ (kg)" value={qtyFormat.format(total.quantity)} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Vụn nhôm kiểm kê gần nhất (kg)" value={qtyFormat.format(total.scrap)} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card size="small"><Statistic title="Hao hụt thực kiểm gần nhất (kg)" value={qtyFormat.format(total.loss)} /></Card></Col>
-      </Row> : <>
+        </Card>
+        <Card size="small"><Statistic title="Tồn sổ (kg)" value={qtyFormat.format(total.quantity)} /></Card>
+        <Card size="small"><Statistic title="Vụn nhôm kiểm kê gần nhất (kg)" value={qtyFormat.format(total.scrap)} /></Card>
+        <Card size="small"><Statistic title="Hao hụt thực kiểm gần nhất (kg)" value={qtyFormat.format(total.loss)} /></Card>
+      </div> : <>
         <Alert style={{ marginBottom: 12 }} type="info" showIcon message="Xưởng không trừ kho khi giao thành phẩm; tồn và hao hụt được quyết toán theo kiểm kê cuối kỳ." description={<Link to="/quyet-toan-xuong">Mở quyết toán Xưởng để kiểm kê từng loại nhôm và chốt kỳ</Link>} />
-        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Tiền nhập nguyên liệu trong kỳ" value={formatMoney(factoryReport?.purchaseValue ?? 0)} /></Card></Col>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Khối lượng nhập (kg)" value={qtyFormat.format(factoryReport?.purchasedKg ?? 0)} /></Card></Col>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Đã giao khách (kg)" value={qtyFormat.format(factoryReport?.finishedSoldKg ?? 0)} />
+        <div className="stock-stat-grid">
+          <Card size="small"><Statistic title="Tổng tiền hàng đã nhập (gồm nội bộ)" value={formatMoney(total.purchasedValue)} /></Card>
+          <Card size="small"><Statistic title="Tổng đã nhập kho (kg, gồm nội bộ)" value={qtyFormat.format(total.purchased)} /></Card>
+          <Card size="small"><Statistic title="Tồn sổ hiện tại (kg)" value={qtyFormat.format(total.quantity)} /></Card>
+        </div>
+        <div className="stock-stat-grid">
+          <Card size="small"><Statistic title="Tiền nhập nguyên liệu trong kỳ" value={factoryReport ? formatMoney(factoryReport.purchaseValue) : "—"} /></Card>
+          <Card size="small"><Statistic title="Khối lượng nhập trong kỳ (kg)" value={qtyFormat.format(factoryReport?.purchasedKg ?? 0)} /></Card>
+          <Card size="small"><Statistic title="Đã giao khách (kg)" value={qtyFormat.format(factoryReport?.finishedSoldKg ?? 0)} />
             {factoryCount && <DeliveredByCategory from={factoryCount.periodFrom} to={factoryCount.periodTo} shopKey={`${shop}-${factoryYear}`} />}
-          </Card></Col>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Tổng vụn nhôm (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(Number(factoryReport?.scrapSoldKg ?? 0) + Number(factoryCount.scrapKg))} /></Card></Col>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Vụn chưa bán kiểm kê (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(factoryCount.scrapKg)} /></Card></Col>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Hao hụt ước tính (kg)" value={factoryReport?.estimatedLossKg == null ? "Chưa kiểm kê" : qtyFormat.format(factoryReport.estimatedLossKg)} /></Card></Col>
-          <Col xs={24} sm={12} lg={8}><Card size="small"><Statistic title="Giá trị nguyên liệu cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} /></Card></Col>
-        </Row>
+          </Card>
+          <Card size="small"><Statistic title="Tổng vụn nhôm (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(Number(factoryReport?.scrapSoldKg ?? 0) + Number(factoryCount.scrapKg))} /></Card>
+          <Card size="small"><Statistic title="Vụn chưa bán kiểm kê (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(factoryCount.scrapKg)} /></Card>
+          <Card size="small"><Statistic title="Hao hụt ước tính (kg)" value={factoryReport?.estimatedLossKg == null ? "Chưa kiểm kê" : qtyFormat.format(factoryReport.estimatedLossKg)} /></Card>
+          <Card size="small"><Statistic title="Giá trị nguyên liệu cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} /></Card>
+        </div>
       </>}
       {asTon && <Alert type="info" showIcon style={{ marginBottom: 12 }} message="Số vụn và hao hụt chỉ là lần kiểm kê gần nhất của từng loại, không cộng dồn theo năm. Muốn chốt kỳ phải cân đủ các loại đã phát sinh." />}
       <Space style={{ marginBottom: 16 }} wrap>
@@ -262,7 +267,7 @@ export function StockPage() {
           dataSource={movements}
           columns={[
             { title: "Thời gian", dataIndex: "movementAt", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
-            { title: "Phiếu", dataIndex: "documentCode", align: "center" },
+            { title: "Phiếu", align: "center", render: (_, movement) => <Space>{movement.documentCode}{movement.internal && <Tag color="blue">Nội bộ</Tag>}</Space> },
             {
               title: "Loại",
               dataIndex: "movementType",

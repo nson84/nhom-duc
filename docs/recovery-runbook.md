@@ -10,7 +10,7 @@ Dùng ứng dụng V44 trở lên. Cất riêng tệp .ndbak và khóa phục h�
 
 ## Dùng dữ liệu đã dựng trong ứng dụng desktop
 
-1. Trong khối kết quả dựng thử, bấm **Dùng dữ liệu này**. Ứng dụng sẽ sao lưu và dừng backend do nó khởi động, mở DB đã dựng và kiểm tra tên DB từ `/system/ready`. Nếu backend cổng 8080 được khởi động bên ngoài, nút từ chối chuyển để tránh đóng nhầm tiến trình.
+1. Trong khối kết quả dựng thử, bấm **Dùng dữ liệu này**. Ứng dụng sẽ sao lưu và dừng backend do nó khởi động, mở DB đã dựng và kiểm tra tên DB từ `/system/ready`. Nếu backend dev được khởi động bằng dev-backend.ps1 với cấu hình mặc định và đã bật bàn giao, desktop có thể sao lưu và yêu cầu nhường cổng. Backend ngoài khác bị từ chối.
 2. Nếu chuyển thành công, giao diện hiện mật khẩu đăng nhập lần đầu của các tài khoản mới. Cất mật khẩu, bấm xác nhận, đăng nhập lại rồi đổi mật khẩu. Tài khoản đăng nhập máy cũ không nằm trong backup.
 3. Đối chiếu dữ liệu trong ứng dụng. Backend của DB phục hồi có thư mục ảnh và khóa JWT riêng. Nó dùng lại khóa giải mã và sao chép cấu hình R2 đã nhập trên máy này vào runtime mới; bản sao local tự động tiếp tục chạy. Mở **Khóa phục hồi** để kiểm tra và cất khóa ngoài máy, rồi bấm **Kiểm tra kết nối** và xem bản mới có đồng bộ R2 hay không.
 
@@ -23,3 +23,6 @@ Vào **Sao lưu → Quay lại database trước**. Ứng dụng sao lưu trạn
 Launcher `scripts/start-recovered-backend.ps1` vẫn có trong mã nguồn cho kiểm tra kỹ thuật, nhưng luồng desktop không yêu cầu chạy lệnh thủ công.
 
 Restore trực tiếp DB đang chạy tiếp tục khóa. Diễn tập cùng máy không thay thế kiểm thử R2, bộ cài và máy vật lý khác.
+
+
+Bản desktop có thể bàn giao backend dev mặc định khi dùng bản build mới của cả backend và desktop. [Quy trình chuyển dữ liệu](recovery-runbook.md).

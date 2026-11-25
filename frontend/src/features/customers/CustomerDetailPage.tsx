@@ -1,4 +1,5 @@
-import { ArrowLeftOutlined, BellOutlined, CheckOutlined, CloseOutlined, DollarOutlined, PlusOutlined, PrinterOutlined } from "@ant-design/icons";
+import { PaymentDateEditor } from "../stock/PaymentDateEditor";
+import { ArrowLeftOutlined, BellOutlined, CheckOutlined, CloseOutlined, DollarOutlined, EditOutlined, PlusOutlined, PrinterOutlined } from "@ant-design/icons";
 import {
   Alert,
   AutoComplete,
@@ -39,6 +40,7 @@ import { bankName } from "../../utils/vietqr";
 import { buildDebtListHtml, hasBankAccount, openDebtDocuments } from "./debt-print";
 import { PrintDocument } from "../../components/print-document";
 import { buildCustomerHistoryHtml } from "./customer-history-print";
+import { CustomerFormModal } from "./CustomersPage";
 import {
   createCustomerReminder,
   getCustomer,
@@ -78,6 +80,7 @@ export function CustomerDetailPage() {
   const scope = isAdmin ? ("all" as const) : undefined;
 
   const [summary, setSummary] = useState<CustomerSummary | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState(false);
   const [salesYear, setSalesYear] = useState(workingYear.year);
   const [selectedRange, setSelectedRange] = useState<[string, string] | null>(null);
   const [periodReady, setPeriodReady] = useState(false);
@@ -176,24 +179,28 @@ export function CustomerDetailPage() {
             {summary.internalTransfer && <Tag color="blue">Có phiếu nội bộ</Tag>}
           </Space>
         }
-        extra={
+        extra={<Space wrap>
+          {canWrite && <AppActionButton tone="edit" icon={<EditOutlined />} onClick={() => setEditingCustomer(true)}>
+            Sửa thông tin
+          </AppActionButton>}
           <AppActionButton tone="print" icon={<PrinterOutlined />} onClick={() => setPrintingDebt(true)}>
             In danh sách nợ
           </AppActionButton>
-        }
+        </Space>}
       >
-        <Descriptions column={{ xs: 1, md: 3 }} size="small">
+        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} size="small">
           {isAdmin ? (
             <Descriptions.Item label="Cửa hàng">
               {SHOP_LABELS[summary.shopCode as keyof typeof SHOP_LABELS] ?? summary.shopName}
             </Descriptions.Item>
           ) : null}
           <Descriptions.Item label="SĐT">{summary.phone || "—"}</Descriptions.Item>
-          <Descriptions.Item label="Khối lượng đã giao">{formatQtyInput(summary.deliveredKg)} kg
-            <DeliveredByCategory customerIds={[customerId]} from={selectedRange?.[0]} to={selectedRange?.[1]} scope={scope} shopKey={summary.shopCode} />
-          </Descriptions.Item>
+          <Descriptions.Item label="Khối lượng đã giao"><div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 14px" }}>
+            <span>{formatQtyInput(summary.deliveredKg)} kg</span>
+            <DeliveredByCategory inline customerIds={[customerId]} from={selectedRange?.[0]} to={selectedRange?.[1]} scope={scope} shopKey={summary.shopCode} />
+          </div></Descriptions.Item>
           <Descriptions.Item label="Tiền hàng phải thu">{formatMoney(summary.totalSales)}</Descriptions.Item>
-          <Descriptions.Item label="Đã thu từ các hóa đơn đã lọc theo ngày bán (tính đến nay)">{formatMoney(summary.receivedAmount)}</Descriptions.Item>
+          <Descriptions.Item label={<span title="Tổng tiền đã thu đến nay của các hóa đơn đang lọc theo ngày bán">Đã thu đến nay</span>}>{formatMoney(summary.receivedAmount)}</Descriptions.Item>
           <Descriptions.Item label="Còn nợ">
             {summary.outstandingDebt > 0 ? (
               <Tag color="red">{formatMoney(summary.outstandingDebt)}</Tag>
@@ -204,16 +211,24 @@ export function CustomerDetailPage() {
           <Descriptions.Item label="Số phiếu bán">{summary.saleCount}</Descriptions.Item>
         </Descriptions>
       </Card>
+      {editingCustomer && canWrite && <CustomerFormModal customer={summary} onClose={() => setEditingCustomer(false)}
+        onSaved={(saved) => {
+          setSummary(current => current?.id === saved.id
+            ? { ...current, name: saved.name, phone: saved.phone, note: saved.note, active: saved.active }
+            : current);
+          setEditingCustomer(false);
+        }} />}
 
       {summary.shopCode === "MANUFACTURING" && !workingYear.month ? (
         <Card
           title="Sản lượng thành phẩm đã giao"
           extra={<DatePicker picker="year" value={dayjs(`${salesYear}-01-01`)} onChange={(value) => value && setSalesYear(value.year())} />}
         >
-          <Descriptions column={{ xs: 1, md: 4 }} size="small">
-            <Descriptions.Item label="Đã giao">{yearSummary ? `${formatQtyInput(yearSummary.quantityKg)} kg` : "—"}
-              <DeliveredByCategory customerIds={[customerId]} from={`${salesYear}-01-01`} to={`${salesYear}-12-31`} scope={scope} shopKey={summary.shopCode} />
-            </Descriptions.Item>
+          <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} size="small">
+            <Descriptions.Item label="Đã giao"><div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 14px" }}>
+              <span>{yearSummary ? `${formatQtyInput(yearSummary.quantityKg)} kg` : "—"}</span>
+              <DeliveredByCategory inline customerIds={[customerId]} from={`${salesYear}-01-01`} to={`${salesYear}-12-31`} scope={scope} shopKey={summary.shopCode} />
+            </div></Descriptions.Item>
             <Descriptions.Item label="Doanh thu">{formatMoney(yearSummary?.revenue ?? 0)}</Descriptions.Item>
             <Descriptions.Item label="Đã thu của các phiếu">{formatMoney(yearSummary?.paidAmount ?? 0)}</Descriptions.Item>
             <Descriptions.Item label="Còn nợ các phiếu">{formatMoney(yearSummary?.outstandingAmount ?? 0)}</Descriptions.Item>
@@ -223,7 +238,7 @@ export function CustomerDetailPage() {
             dataSource={yearSummary?.rows ?? []}
             size="middle"
             columns={[
-              { title: "Ngày giờ", dataIndex: "documentDate", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
+              { title: "Ngày", dataIndex: "documentDate", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
               { title: "Số phiếu", dataIndex: "documentCode" },
               { title: "Sản phẩm", dataIndex: "productName" },
               { title: "Kg", dataIndex: "quantityKg", render: (v: number) => formatQtyInput(v) },
@@ -279,7 +294,7 @@ export function CustomerDetailPage() {
               title: "Ngày",
               dataIndex: "documentDate",
               align: "center",
-              render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
+              render: (v: string) => dayjs(v).format("DD/MM/YYYY"),
             },
             {
               title: "Tổng",
@@ -597,7 +612,8 @@ function InvoiceDetailModal({ documentId, onClose }: { documentId: number; onClo
       ) : (
         <>
           <Descriptions size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="Ngày">{dayjs(doc.documentDate).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
+            <Descriptions.Item label="Nguồn phiếu">{doc.paperSource ? "Ghi từ sổ" : "Ghi từ app"}</Descriptions.Item>
+            <Descriptions.Item label="Ngày">{dayjs(doc.documentDate).format("DD/MM/YYYY")}</Descriptions.Item>
             <Descriptions.Item label="Thanh toán">
               <Tag color={status.color}>{methodText ? `${status.text} · ${methodText}` : status.text}</Tag>
             </Descriptions.Item>
@@ -634,10 +650,14 @@ function InvoiceDetailModal({ documentId, onClose }: { documentId: number; onClo
               scroll={{ x: "max-content" }}
               columns={[
                 {
-                  title: "Ngày giờ",
+                  title: "Ngày",
                   dataIndex: "paymentDate",
                   align: "center",
-                  render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
+                  render: (v: string, payment) => <>
+                  {dayjs(v).format("DD/MM/YYYY")}
+                  {doc.status === "CONFIRMED" && !doc.reversedByDocumentId && !doc.reversalOfDocumentId &&
+                    <PaymentDateEditor document={doc} payment={payment} onSaved={setDoc} />}
+                </>,
                 },
                 {
                   title: "Số tiền",
@@ -732,10 +752,10 @@ function PayDebtModal({
             dataSource={payments}
             columns={[
               {
-                title: "Thời gian thanh toán",
+                title: "Ngày thanh toán",
                 dataIndex: "paymentDate",
                 align: "center",
-                render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
+                render: (v: string) => dayjs(v).format("DD/MM/YYYY"),
               },
               {
                 title: "Số tiền lần này",
@@ -801,7 +821,7 @@ function PayDebtModal({
                   Số tiền thu: <b>{formatMoney(amount)}</b> ({paymentMethodLabel(values.paymentMethod)})
                 </p>
                 <p style={{ margin: "4px 0" }}>
-                  Ngày nhận tiền: <b>{values.paymentDate.format("DD/MM/YYYY HH:mm")}</b><br />
+                  Ngày nhận tiền: <b>{values.paymentDate.format("DD/MM/YYYY")}</b><br />
                   Người thu tiền: <b>{values.collectedBy.trim()}</b>
                 </p>
                 <p style={{ margin: "4px 0" }}>
@@ -820,7 +840,7 @@ function PayDebtModal({
                   amount,
                   paymentMethod: values.paymentMethod,
                   collectedBy: values.collectedBy.trim(),
-                  paymentDate: values.paymentDate.format("YYYY-MM-DDTHH:mm:ss"),
+                  paymentDate: values.paymentDate.format("YYYY-MM-DD[T00:00:00]"),
                   idempotencyKey,
                 });
                 message.success("Đã ghi lần trả nợ");
@@ -836,7 +856,7 @@ function PayDebtModal({
       >
         <Form.Item name="paymentDate" label="Ngày thực nhận tiền"
           rules={[{ required: true, message: "Chọn ngày nhận tiền" }]}>
-          <DatePicker showTime format="DD/MM/YYYY HH:mm" disabled={!paymentRange}
+          <DatePicker format="DD/MM/YYYY" disabled={!paymentRange}
             disabledDate={date => !paymentRange || date.isBefore(dayjs(paymentRange[0]), "day")
               || date.isAfter(dayjs(paymentRange[1]), "day")} />
         </Form.Item>

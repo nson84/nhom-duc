@@ -78,6 +78,7 @@ export function CarryoverDebtReport({ year }: { year: number }) {
     })}
     {paying && <PaymentModal label={paying.documentType === "SALE" ? "Thu nợ cũ" : "Trả nhà cung cấp"}
       remaining={paying.totalAmount - paying.paidAmount}
+      documentDate={paying.documentDate}
       kind={paying.documentType === "SALE" ? "SALE" : "PURCHASE"}
       onClose={() => setPaying(undefined)}
       onSubmit={async (values) => {

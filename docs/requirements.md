@@ -26,9 +26,17 @@ Reset thủ công dữ liệu nghiệp vụ qua `scripts/reset-business-data.sql
 - Doanh thu, tiền thực thu và chi phí hoạt động là ba số khác nhau. Tiền nhập hàng chưa bán không phải chi phí kỳ.
 - Kỳ chốt năm là khoảng ngày do từng cửa hàng chọn, có thể theo Tết âm lịch và đi qua 31/12. Năm trên màn hình là tên kỳ. Kỳ sau bắt đầu ngay sau ngày chốt kỳ trước. Tồn và công nợ chuyển tiếp theo chứng từ gốc; thu/trả nợ cũ sau ngày chốt không tính lãi lần hai. Tiền công tháng thuộc kỳ chứa ngày cuối tháng.
 - Tháng là kỳ làm việc chính nằm trong kỳ năm: chọn tháng và bấm Mở tháng trước khi ghi phiếu. Mọi màn nghiệp vụ theo ngày dùng phần giao của tháng và kỳ năm; ví dụ năm bắt đầu 18/02 thì tháng đầu tính từ 18/02. Khóa tháng khóa ghi/sửa chứng từ của tháng đó và chỉ sau đó mới mở tháng tiếp; Xưởng phải chốt kỳ công trước. Phiếu thanh toán nợ cũ ghi vào tháng nhận/trả thực tế đang mở. Có thể chốt năm khi tháng cuối vẫn mở. Cần xử lý phiếu kho nháp trong khoảng chốt.
+- Có thể mở lại tháng đã khóa trong kỳ chưa chốt để chỉnh chứng từ, kể cả khi tháng sau đang mở. Từ chối mở lại nếu có bản chốt sổ từ tháng đó trở đi. Sau khi chỉnh xong có thể khóa lại tháng đó.
 - Sổ Thu chi lọc và cộng tiền theo ngày nhận/trả thực tế. Khoản trả cho hóa đơn cũ không xuất hiện trong Sổ Thu chi của tháng lập hóa đơn; báo cáo công nợ vẫn gắn khoản trả với hóa đơn gốc.
+- Ngày thu hoặc trả trên phiếu bán và phiếu nhập phải từ ngày lập phiếu trở đi. Khoản cũ lệch ngày được đánh dấu để người dùng đối chiếu trước khi sửa.
+- Ngày thanh toán gợi ý là ngày lập phiếu hoặc ngày đầu khoảng làm việc đang mở nếu phiếu lập trước khoảng đó. Có thể đổi sang ngày thực thu hoặc trả.
+- Phiếu bán mới ưu tiên ngày hôm nay trong kỳ đang mở. Khi nhập kỳ cũ, ngày gợi ý lấy từ phiếu bán vừa tạo trong cùng kỳ hoặc phiếu bán đã xác nhận trong danh sách, nếu có.
 - Ngày bắt đầu và kết thúc kỳ chưa chốt được lưu bằng hai thao tác riêng cho từng sổ, từng tên năm. Sau khi lưu ngày bắt đầu, số liệu kỳ được tính từ ngày đó đến hiện tại. Ngày kết thúc dự kiến có thể đổi trước khi chốt và không giới hạn dữ liệu đang làm việc; chốt là bước xác nhận riêng sau kiểm kê. Tổng quan, Thu chi, Báo cáo, kiểm kê Xưởng và Sổ cuối năm dùng cùng khoảng kỳ; kỳ đã chốt không đổi ngày. Tên kỳ là chuỗi tùy ý, chẳng hạn “Kỳ 02/2026–02/2027”; số năm trong bộ chọn là khóa tra cứu.
 - Tăng ca chỉ tính khi đã duyệt. Kỳ công đã chốt không đổi theo hồ sơ mới.
+- Đơn giá tăng ca theo từng bản ghi là tùy chọn; nếu bỏ trống, dùng mức cấu hình hiệu lực vào ngày công. Thành tiền bằng số giờ nhân đơn giá đã chọn và được lưu cùng bản ghi.
+- Tăng ca có hai cách tính: theo giờ (số giờ nhân đơn giá giờ) hoặc theo buổi (mỗi bản ghi đúng một buổi nhân đơn giá buổi). Mức giờ và mức buổi được cấu hình riêng theo lịch sử mức công của từng nhân viên. Kỳ lương cộng tiền tăng ca đã duyệt; tổng giờ chỉ gồm phần tính theo giờ.
+- Sổ cuối năm in hai đầu chuyển nội bộ để đối chiếu. Xưởng còn hiển thị phiếu nhập nội bộ trước kỳ với nhãn “Trước kỳ”, nhưng không cộng vào tổng chuyển của kỳ; Phân phối in phiếu xuất nội bộ trong kỳ. Giá chuyển nội bộ không thành doanh thu, tiền thu, nợ khách hoặc nợ nhà cung cấp.
+- Tồn kho Xưởng hiện tại cộng kg nhập đã xác nhận từ cả phiếu nội bộ và phiếu nhập ngoài, kể cả phiếu trước ngày đầu kỳ đang xem. Mỗi biến động từ phiếu chuyển có nhãn “Nội bộ”. Chỉ số nhập trong kỳ vẫn lọc theo ngày phiếu của kỳ; không cộng lại phiếu trước kỳ.
 - Thưởng lễ theo từng nhân viên được tính vào chi phí Xưởng. Khoản đã nhận trực tiếp không cộng lại vào tiền công cuối tháng.
 - Giờ qua đêm và làm tròn là cấu hình, không hard-code một công thức cho mọi cửa hàng.
 
@@ -69,3 +77,25 @@ V44 thêm historical_username vào admin_users. Backup mới chỉ mang tác gi�
 Đảo phiếu là sửa sai trong tháng gốc đang mở: ngày phiếu đảo và biến động dùng ngày nghiệp vụ gốc; confirmed_at/cancelled_at và nhật ký giữ thời điểm thao tác thực tế. Cặp nội bộ được khóa theo thứ tự cố định. Không dùng đảo phiếu để điều chỉnh một kỳ đã khóa.
 
 Phục hồi tách biệt sinh verified-recovery.json sau khi kiểm tra số dòng, FK và ảnh. Desktop mới cho chọn **Dùng dữ liệu này**, tự chuyển sang DB aluminum_restore_* trên loopback và thử quay lại DB trước nếu lỗi; không ghi đè DB cũ. Mật khẩu MySQL và khóa đã dùng giải mã bản sao lưu trong Windows Credential Manager để mở lại ứng dụng. Backend đã chuyển có runtime riêng, sao lưu local tự động và bản sao cấu hình R2 đã nhập; người dùng phải kiểm tra kết nối R2 và cất khóa phục hồi ngoài máy. Restore trực tiếp ghi đè DB vẫn khóa. Xem docs/recovery-runbook.md.
+
+
+## Nhập sổ giấy trong kỳ đang làm việc
+
+Phiếu mua/bán ghi ngày đầy đủ, có nguồn và mã do app tạo. Thanh toán sửa ngày được với cùng khoản tiền và có nhật ký, không nhập lý do. Chỉ sửa trong kỳ năm chưa chốt, kể cả tháng trước đã khóa. Chi phí giấy có thể ghi tổng tháng. Công thợ giấy đã trả đủ có thể nhập tổng từng người, ghi ứng và phần trả cuối tháng mà chỉ ghi một khoản chi. Báo cáo tháng trừ chi hoạt động và tiền công, lãi tạm tính giữ riêng với lãi chốt năm.
+
+Chốt sổ tháng là tùy chọn. Bỏ qua nếu chưa cân, không ghi số 0 thay chỗ trống. Chốt tháng Phân phối có số cân thật điều chỉnh tồn kho theo từng sản phẩm và loại nhôm, trừ cả chênh lệch và phân loại phần vụn thuộc số thiếu. Nếu đã điều chỉnh và số cân vẫn khớp thì không trừ lần nữa. Chốt năm dùng ngày kết thúc kỳ do người dùng chọn và kiểm kê tại mốc đó, không cần bản chốt tháng.
+
+
+Màn Chốt năm quản lý ngày kết thúc và xác nhận chốt kỳ. Tổng quan giữ Khóa tháng để sang tháng mới.
+
+
+Cho phép xóa thiết lập kỳ tạo nhầm nếu chưa mở tháng, chưa có dữ liệu và chưa chốt. Hộp thoại xác nhận ghi rõ kỳ và ngày bắt đầu.
+
+
+Xưởng và Phân phối phải xác nhận khi sửa mốc ngày đã lưu. Khi đổi ngày bắt đầu thành công, app tự chọn tháng đầu tương ứng. Ngày kết thúc không được bỏ lại tháng đã mở hoặc giao dịch đã ghi.
+
+
+Bản desktop hỗ trợ bàn giao backend local do dev-backend.ps1 bật với cấu hình database mặc định. Tiến trình bên ngoài không bật bàn giao không bị dừng.
+
+
+Phiếu chi tự lập ngoài công thợ được sửa trong tháng mở chưa chốt sổ. Giữ mã phiếu. Khoản thanh toán gắn phiếu nguồn và khoản công thợ tiếp tục chỉnh ở luồng gốc.

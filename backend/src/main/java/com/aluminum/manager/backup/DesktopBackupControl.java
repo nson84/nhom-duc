@@ -2,6 +2,7 @@ package com.aluminum.manager.backup;
 
 import com.aluminum.manager.backup.BackupDtos.BackupLogDto;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -48,6 +49,42 @@ class DesktopBackupControl {
     @PostMapping("/{reason}")
     BackupLogDto backup(@PathVariable String reason, @RequestHeader(value = "X-Desktop-Backup-Token", required = false) String supplied,
                         HttpServletRequest request) {
+        authorize(supplied, request);
+        if (!"startup".equals(reason) && !"shutdown".equals(reason))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        return checkedBackup(reason);
+    }
+
+    @PostMapping("/dev-handoff")
+    void handoff(@RequestHeader(value = "X-Desktop-Backup-Token", required = false) String supplied,
+                 HttpServletRequest request, HttpServletResponse response) throws IOException {
+        requireDevHandoff(supplied, request);
+        checkedBackup("shutdown");
+        response.setStatus(200);
+        response.setContentLength(0);
+        response.flushBuffer();
+        Thread shutdown = new Thread(() -> System.exit(0), "desktop-dev-handoff");
+        shutdown.start();
+    }
+
+    @PostMapping("/dev-handoff-check")
+    java.util.Map<String, String> handoffCheck(
+            @RequestHeader(value = "X-Desktop-Backup-Token", required = false) String supplied,
+            HttpServletRequest request) {
+        requireDevHandoff(supplied, request);
+        String imageDirectory = System.getenv("ALUMINUM_IMAGE_DIR");
+        if (imageDirectory == null || !Path.of(imageDirectory).isAbsolute())
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Thư mục ảnh của backend dev không hợp lệ");
+        return java.util.Map.of("imageDirectory", imageDirectory);
+    }
+
+    private void requireDevHandoff(String supplied, HttpServletRequest request) {
+        authorize(supplied, request);
+        if (!"true".equals(System.getenv("ALUMINUM_DEV_HANDOFF")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Backend này không bật bàn giao cho desktop");
+    }
+
+    private void authorize(String supplied, HttpServletRequest request) {
         byte[] expected = token;
         byte[] provided;
         try { provided = HexFormat.of().parseHex(supplied == null ? "" : supplied); }
@@ -56,8 +93,9 @@ class DesktopBackupControl {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         if (expected == null || !MessageDigest.isEqual(expected, provided))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        if (!"startup".equals(reason) && !"shutdown".equals(reason))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+    }
+
+    private BackupLogDto checkedBackup(String reason) {
         BackupLogDto result = backups.createDesktopBackup(reason);
         if (!"SUCCESS".equals(result.status()))
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, result.errorMessage());

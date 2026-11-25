@@ -64,12 +64,20 @@ export async function closeMonth(year: number, month: string): Promise<boolean> 
   return (await api.post<Envelope<boolean>>("/api/v1/dashboard/month-close", null, { params: { year, month } })).data.data;
 }
 
+export async function reopenMonth(year: number, month: string): Promise<boolean> {
+  return (await api.post<Envelope<boolean>>("/api/v1/dashboard/month-reopen", null, { params: { year, month } })).data.data;
+}
+
 export async function saveYearPeriod(year: number, from: string, to: string): Promise<YearPeriod> {
   return (await api.post<Envelope<YearPeriod>>("/api/v1/dashboard/year-period", null, { params: { year, from, to } })).data.data;
 }
 
 export async function saveYearStart(year: number, from: string, name: string): Promise<YearPeriod> {
   return (await api.post<Envelope<YearPeriod>>("/api/v1/dashboard/year-period/start", null, { params: { year, from, name } })).data.data;
+}
+
+export async function deleteYearPeriod(year: number, from: string): Promise<YearPeriod> {
+  return (await api.delete<Envelope<YearPeriod>>("/api/v1/dashboard/year-period", { params: { year, from } })).data.data;
 }
 
 export async function getYearEndBalance(year: number): Promise<YearEndBalance | null> {

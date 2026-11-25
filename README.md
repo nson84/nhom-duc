@@ -78,7 +78,7 @@ Lệnh đầu tạo thử rồi hoàn tác; lệnh sau ghi dữ liệu trong m�
 
 Mở **Sổ cuối năm** bằng tài khoản Xưởng hoặc Phân phối, chọn năm và bấm **Tạo bản xem trước**. Mỗi tài khoản vận hành chỉ in sổ của mình; Admin không truy cập màn này. Bản in gồm từng khách và phiếu bán/thu tiền, nợ chi tiết, sổ thu, sổ chi, phiếu nhập/nợ nhà cung cấp, công thợ Xưởng và tồn kho. Bấm **In / Lưu thành PDF**, chọn máy in PDF trong hộp thoại, rồi in/photocopy bản PDF. Số liệu chưa chốt có nhãn tạm tính.
 
-Khi chốt năm Xưởng, ứng dụng lưu bản số dư nhôm, nợ khách, nợ nhà cung cấp và lãi tại thời điểm chốt. Phân phối chọn tên năm, đặt ngày bắt đầu và ngày chốt trên Tổng quan rồi bấm **Chốt năm** để có bản số dư tương tự. Sau đó chỉ cần chọn tên năm trên Tổng quan, Báo cáo hoặc Thu chi: ứng dụng hiện ngày bắt đầu/kết thúc đã lưu và lọc đúng kỳ. Kỳ kế tiếp bắt đầu sau ngày chốt; Sổ cuối năm cũng lấy mốc này. Bản chốt dùng để đối chiếu; tồn kho và công nợ tiếp tục theo phiếu gốc sang năm sau. Thu hoặc trả nợ cũ chỉ thay đổi dòng tiền và công nợ, không tính lãi lần hai.
+Khi chốt năm Xưởng, ứng dụng lưu bản số dư nhôm, nợ khách, nợ nhà cung cấp và lãi tại thời điểm chốt. Phân phối chọn tên năm, đặt ngày bắt đầu và ngày kết thúc trong **Kiểm kê & chốt sổ → Chốt năm**, kiểm kê rồi chốt tại đó để có bản số dư tương tự. Sau đó chỉ cần chọn tên năm trên Tổng quan, Báo cáo hoặc Thu chi: ứng dụng hiện ngày bắt đầu/kết thúc đã lưu và lọc đúng kỳ. Kỳ kế tiếp bắt đầu sau ngày chốt; Sổ cuối năm cũng lấy mốc này. Bản chốt dùng để đối chiếu; tồn kho và công nợ tiếp tục theo phiếu gốc sang năm sau. Thu hoặc trả nợ cũ chỉ thay đổi dòng tiền và công nợ, không tính lãi lần hai.
 
 Xưởng ghi phiếu nhập nhôm, phiếu bán thành phẩm đã giao và từng lần bán phế liệu. Phiếu bán xưởng mới không trừ tồn theo ngày. Vào **Quyết toán xưởng** để kiểm kê nhôm nguyên liệu, phế liệu chưa bán, hàng đang làm và thành phẩm chưa bán vào cuối năm. Báo cáo tính hao hụt ước tính và lãi quản trị theo giá trị tồn đầu/cuối năm; trang này cũng có công nợ khách theo tháng/năm. Phân phối tiếp tục quản lý tồn liên tục.
 
@@ -168,3 +168,11 @@ Xem [kết quả audit tiếp theo](docs/audit-next-main.md): khóa chốt/ghi �
 Kiểm thử frontend: `cd frontend; node --test tests/*.test.mjs`. Kiểm thử script: `pwsh -File scripts/test-windows-build.ps1` và `pwsh -File scripts/test-recovered-backend.ps1`. Script đóng gói dừng khi Maven/npm/Tauri lỗi hoặc thiếu Cargo. GitHub Actions → **Build Windows installer candidate** chạy thủ công, đợi toàn bộ workflow Verify đạt rồi mới tạo artifact NSIS; không tự phát hành.
 
 Sau khi có artifact, chạy **Test installed Windows candidate** với run ID đóng gói để cài/mở/đăng nhập đầu tiên/đóng/gỡ trên Windows runner tạm. Kết quả có summary JSON và ảnh cửa sổ đăng nhập thực tế. MySQL ZIP lấy từ CDN Oracle, kiểm tra chữ ký executable, không cài dịch vụ hoặc dùng database thật. Kịch bản này không chạy trên máy vận hành.
+
+
+## Nhập lại sổ giấy
+
+Mở tháng cần nhập, lập phiếu và chọn Ghi từ sổ. Dùng ngày gốc cho phiếu và thanh toán. Thu chi cho nhập tổng tháng khi giấy không lưu từng ngày. Báo cáo → Lãi gộp hóa đơn / tháng xem lãi sau chi phí tạm tính. Xem quy tắc và giới hạn trong [yêu cầu](docs/requirements.md).
+
+
+Bản desktop có thể bàn giao backend dev mặc định khi dùng bản build mới của cả backend và desktop. [Quy trình chuyển dữ liệu](docs/recovery-runbook.md).

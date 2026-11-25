@@ -106,9 +106,70 @@ class StockLifecycleMysqlIT {
     }
 
     @Test
+    void manualExpenseEditKeepsCodeAndRejectsLockedMonth() {
+        var finance = new FinanceService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), clock, shops, periods);
+        var original = new com.aluminum.manager.finance.FinanceDtos.CreateTransactionRequest(
+                day, "EXPENSE", "OPERATING_EXPENSE", new BigDecimal("30000"), "Tiền điện", "Hải", null, false);
+        var changed = new com.aluminum.manager.finance.FinanceDtos.CreateTransactionRequest(
+                day.plusDays(1), "EXPENSE", "MAINTENANCE", new BigDecimal("40000"), "Bảo dưỡng", "Thuấn", null, false);
+        var created = transaction(() -> finance.createTransaction(original));
+        var updated = transaction(() -> finance.updateManualExpense(created.id(), changed));
+        assertEquals(created.transactionCode(), updated.transactionCode());
+        assertEquals("Thuấn", updated.spentBy());
+        assertEquals(0, new BigDecimal("40000").compareTo(updated.amount()));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions", Integer.class));
+        jdbc.update("UPDATE shop_month_periods SET closed_at = NOW() WHERE shop_id = ?", shops.currentId());
+        assertThrows(BusinessException.class, () -> transaction(() -> finance.updateManualExpense(created.id(), original)));
+    }
+
+    @Test
+    void plannedEndCannotExcludeRecordedActivity() {
+        var from = day.toLocalDate();
+        var later = day.plusDays(1);
+        var receipt = request("PURCHASE", "1", "75000000");
+        var dated = new StockDtos.DocumentRequest(receipt.documentType(), later, receipt.counterpartyName(),
+                receipt.customerId(), receipt.issuedBy(), receipt.receivedBy(), receipt.reason(), receipt.discountAmount(),
+                receipt.paymentMethod(), receipt.notes(), receipt.idempotencyKey(), receipt.items(), receipt.internal());
+        transaction(() -> service.confirm(service.createDraft(dated).id()));
+        assertThrows(BusinessException.class, () -> transaction(() -> periods.saveDraftPeriod(2025, from, from)));
+        var saved = transaction(() -> periods.saveDraftPeriod(2025, from, later.toLocalDate()));
+        assertEquals(later.toLocalDate(), saved.plannedEnd());
+        assertThrows(BusinessException.class, () -> transaction(() -> periods.saveStart(2025, later.toLocalDate(), "Changed")));
+    }
+
+    @Test
+    void unusedWrongYearCanBeRemovedBeforeStartingCorrectYear() {
+        var from = day.toLocalDate();
+        assertThrows(BusinessException.class, () -> transaction(() -> periods.deleteUnusedPeriod(2025, from)));
+        assertTrue(periods.period(2025).started());
+        jdbc.update("DELETE FROM shop_month_periods WHERE shop_id = ? AND period_year = 2025", shops.currentId());
+        var wrongStart = from.plusYears(1);
+        transaction(() -> periods.saveStart(2025, wrongStart, "Kỳ chọn nhầm"));
+        assertThrows(BusinessException.class, () -> transaction(() -> periods.saveStart(2026, wrongStart, "Kỳ đúng")));
+        assertFalse(transaction(() -> periods.deleteUnusedPeriod(2025, wrongStart)).started());
+        assertTrue(transaction(() -> periods.saveStart(2026, wrongStart, "Kỳ đúng")).started());
+    }
+
+    @Test
+    void monthReconciliationCarriesMeasuredStockWithoutDeductingTwice() {
+        confirm("PURCHASE", "1", "75000000");
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(),
+                new MonthlyInventoryValuation(jdbc, shops), service);
+        var count = new StockDtos.InventoryCountItemRequest(product, category, new BigDecimal("970"), new BigDecimal("10"));
+        var input = new MonthlyBookController.ReconcileInput(2025, "2025-02", List.of(count));
+        var snapshot = transaction(() -> book.reconcile(input)).data();
+        assertEquals(0, new BigDecimal("970").compareTo(snapshot.counts().get(0).rawKg()));
+        assertEquals(0, new BigDecimal("970").compareTo(service.balances(null, false).get(0).quantityBase()));
+        assertEquals(0, new BigDecimal("20").compareTo(service.balances(null, false).get(0).latestCountLossKg()));
+        assertThrows(BusinessException.class, () -> transaction(() -> book.reconcile(input)));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents WHERE document_type = 'ADJUSTMENT_OUT'", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM year_end_balances", Integer.class));
+    }
+
+    @Test
     void monthlyCountNeedsOnlyRawKgAndAnnualScrapCanStillBeRecordedLater() {
         confirm("PURCHASE", "1", "75000000");
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         var input = new MonthlyBookController.Input(2025, "2025-02", List.of(
                 new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("600"), null, null, null)), null);
         var saved = transaction(() -> book.close(input)).data();
@@ -148,7 +209,7 @@ class StockLifecycleMysqlIT {
         confirm("PURCHASE", "0.2", "75000000");
         long second = addSecondCategoryWithReceipt();
         if (!shops.isDistribution()) jdbc.update("INSERT INTO payroll_periods (period_year, period_month, status) VALUES (2025, 2, 'CLOSED')");
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         var counts = List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("200"), BigDecimal.ZERO, BigDecimal.ZERO, null),
                 new MonthlyBookController.Count(second, "Second aluminium", new BigDecimal("400"), BigDecimal.ZERO, BigDecimal.ZERO, null));
         transaction(() -> book.close(new MonthlyBookController.Input(2025, "2025-02", counts, BigDecimal.ZERO)));
@@ -175,7 +236,7 @@ class StockLifecycleMysqlIT {
             jdbc.update("INSERT INTO factory_raw_counts (year_number, category_id, quantity_kg, value_amount) VALUES (2025, ?, 200, 15000000), (2025, ?, 400, 28000000)", category, second);
             jdbc.update("INSERT INTO payroll_periods (period_year, period_month, status) VALUES (2025, 2, 'CLOSED')");
         }
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         var counts = List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("200"), BigDecimal.ZERO, BigDecimal.ZERO, null),
                 new MonthlyBookController.Count(second, "Second aluminium", new BigDecimal("400"), BigDecimal.ZERO, BigDecimal.ZERO, null));
         transaction(() -> book.close(new MonthlyBookController.Input(2025, "2025-02", counts, BigDecimal.ZERO)));
@@ -236,8 +297,13 @@ class StockLifecycleMysqlIT {
         confirm("SALE", "2", "76000000");
         jdbc.update("INSERT INTO distribution_inventory_count_evidence (shop_id, product_id, category_id, counted_quantity_kg, counted_at) VALUES (?, ?, ?, 6000, NOW(3))", shops.currentId(), product, category);
         var dashboard = new DashboardService(jdbc, clock, shops, periods);
-        var closing = transaction(() -> dashboard.closeDistribution(day.toLocalDate(), day.toLocalDate().plusDays(2), false, null));
+        var end = day.toLocalDate().plusDays(2);
+        transaction(() -> periods.saveDraftPeriod(2025, day.toLocalDate(), end));
+        var closing = transaction(() -> dashboard.closeDistribution(day.toLocalDate(), end, true, 2025));
         assertEquals(0, new BigDecimal("2000000").compareTo(closing.profit()));
+        assertTrue(periods.period(2025).closed());
+        assertEquals(end, periods.period(2025).periodTo());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM monthly_books", Integer.class));
     }
 
     @Test
@@ -266,6 +332,47 @@ class StockLifecycleMysqlIT {
         assertFalse(zeroReference.standardCostComplete());
         assertNull(zeroReference.standardGrossProfit());
         assertNull(zeroReference.dailyRows().get(0).standardGrossProfit());
+    }
+
+    @Test
+    void paperSaleKeepsCostAndCorrectsCashDateAcrossMonths() {
+        confirm("PURCHASE", "2", "75000000");
+        var original = request("SALE", "1", "90000000");
+        var line = new StockDtos.ItemRequest(product, category, unit, BigDecimal.ONE,
+                new BigDecimal("90000000"), BigDecimal.ZERO, "kg", null, null, null, null, new BigDecimal("80000"));
+        var paper = new StockDtos.DocumentRequest(original.documentType(), day, original.counterpartyName(),
+                customer, original.issuedBy(), original.receivedBy(), original.reason(), BigDecimal.ZERO,
+                null, null, original.idempotencyKey(), List.of(line), false, true);
+        var sale = transaction(() -> service.confirm(service.createDraft(paper).id()));
+        assertTrue(sale.paperSource());
+        assertEquals(0, new BigDecimal("80000").compareTo(sale.items().get(0).enteredCostPerKg()));
+
+        var earlyPayment = new StockDtos.PaymentRequest(new BigDecimal("1000000"), "TRANSFER", day.minusDays(1),
+                null, UUID.randomUUID().toString(), "Hải", "Test customer");
+        var error = assertThrows(BusinessException.class, () -> transaction(() -> service.addPayment(sale.id(), earlyPayment)));
+        assertEquals("Ngày thanh toán không được trước ngày lập phiếu", error.getMessage());
+
+        jdbc.update("UPDATE shop_month_periods SET closed_at = NOW() WHERE shop_id = ?", shops.currentId());
+        jdbc.update("INSERT INTO shop_month_periods (shop_id, month_start, period_year, opened_at) VALUES (?, '2025-03-01', 2025, NOW())", shops.currentId());
+        var payment = new StockDtos.PaymentRequest(new BigDecimal("1000000"), "TRANSFER", day.plusMonths(1),
+                null, UUID.randomUUID().toString(), "Hải", "Test customer");
+        var paid = transaction(() -> service.addPayment(sale.id(), payment));
+        var corrected = transaction(() -> service.editPaymentDate(sale.id(), paid.payments().get(0).id(), day.toLocalDate()));
+        assertEquals(paid.paidAmount(), corrected.paidAmount());
+        assertEquals(day.toLocalDate(), corrected.payments().get(0).paymentDate().toLocalDate());
+        assertEquals(day.toLocalDate(), jdbc.queryForObject(
+                "SELECT DATE(transaction_date) FROM financial_transactions WHERE reference_id = ?",
+                java.time.LocalDate.class, sale.id()));
+
+        jdbc.update("""
+                INSERT INTO financial_transactions (transaction_code, transaction_date, transaction_type,
+                    category, amount, reference_type, status, shop_id, monthly_summary)
+                VALUES ('TEST-MAINT', '2025-02-18', 'EXPENSE', 'MAINTENANCE', 2000000, 'MANUAL', 'CONFIRMED', ?, TRUE)
+                """, shops.currentId());
+        var finance = new FinanceService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), clock, shops, periods);
+        var month = finance.monthlyMargins(day.toLocalDate(), day.toLocalDate().withDayOfMonth(28)).get(0);
+        assertEquals(0, new BigDecimal("10000000").compareTo(month.grossProfit()));
+        assertEquals(0, new BigDecimal("8000000").compareTo(month.profitAfterExpenses()));
     }
 
     @Test
@@ -353,7 +460,7 @@ class StockLifecycleMysqlIT {
     void optionalMonthlySnapshotDoesNotChangeWhenAnotherInvoiceIsAdded() throws Exception {
         confirm("PURCHASE", "10", "75000000");
         confirm("SALE", "2", "76000000");
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         var input = new MonthlyBookController.Input(2025, "2025-02", List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("8000"), BigDecimal.ZERO, BigDecimal.ZERO, null)), BigDecimal.ZERO);
         var saved = transaction(() -> {
             try { return book.close(input).data(); } catch (Exception e) { throw new RuntimeException(e); }
@@ -434,7 +541,7 @@ class StockLifecycleMysqlIT {
     void decemberCarryoverKeepsSnapshotNamesInactiveCategoriesAndShopIsolation() {
         confirm("PURCHASE", "1", "75000000");
         long second = addSecondCategoryWithReceipt();
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         var input = new MonthlyBookController.Input(2025, "2025-12", List.of(
                 new MonthlyBookController.Count(category, "Original name", new BigDecimal("200"), null, null, null),
                 new MonthlyBookController.Count(second, "Second name", new BigDecimal("400"), null, null, null)), null);
@@ -525,8 +632,15 @@ class StockLifecycleMysqlIT {
         transaction(() -> attendance.payPeriod(periodId, payout));
         assertEquals(0, new BigDecimal("400000").compareTo(attendance.getPayrollPeriod(periodId).paidAmount()));
         assertEquals(0, new BigDecimal("450000").compareTo(jdbc.queryForObject("SELECT SUM(amount) FROM financial_transactions WHERE category = 'PAYROLL' AND status = 'CONFIRMED'", BigDecimal.class)));
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         assertEquals(0, new BigDecimal("450000").compareTo(book.get(2025, "2025-02").data().expenses()), "Advance and payout must not be added again to accrued payroll cost");
+        var finance = new FinanceService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), clock, shops, periods);
+        var paper = new com.aluminum.manager.finance.FinanceDtos.CreateTransactionRequest(day, "EXPENSE", "PAYROLL",
+                new BigDecimal("200000"), "Công thợ đã trả đủ từ sổ giấy: Thợ B", null, UUID.randomUUID().toString(), true);
+        assertTrue(transaction(() -> finance.createTransaction(paper)).monthlySummary());
+        var month = finance.monthlyMargins(day.toLocalDate(), day.toLocalDate().withDayOfMonth(28)).get(0);
+        assertEquals(0, new BigDecimal("650000").compareTo(month.payrollCost()));
+        assertEquals(0, new BigDecimal("-650000").compareTo(month.profitAfterExpenses()));
     }
 
     @Test
@@ -621,7 +735,7 @@ class StockLifecycleMysqlIT {
             assertTrue(checked.await(5, java.util.concurrent.TimeUnit.SECONDS));
             var closing = executor.submit(() -> withDistributionContext(() -> transaction(() -> {
                 if (scenario.equals("month-snapshot")) {
-                    var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+                    var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
                     return book.close(new MonthlyBookController.Input(2025, "2025-02", List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("10000"), null, null, null)), null)).data();
                 }
                 periods.save(2025, day.toLocalDate(), java.time.LocalDate.of(2025, 2, 28), new BigDecimal(sale == null ? "10000" : "8000"), BigDecimal.ZERO, BigDecimal.ZERO);
@@ -645,7 +759,7 @@ class StockLifecycleMysqlIT {
     @Test
     void simultaneousMonthlySnapshotsCreateOnlyOneBookAndDoNotLockTheOperatingMonth() throws Exception {
         confirm("PURCHASE", "1", "75000000");
-        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops));
+        var book = new MonthlyBookController(jdbc, shops, periods, new tools.jackson.databind.ObjectMapper(), new MonthlyInventoryValuation(jdbc, shops), service);
         var input = new MonthlyBookController.Input(2025, "2025-02", List.of(new MonthlyBookController.Count(category, "Test aluminium", new BigDecimal("600"), null, null, null)), null);
         var start = new java.util.concurrent.CountDownLatch(1);
         var executor = java.util.concurrent.Executors.newFixedThreadPool(2);

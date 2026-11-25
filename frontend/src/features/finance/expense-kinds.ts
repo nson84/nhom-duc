@@ -4,6 +4,8 @@ export const expenseKinds = [
   { value: "BREAK_SNACKS", label: "Tiền nước + bánh kẹo giữa giờ", category: "OPERATING_EXPENSE" },
   { value: "MACHINE_SUPPLIES", label: "Tiền vật tư máy móc", category: "OPERATING_EXPENSE" },
   { value: "REPAIR_MAINTENANCE", label: "Tiền sửa chữa hoặc thay thế bảo dưỡng", category: "MAINTENANCE" },
+  { value: "OTHER", label: "Chi khác", category: "OTHER_EXPENSE" },
+  { value: "PAPER_PAYROLL", label: "Công thợ đã trả đủ từ sổ giấy", category: "PAYROLL" },
 ] as const;
 
 export type ExpenseKind = (typeof expenseKinds)[number]["value"];

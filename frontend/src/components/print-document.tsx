@@ -17,6 +17,13 @@ export function printPage(title: string, body: string, landscape = false) {
     h3{font-size:11pt;margin:5mm 0 2mm}p{margin:2mm 0}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;table-layout:fixed}
     th,td{border:1px solid #9aa9bb;padding:2mm;vertical-align:top;overflow-wrap:anywhere;text-align:left}th{background:#e8eef5}
     .invoice{break-inside:avoid-page;margin:6mm 0;padding:3mm;border:1px solid #9aa9bb}
+    .invoice-payments{display:grid;grid-template-columns:repeat(3,max-content);gap:1mm 3mm;margin:1mm 0 2mm;padding:0;list-style:none}
+    .invoice-payments li{display:grid;grid-column:1 / -1;grid-template-columns:subgrid;align-items:center}
+    .payment-amount{text-align:right;font-variant-numeric:tabular-nums}
+    .payment-method{display:inline-block;padding:.3mm 1.5mm;border:.5pt solid #aab6c1;border-radius:1mm;font-size:9pt}
+    .payment-method-cash{color:#166534;background:#dcfce7;border-color:#86c995}
+    .payment-method-transfer{color:#1e40af;background:#dbeafe;border-color:#91b9ed}
+    .payment-method-other{color:#475569;background:#f1f5f9}
     .total{font-weight:bold;background:#e8eef5}.muted{color:#52657d}.warn{color:#9b1c1c;font-weight:bold}
     @media screen{body{max-width:${landscape ? "297mm" : "210mm"};margin:auto;padding:15mm;background:white}}
   </style></head><body>${body}</body></html>`;

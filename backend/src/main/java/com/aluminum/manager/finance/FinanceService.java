@@ -27,6 +27,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,7 +74,7 @@ public class FinanceService {
 		StringBuilder sql = new StringBuilder("""
 				SELECT ft.id, ft.transaction_code, ft.transaction_date, ft.transaction_type, ft.category,
 				       ft.amount, ft.description, ft.spent_by, ft.reference_type, ft.reference_id, ft.status, ft.created_at,
-				       ft.is_internal, s.code AS shop_code
+				       ft.is_internal, s.code AS shop_code, ft.monthly_summary
 				FROM financial_transactions ft
 				JOIN shops s ON s.id = ft.shop_id
 				LEFT JOIN stock_documents d ON d.id = ft.reference_id AND ft.reference_type = 'STOCK_DOCUMENT'
@@ -138,6 +139,10 @@ public class FinanceService {
 		}
 
 		LocalDateTime when = request.transactionDate() == null ? LocalDateTime.now(clock) : request.transactionDate();
+		boolean monthly = Boolean.TRUE.equals(request.monthlySummary());
+		if (monthly && request.transactionDate() == null) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chọn tháng tổng hợp", null);
+		}
 		yearPeriods.requireWorkingDate(when);
 		if (!shops.isDistribution()) assertFactoryYearOpen(when);
 		String code = sequences.nextCode("FINANCE_EXPENSE", when.toLocalDate());
@@ -146,18 +151,64 @@ public class FinanceService {
 				INSERT INTO financial_transactions (
 				    transaction_code, transaction_date, transaction_type, category,
 				    amount, description, spent_by, reference_type, reference_id, status, idempotency_key,
-				    shop_id, is_internal)
-				VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL', NULL, 'CONFIRMED', ?, ?, 0)
+				    shop_id, is_internal, monthly_summary)
+				VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL', NULL, 'CONFIRMED', ?, ?, 0, ?)
 				""",
 				code, Timestamp.valueOf(when), type, category, amount, blank(request.description()), blank(request.spentBy()), key,
-				shops.currentId());
+				shops.currentId(), monthly);
 		audit.record(CurrentAdmin.get().id(), "CREATE_FINANCE_" + type, "financial_transactions",
 				String.valueOf(id), code);
 		return getTransaction(id);
 	}
 
 	@Transactional
+	public TransactionDto updateManualExpense(long id, CreateTransactionRequest request) {
+		long shopId = shops.currentId();
+		jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shopId);
+		var owned = jdbc.queryForList("""
+				SELECT id FROM financial_transactions WHERE id = ? AND shop_id = ? AND status = 'CONFIRMED'
+				  AND transaction_type = 'EXPENSE' AND reference_type = 'MANUAL'
+				  AND category <> 'PAYROLL' AND is_internal = 0 FOR UPDATE
+				""", Long.class, id, shopId);
+		String category = request.category().trim();
+		if (owned.isEmpty() || !"EXPENSE".equals(request.transactionType()) ||
+				!MANUAL_EXPENSE_CATEGORIES.contains(category) || "PAYROLL".equals(category)) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ sửa được phiếu chi tự lập còn hiệu lực, ngoài phiếu công thợ", null);
+		}
+		TransactionDto previous = getTransaction(id);
+		LocalDateTime when = request.transactionDate();
+		if (when == null || (shops.isDistribution() && blank(request.spentBy()) == null)) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nhập ngày chi và thông tin người chi bắt buộc", null);
+		}
+		yearPeriods.requireWorkingDate(previous.transactionDate());
+		yearPeriods.requireWorkingDate(when);
+		if (!shops.isDistribution()) {
+			assertFactoryYearOpen(previous.transactionDate());
+			assertFactoryYearOpen(when);
+		}
+		Boolean monthBooked = jdbc.queryForObject("""
+				SELECT EXISTS(SELECT 1 FROM monthly_books WHERE shop_id = ? AND month_start IN (?, ?))
+				""", Boolean.class, shopId, previous.transactionDate().toLocalDate().withDayOfMonth(1),
+				when.toLocalDate().withDayOfMonth(1));
+		if (Boolean.TRUE.equals(monthBooked))
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không sửa phiếu thuộc tháng đã chốt sổ", null);
+		BigDecimal amount = InventoryMath.snapshotMoney(request.amount());
+		jdbc.update("""
+				UPDATE financial_transactions SET transaction_date = ?, category = ?, amount = ?,
+				    description = ?, spent_by = ?, monthly_summary = ? WHERE id = ? AND shop_id = ?
+				""", Timestamp.valueOf(when), category, amount, blank(request.description()), blank(request.spentBy()),
+				Boolean.TRUE.equals(request.monthlySummary()), id, shopId);
+		audit.record(CurrentAdmin.get().id(), "EDIT_MANUAL_EXPENSE", "financial_transactions", String.valueOf(id),
+				previous.transactionCode() + ": " + previous.transactionDate() + " / " + previous.amount() + " → " + when + " / " + amount);
+		return getTransaction(id);
+	}
+
+	@Transactional
 	public TransactionDto voidTransaction(long id, String reason) {
+		long shopId = shops.currentId();
+		jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shopId);
+		jdbc.queryForList("SELECT id FROM financial_transactions WHERE id = ? AND shop_id = ? FOR UPDATE",
+				Long.class, id, shopId);
 		TransactionDto tx = getTransaction(id);
 		yearPeriods.requireWorkingDate(tx.transactionDate());
 		if ("VOID".equals(tx.status())) {
@@ -219,7 +270,7 @@ public class FinanceService {
 				rs.getString("status"),
 				rs.getTimestamp("created_at").toLocalDateTime(),
 				rs.getBoolean("is_internal"),
-				rs.getString("shop_code"));
+				rs.getString("shop_code"), rs.getBoolean("monthly_summary"));
 	}
 
 	private void assertFactoryYearOpen(LocalDateTime date) {
@@ -408,7 +459,7 @@ public class FinanceService {
 		jdbc.query(shops.apply("""
 				SELECT DATE(transaction_date) AS day, COALESCE(SUM(amount), 0) AS exp
 				FROM financial_transactions
-				WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED'
+				WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED' AND monthly_summary = 0
 				  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'PAYROLL', 'OTHER_EXPENSE')
 				  AND transaction_date >= ? AND transaction_date < ?
 				GROUP BY DATE(transaction_date)
@@ -472,6 +523,7 @@ public class FinanceService {
 				       COALESCE(d.counterparty_name, 'Khách chưa gắn') AS customer_name,
 				       d.total_amount AS revenue,
 				       SUM(i.quantity_base * COALESCE(
+				           i.entered_cost_per_kg,
 				           NULLIF(i.factory_reference_cost_per_kg, 0),
 				           NULLIF(i.standard_cost_per_base_snapshot, 0),
 				           NULLIF((SELECT cpp.price_per_base FROM category_purchase_prices cpp
@@ -480,7 +532,7 @@ public class FinanceService {
 				            ORDER BY cpp.effective_from DESC, cpp.id DESC LIMIT 1), 0)
 				       )) AS reference_cost,
 				       SUM(CASE WHEN COALESCE(
-				           NULLIF(i.factory_reference_cost_per_kg, 0), NULLIF(i.standard_cost_per_base_snapshot, 0),
+				           i.entered_cost_per_kg, NULLIF(i.factory_reference_cost_per_kg, 0), NULLIF(i.standard_cost_per_base_snapshot, 0),
 				           NULLIF((SELECT cpp.price_per_base FROM category_purchase_prices cpp
 				            WHERE cpp.category_id = i.category_id
 				              AND cpp.effective_from <= DATE(d.document_date)
@@ -489,6 +541,8 @@ public class FinanceService {
 				FROM stock_documents d
 				JOIN stock_document_items i ON i.document_id = d.id
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				  AND d.reversal_of_document_id IS NULL
+				  AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id)
 				  AND d.document_date >= ? AND d.document_date < ?
 				GROUP BY d.id, d.document_code, DATE(d.document_date),
 				         d.counterparty_name, d.total_amount, d.is_internal
@@ -504,6 +558,64 @@ public class FinanceService {
 	static FinanceDtos.InvoiceGrossMarginDto invoiceMargin(long id, String code, LocalDate day,
 			String customer, BigDecimal revenueValue, BigDecimal referenceCost, int missingCost) {
 		return invoiceMargin(id, code, day, customer, revenueValue, referenceCost, missingCost, false);
+	}
+
+	public record MonthlyMargin(String month, BigDecimal grossProfit, BigDecimal operatingCost,
+			BigDecimal payrollCost, BigDecimal profitAfterExpenses) {}
+
+	@Transactional(readOnly = true)
+	public List<MonthlyMargin> monthlyMargins(LocalDate from, LocalDate to) {
+		DateRange period = range(from, to);
+		var invoices = invoiceGrossMargins(period.from(), period.to());
+		List<MonthlyMargin> result = new ArrayList<>();
+		for (YearMonth month = YearMonth.from(period.from()); !month.isAfter(YearMonth.from(period.to()));
+				month = month.plusMonths(1)) {
+			LocalDate first = month.atDay(1);
+			LocalDate last = month.atEndOfMonth();
+			LocalDate start = first.isBefore(period.from()) ? period.from() : first;
+			LocalDate end = last.isAfter(period.to()) ? period.to().plusDays(1) : last.plusDays(1);
+			BigDecimal gross = BigDecimal.ZERO;
+			for (var invoice : invoices) {
+				if (invoice.internal() || !month.equals(YearMonth.from(invoice.documentDate()))) continue;
+				if (!invoice.costComplete()) {
+					gross = null;
+					break;
+				}
+				gross = gross.add(invoice.estimatedGrossProfit());
+			}
+			BigDecimal operating = queryMoney("""
+					SELECT COALESCE(SUM(amount), 0) FROM financial_transactions
+					WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED' AND is_internal = 0
+					  AND category IN ('OPERATING_EXPENSE', 'MAINTENANCE', 'OTHER_EXPENSE')
+					  AND transaction_date >= ? AND transaction_date < ?
+					""", Timestamp.valueOf(start.atStartOfDay()), Timestamp.valueOf(end.atStartOfDay()));
+			BigDecimal payroll = queryMoney("""
+					SELECT COALESCE(SUM(amount), 0) FROM financial_transactions
+					WHERE transaction_type = 'EXPENSE' AND status = 'CONFIRMED' AND is_internal = 0
+					  AND category = 'PAYROLL' AND reference_type = 'MANUAL'
+					  AND transaction_date >= ? AND transaction_date < ?
+					""", Timestamp.valueOf(start.atStartOfDay()), Timestamp.valueOf(end.atStartOfDay()));
+			if (!shops.isDistribution()) {
+				if (last.isBefore(end)) {
+					payroll = payroll.add(queryMoney("""
+							SELECT COALESCE(SUM(GREATEST(pd.base_pay + pd.overtime_pay + pd.bonus_pay
+							       + pd.allowances - pd.deductions, 0) - pd.holiday_bonus_pay), 0)
+							FROM payroll_details pd JOIN payroll_periods pp ON pp.id = pd.payroll_period_id
+							JOIN employees e ON e.id = pd.employee_id
+							WHERE e.shop_id = ? AND pp.period_year = ? AND pp.period_month = ?
+							""", shops.currentId(), month.getYear(), month.getMonthValue()));
+				}
+				payroll = payroll.add(queryMoney("""
+						SELECT COALESCE(SUM(h.bonus_amount), 0)
+						FROM holiday_employee_bonuses b JOIN holidays h ON h.id = b.holiday_id
+						JOIN employees e ON e.id = b.employee_id
+						WHERE e.shop_id = ? AND h.holiday_date >= ? AND h.holiday_date < ?
+						""", shops.currentId(), start, end));
+			}
+			result.add(new MonthlyMargin(month.toString(), gross, operating, payroll,
+					gross == null ? null : gross.subtract(operating).subtract(payroll)));
+		}
+		return result;
 	}
 
 	static FinanceDtos.InvoiceGrossMarginDto invoiceMargin(long id, String code, LocalDate day,

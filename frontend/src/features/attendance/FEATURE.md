@@ -14,8 +14,10 @@ Bảng nhân viên, chấm công, tiền công và bảng trong modal cuộn nga
 
 **Chức năng**
 - CRUD nhân viên (họ tên, SĐT, ngày vào, đang/ngừng làm). Ngày vào làm chỉ hiện trong biểu mẫu.
-- Lịch sử mức công ngày và một đơn giá tăng ca mỗi giờ theo hiệu lực, áp dụng cho mọi ngày.
+- Lịch sử mức công ngày, đơn giá tăng ca mỗi giờ và mỗi buổi theo hiệu lực. Khi thêm nhân viên hoặc mức công mới có thể đặt cả hai đơn giá.
 - Có thể xóa mức công đặt trước khi mức đó chưa có hiệu lực và chưa được dùng trong chấm công.
+- Lịch sử chỉ đánh dấu một mức đang áp dụng. Lưu mức công tính lại kỳ công đã lập nếu tháng và kỳ công còn mở và ngày hiệu lực giao với tháng đó.
+- Lịch sử hiển thị mốc mới nhất nếu có nhiều bản ghi cùng ngày và gộp các khoảng liền nhau đã có hiệu lực nếu các mức tiền và giờ chuẩn giống nhau.
 
 ### `/cham-cong` — Chấm công
 
@@ -33,6 +35,8 @@ Trong **Lịch nghỉ lễ**, chọn ngày trong năm đang xem, nhập mức th
 - Bảng tháng: bấm số ngày để mở phiếu từ 00:01 đến hết 23:59 của chính ngày đó. Tìm theo tên hoặc mã nhân viên. Sáng và chiều mỗi buổi 0,5 công. Tăng ca có checkbox và ô số giờ lẻ riêng, bỏ tích đặt số giờ về 0. Tổng công và tổng giờ tăng ca hiển thị riêng. Lưu xong khóa phiếu, mở lại trong ngày phải xác nhận.
 - Dưới mỗi ngày có ký hiệu loại nghỉ: nghỉ cửa hàng, nghỉ lễ quốc gia, nghỉ lễ công giáo. Mỗi ngày nghỉ đặt được lương riêng; lương đó thay công ngày khi tính tiền
 - Ô ngày xem/sửa buổi sáng, chiều khi phiếu điểm danh chưa khóa. Tăng ca và tiền thưởng riêng của từng nhân viên vẫn sửa được sau khi lưu điểm danh, cho đến khi kỳ công chốt. Tăng ca chỉ tính lương khi đã duyệt; thưởng theo ngày cộng riêng vào kỳ lương
+- Khi thêm hoặc sửa tăng ca, chọn tính theo giờ hoặc một buổi. Theo giờ nhập số giờ; theo buổi mỗi bản ghi tính đúng một buổi. Có thể nhập đơn giá riêng; bỏ trống dùng mức tương ứng đã cấu hình theo ngày công. Đơn giá, đơn vị và thành tiền được lưu trên bản ghi tăng ca. Tổng giờ trong bảng công chỉ cộng tăng ca theo giờ.
+- Các ô nhập tiền trên màn chấm công, gồm đơn giá tăng ca, hiển thị dấu phẩy phân tách hàng nghìn khi gõ; giá trị gửi lên API vẫn là số tiền.
 - Lịch nghỉ lễ; quy tắc chấm (qua đêm, làm tròn…) — cấu hình, không hard-code
 - Kỳ công đã chốt thì không sửa điểm danh, loại ngày, hay tăng ca
 
@@ -44,7 +48,7 @@ Khi mở trang hoặc đổi tháng, kỳ đang mở tự tính lại theo dữ 
 
 Nhập tổng tiền lương đã ứng của từng người trong kỳ mở. Hệ thống trừ khi tính thực lĩnh và kiểm tra số ứng trước khi chốt. Sau khi chốt, mở **Xem bảng kê** theo tên để xem công, giờ tăng ca đã duyệt, thưởng lễ, tiền ứng và tổng nhận.
 
-Nút **In bảng công và lương** xuất tháng đang chọn thành bản in/PDF: mỗi nhân viên có các ngày chấm công, sáng/chiều, công, tăng ca đã duyệt, thưởng ngày và bảng từng khoản tính lương; cuối bản in tổng hợp tháng và số đã chi. Kỳ chưa chốt ghi rõ là tạm tính. Tiền ứng hiện chỉ lưu tổng tháng nên bản in không tự tạo ngày ứng.
+Nút **In bảng công và lương** xuất tháng đang chọn thành bản in/PDF. Bảng chi tiết lương bỏ các khoản không phát sinh và giữ dòng thực lĩnh. Lịch sử ứng giữ ghi chú đã nhập. Cuối bản in có tổng hợp tháng và số đã chi nếu có. Kỳ chưa chốt ghi rõ là tạm tính.
 
 | | |
 |--|--|

@@ -32,3 +32,6 @@ Thao tác sao lưu và phục hồi dành cho Admin.
 ## Cập nhật rà soát 19/11/2026
 
 Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn kiểm thử. Sổ tháng định giá tồn theo lớp nhập mới nhất, không FIFO; tiền công/phụ cấp/khấu trừ theo tháng. Ứng lương mới có lịch sử ngày, tiền và ghi chú, ghi chi thực tế và trừ thực lĩnh; số ứng tổng cũ không được tự gán ngày. Báo cáo thiếu giá vốn không hiển thị lợi nhuận giả bằng cách coi giá vốn là 0. Các bài MySQL phải dùng cấu hình thử riêng, không thay đổi database thật.
+
+
+Bản desktop hỗ trợ Dùng dữ liệu này khi backend dev mặc định đã bật bàn giao. App xác minh backend, giữ đường dẫn ảnh gốc, chờ backend dev sao lưu và nhường cổng rồi tự mở database phục hồi. Quay lại kiểm tra tên database trước khi báo thành công.

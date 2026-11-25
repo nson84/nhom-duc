@@ -98,8 +98,8 @@ public class StockController {
 	}
 
 	@GetMapping("/stock-documents/{id}")
-	public ApiResponse<DocumentDto> get(@PathVariable long id) {
-		return ApiResponse.ok(service.getForView(id), null);
+	public ApiResponse<DocumentDto> get(@PathVariable long id, @RequestParam(defaultValue = "false") boolean internalHistory) {
+		return ApiResponse.ok(internalHistory ? service.getInternalPurchaseHistory(id) : service.getForView(id), null);
 	}
 
 	@PostMapping("/stock-documents")
@@ -132,6 +132,14 @@ public class StockController {
 	@PostMapping("/stock-documents/{id}/payments")
 	public ApiResponse<DocumentDto> pay(@PathVariable long id, @Valid @RequestBody PaymentRequest request) {
 		return ApiResponse.ok(service.addPayment(id, request), "Đã ghi thanh toán");
+	}
+
+	public record PaymentDateRequest(@jakarta.validation.constraints.NotNull LocalDate date) {}
+
+	@PutMapping("/stock-documents/{id}/payments/{paymentId}/date")
+	public ApiResponse<DocumentDto> editPaymentDate(@PathVariable long id, @PathVariable long paymentId,
+			@Valid @RequestBody PaymentDateRequest request) {
+		return ApiResponse.ok(service.editPaymentDate(id, paymentId, request.date()), "Đã sửa ngày thanh toán");
 	}
 
 	@PutMapping("/stock-documents/{id}/confirmed")

@@ -28,7 +28,8 @@ public final class FinanceDtos {
 			String status,
 			LocalDateTime createdAt,
 			boolean internal,
-			String shopCode
+			String shopCode,
+			boolean monthlySummary
 	) {
 	}
 
@@ -40,7 +41,8 @@ public final class FinanceDtos {
 			@DecimalMin(value = "0", inclusive = false, message = "Số tiền phải lớn hơn 0") BigDecimal amount,
 			@Size(max = 500) String description,
 			@Size(max = 150) String spentBy,
-			@Size(max = 80) String idempotencyKey
+			@Size(max = 80) String idempotencyKey,
+			Boolean monthlySummary
 	) {
 	}
 

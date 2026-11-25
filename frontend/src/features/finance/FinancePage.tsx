@@ -1,4 +1,4 @@
-import { StopOutlined } from "@ant-design/icons";
+import { EditOutlined, StopOutlined } from "@ant-design/icons";
 import {
   Alert,
   AutoComplete,
@@ -78,6 +78,7 @@ export function FinancePage() {
   const [creating, setCreating] = useState(false);
   const [viewing, setViewing] = useState<FinanceTransaction | null>(null);
   const [voiding, setVoiding] = useState<FinanceTransaction | null>(null);
+  const [editing, setEditing] = useState<FinanceTransaction | null>(null);
 
   useEffect(() => {
     if (shop === "DISTRIBUTION" && scope !== "all" && categoryFilter === "PAYROLL") setCategoryFilter(undefined);
@@ -145,7 +146,7 @@ export function FinancePage() {
       <p style={{ marginTop: 0, color: "var(--color-text-secondary)" }}>
         Sổ thu chi chỉ hiển thị khoản tiền theo ngày thực nhận hoặc thực chi trong tháng đang chọn. Phiếu bán và phiếu nhập gốc có thể thuộc tháng khác; tiền nhập hàng không tính vào chi phí hoạt động.
       </p>
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      <Row className="finance-summary-row" gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={6}>
           <Card size="small">
             <Statistic title="Tổng tiền thực thu trong kỳ" value={formatMoney(summary?.totalIncome ?? 0)} />
@@ -169,10 +170,15 @@ export function FinancePage() {
         <Col xs={24} md={6}>
           <Card size="small">
             <Statistic
-              title="Thu trừ chi trong kỳ (không phải lãi)"
+              title="Chênh lệch tiền thu và chi"
               value={formatMoney(summary?.netCashflow ?? 0)}
               valueStyle={{ color: (summary?.netCashflow ?? 0) >= 0 ? "var(--color-success)" : "var(--color-danger)" }}
             />
+            {summary && <div style={{ marginTop: 8, color: "var(--color-text-secondary)" }}>
+              {Number(summary.netCashflow) === 0
+                ? "Tiền thu bằng tiền chi trong kỳ."
+                : `${Number(summary.netCashflow) < 0 ? "Đã chi nhiều hơn thu" : "Đã thu nhiều hơn chi"} ${formatMoney(Math.abs(Number(summary.netCashflow)))} trong kỳ.`}
+            </div>}
           </Card>
         </Col>
         {scope === "all" ? (
@@ -263,7 +269,7 @@ export function FinancePage() {
             dataIndex: "transactionDate",
             width: 150,
             align: "center",
-            render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
+            render: (v: string, row) => dayjs(v).format(row.monthlySummary ? "[Tổng tháng] MM/YYYY" : "DD/MM/YYYY"),
           },
           {
             title: "Loại",
@@ -291,23 +297,28 @@ export function FinancePage() {
         ]}
       />
 
-      {creating ? (
+      {creating || editing ? (
         <CreateTxModal
+          key={editing?.id ?? "new"}
+          editing={editing}
           shop={shop}
           workingPeriod={period}
-          onClose={() => setCreating(false)}
-          onSaved={() => {
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onSaved={(saved) => {
+            if (editing) setViewing(saved);
             setCreating(false);
+            setEditing(null);
             void load();
           }}
         />
       ) : null}
 
-      {viewing ? (
+      {viewing && !editing ? (
         <FinanceDetailModal
           tx={viewing}
           canWrite={canWrite}
           onClose={() => setViewing(null)}
+          onEdit={() => setEditing(viewing)}
           onVoid={() => {
             setVoiding(viewing);
             setViewing(null);
@@ -333,15 +344,19 @@ function FinanceDetailModal({
   tx,
   canWrite,
   onClose,
+  onEdit,
   onVoid,
 }: {
   tx: FinanceTransaction;
   canWrite: boolean;
   onClose: () => void;
+  onEdit: () => void;
   onVoid: () => void;
 }) {
   const holidayBonus = tx.referenceType === "HOLIDAY_BONUS";
   const canVoid = canWrite && tx.status === "CONFIRMED" && tx.referenceType !== "STOCK_DOCUMENT" && !holidayBonus;
+  const canEdit = canWrite && tx.status === "CONFIRMED" && tx.transactionType === "EXPENSE" &&
+    tx.referenceType === "MANUAL" && tx.category !== "PAYROLL" && !tx.internal;
 
   return (
     <Modal
@@ -350,6 +365,7 @@ function FinanceDetailModal({
       onCancel={onClose}
       footer={
         <Space>
+          {canEdit && <AppActionButton tone="edit" icon={<EditOutlined />} onClick={onEdit}>Sửa phiếu</AppActionButton>}
           {canVoid ? (
             <AppActionButton tone="delete" icon={<StopOutlined />} onClick={onVoid}>
               Hủy phiếu
@@ -360,7 +376,7 @@ function FinanceDetailModal({
       }
     >
       <Descriptions size="small" column={1} bordered>
-        <Descriptions.Item label="Thời gian">{dayjs(tx.transactionDate).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
+        <Descriptions.Item label="Thời gian">{dayjs(tx.transactionDate).format(tx.monthlySummary ? "[Tổng tháng] MM/YYYY" : "DD/MM/YYYY")}</Descriptions.Item>
         <Descriptions.Item label="Loại">
           {tx.transactionType === "INCOME" ? <Tag color="green">Thu</Tag> : <Tag color="volcano">Chi</Tag>}
           {tx.internal ? (
@@ -395,32 +411,47 @@ function FinanceDetailModal({
 }
 
 function CreateTxModal({
+  editing,
   shop,
   workingPeriod,
   onClose,
   onSaved,
 }: {
+  editing: FinanceTransaction | null;
   shop: "DISTRIBUTION" | "MANUFACTURING";
   workingPeriod: YearPeriod | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (saved: FinanceTransaction) => void;
 }) {
   const [form] = Form.useForm<{
     transactionDate: Dayjs;
     expenseKind: ExpenseKind;
+    monthlySummary?: boolean;
+    worker?: string;
+    advance?: number;
     amount: number;
     description?: string;
     spentBy?: string;
   }>();
   const [saving, setSaving] = useState(false);
   const key = useMemo(() => crypto.randomUUID(), []);
+  const monthlySummary = Form.useWatch("monthlySummary", form) ?? false;
+  const paperPayroll = Form.useWatch("expenseKind", form) === "PAPER_PAYROLL";
+  const grossPay = Form.useWatch("amount", form) ?? 0;
+  const advance = Form.useWatch("advance", form) ?? 0;
   const periodStart = workingPeriod?.started ? dayjs(workingPeriod.periodFrom) : null;
   const periodEnd = workingPeriod?.started ? dayjs(workingPeriod.periodTo) : null;
+  const existingLabel = expenseLabelFromDescription(editing?.description);
+  const existingKind = expenseKinds.find(kind => kind.label === existingLabel)
+    ?? expenseKinds.find(kind => kind.category === editing?.category);
+  const existingNote = existingLabel
+    ? editing?.description?.slice(existingLabel.length).replace(/^:\s*/, "")
+    : editing?.description;
 
   return (
     <Modal
       open
-      title="Lập phiếu chi"
+      title={editing ? `Sửa ${editing.transactionCode}` : "Lập phiếu chi"}
       okText="Lưu phiếu"
       cancelText="Hủy"
       confirmLoading={saving}
@@ -434,27 +465,40 @@ function CreateTxModal({
           const dateError = errorFields.find((field) => field.name[0] === "transactionDate");
           if (dateError) message.warning(dateError.errors[0]);
         }}
-        initialValues={{
+        initialValues={editing ? {
+          transactionDate: dayjs(editing.transactionDate),
+          expenseKind: existingKind?.value ?? expenseKinds[0].value,
+          monthlySummary: editing.monthlySummary,
+          amount: editing.amount,
+          description: existingNote,
+          spentBy: editing.spentBy,
+        } : {
           transactionDate: periodStart && (dayjs().isBefore(periodStart) || periodEnd && dayjs().isAfter(periodEnd))
             ? periodStart : dayjs(),
           expenseKind: expenseKinds[0].value,
+          monthlySummary: false,
         }}
         onFinish={async (values) => {
           setSaving(true);
           try {
             const kind = expenseKinds.find((option) => option.value === values.expenseKind);
             if (!kind) throw new Error("Chọn khoản chi hợp lệ");
-            await createFinanceTransaction({
-              transactionDate: values.transactionDate.format("YYYY-MM-DDTHH:mm:ss"),
+            const start = values.transactionDate.startOf("month");
+            const anchor = periodStart && start.isBefore(periodStart) ? periodStart : start;
+            const saved = await createFinanceTransaction({
+              monthlySummary: values.monthlySummary,
+              transactionDate: (values.monthlySummary ? anchor : values.transactionDate).format("YYYY-MM-DD[T00:00:00]"),
               transactionType: "EXPENSE",
               category: kind.category,
               amount: values.amount,
-              description: values.description?.trim() ? `${kind.label}: ${values.description.trim()}` : kind.label,
-              spentBy: values.spentBy,
-              idempotencyKey: key,
-            });
-            message.success("Đã ghi nhận phiếu chi");
-            onSaved();
+              description: kind.value === "PAPER_PAYROLL"
+                ? `${kind.label}: ${values.worker?.trim()} · Ứng ${formatMoney(values.advance ?? 0)} · Trả cuối tháng ${formatMoney(values.amount - (values.advance ?? 0))}`
+                : values.description?.trim() ? `${kind.label}: ${values.description.trim()}` : kind.label,
+              spentBy: values.spentBy ?? editing?.spentBy ?? undefined,
+              idempotencyKey: editing ? undefined : key,
+            }, editing?.id);
+            message.success(editing ? "Đã sửa phiếu chi" : "Đã ghi nhận phiếu chi");
+            onSaved(saved);
           } catch (error) {
             message.error(toApiError(error).message);
           } finally {
@@ -462,31 +506,46 @@ function CreateTxModal({
           }
         }}
       >
-        <Form.Item name="transactionDate" label="Thời gian" rules={[{ required: true }, {
+        <Form.Item name="monthlySummary" label="Cách ghi">
+          <Select
+            onChange={(monthly) => { if (!monthly && paperPayroll) form.setFieldValue("expenseKind", expenseKinds[0].value); }}
+            options={[{ value: false, label: "Theo ngày thực chi" }, { value: true, label: "Tổng tháng từ sổ giấy" }]} />
+        </Form.Item>
+        <Form.Item name="transactionDate" label={monthlySummary ? "Tháng chi" : "Ngày chi"} rules={[{ required: true }, {
           validator: (_, value: Dayjs | null) => {
             if (!value || !periodStart) return Promise.resolve();
-            if (value.isBefore(periodStart, "day") || periodEnd && value.isAfter(periodEnd, "day"))
+            const unit = monthlySummary ? "month" : "day";
+            if (value.isBefore(periodStart, unit) || periodEnd && value.isAfter(periodEnd, unit))
               return Promise.reject(new Error("Ngày phiếu chi phải nằm trong năm đang khóa"));
             return Promise.resolve();
           },
         }]}>
-          <DatePicker showTime needConfirm={false} format="DD/MM/YYYY HH:mm" style={{ width: "100%" }}
+          <DatePicker picker={monthlySummary ? "month" : "date"} format={monthlySummary ? "MM/YYYY" : "DD/MM/YYYY"} style={{ width: "100%" }}
             minDate={periodStart ?? undefined} maxDate={periodEnd ?? undefined} />
         </Form.Item>
         <Form.Item name="expenseKind" label="Khoản chi" rules={[{ required: true }]}>
-          <Select options={expenseKinds.map(({ value, label }) => ({ value, label }))} />
+          <Select options={expenseKinds.filter((kind) => kind.value !== "PAPER_PAYROLL" || !editing && monthlySummary && shop === "MANUFACTURING").map(({ value, label }) => ({ value, label }))} />
         </Form.Item>
-        <Form.Item name="amount" label="Số tiền" rules={vndAmountRules}>
+        {paperPayroll && <Form.Item name="worker" label="Tên thợ" rules={[{ required: true, whitespace: true }]}>
+          <Input maxLength={150} />
+        </Form.Item>}
+        <Form.Item name="amount" label={paperPayroll ? "Tổng công tháng" : "Số tiền"} rules={vndAmountRules}>
           <InputNumber {...vndInputNumberProps} style={{ width: "100%" }} />
         </Form.Item>
+        {paperPayroll && <Form.Item name="advance" label="Đã ứng trong tháng" dependencies={["amount"]}
+          extra={`Trả cuối tháng: ${formatMoney(Math.max(0, grossPay - advance))}. Dùng khi đã trả đủ cả kỳ công và chưa ghi ở Tiền công.`}
+          rules={[{ validator: (_, value) => (value ?? 0) <= form.getFieldValue("amount")
+            ? Promise.resolve() : Promise.reject(new Error("Tiền ứng không được vượt tổng công")) }]}>
+          <InputNumber {...vndInputNumberProps} min={0} style={{ width: "100%" }} />
+        </Form.Item>}
         {shop === "DISTRIBUTION" && <Form.Item name="spentBy" label="Người chi" rules={[{ required: true, whitespace: true, message: "Nhập người chi" }]}>
           <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
             <Input maxLength={150} />
           </AutoComplete>
         </Form.Item>}
-        <Form.Item name="description" label="Ghi chú">
+        {!paperPayroll && <Form.Item name="description" label="Ghi chú">
           <Input.TextArea rows={3} maxLength={400} placeholder="Chi tiết khoản chi, người nhận hoặc lý do (nếu có)" />
-        </Form.Item>
+        </Form.Item>}
       </Form>
     </Modal>
   );

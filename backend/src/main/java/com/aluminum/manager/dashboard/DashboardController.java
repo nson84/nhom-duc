@@ -53,6 +53,11 @@ public class DashboardController {
 		return ApiResponse.ok(yearEndBalances.closeMonth(year, YearMonth.parse(month)), "Đã chốt tháng");
 	}
 
+	@PostMapping("/month-reopen")
+	public ApiResponse<Boolean> reopenMonth(@RequestParam int year, @RequestParam String month) {
+		return ApiResponse.ok(yearEndBalances.reopenMonth(year, YearMonth.parse(month)), "Đã mở lại tháng");
+	}
+
 	@PostMapping("/year-period")
 	public ApiResponse<YearEndBalanceService.Period> saveYearPeriod(@RequestParam int year,
 			@RequestParam LocalDate from, @RequestParam LocalDate to) {
@@ -63,6 +68,11 @@ public class DashboardController {
 	public ApiResponse<YearEndBalanceService.Period> saveYearStart(@RequestParam int year, @RequestParam LocalDate from,
 			@RequestParam String name) {
 		return ApiResponse.ok(yearEndBalances.saveStart(year, from, name), "Đã bắt đầu kỳ");
+	}
+
+	@org.springframework.web.bind.annotation.DeleteMapping("/year-period")
+	public ApiResponse<YearEndBalanceService.Period> deleteYearPeriod(@RequestParam int year, @RequestParam LocalDate from) {
+		return ApiResponse.ok(yearEndBalances.deleteUnusedPeriod(year, from), "Đã xóa kỳ chưa sử dụng");
 	}
 
 	@GetMapping("/summary")

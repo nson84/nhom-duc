@@ -1,3 +1,4 @@
+import { PaymentDateEditor } from "./PaymentDateEditor";
 import {
   CheckOutlined,
   CloseOutlined,
@@ -84,6 +85,9 @@ import {
 
 type Kind = "PURCHASE" | "SALE";
 
+const staffOptions = [{ value: "Hải" }, { value: "Thuấn" }];
+const staffPlaceholder = "Chọn Hải hoặc Thuấn";
+
 const copy = {
   PURCHASE: {
     title: "Nhập kho",
@@ -164,6 +168,8 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   const [query, setQuery] = useState("");
   const [listFilter, setListFilter] = useState<DocumentListFilter>("all");
   const [editing, setEditing] = useState<StockDocument | "new" | null>(null);
+  const salePeriodKey = `${draftKey}:${workingYear.year}:${workingPeriod?.periodFrom}`;
+  const [lastCreatedSale, setLastCreatedSale] = useState<{ periodKey: string; date: string }>();
   const [viewing, setViewing] = useState<number | null>(null);
   const [parked, setParked] = useState(() => readParkedDrafts(parkedKey));
   const [parkedId, setParkedId] = useState<string>();
@@ -190,8 +196,9 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   }, [shop, workingYear.month]);
 
   const load = useCallback(async () => {
-    if (!workingPeriod) return;
-    if (!workingPeriod.started) { setRows([]); setSupplierDebt(null); return; }
+    const history = listFilter === "internal-history";
+    if (!workingPeriod && !history) return;
+    if (!history && !workingPeriod?.started) { setRows([]); setSupplierDebt(null); return; }
     setLoading(true);
     try {
       const [documents, dashboard, balances] = await Promise.all([
@@ -199,10 +206,10 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           type: kind,
           filter: listFilter,
           q: query || undefined,
-          from: workingPeriod.periodFrom,
-          to: workingPeriod.periodTo,
+          from: history ? undefined : workingPeriod?.periodFrom,
+          to: history ? undefined : workingPeriod?.periodTo,
         }),
-        kind === "PURCHASE" ? getSummary(workingPeriod.periodFrom, workingPeriod.periodTo) : Promise.resolve(null),
+        kind === "PURCHASE" && workingPeriod?.started ? getSummary(workingPeriod.periodFrom, workingPeriod.periodTo) : Promise.resolve(null),
         kind === "PURCHASE" ? listBalances({ onlyInStock: false }) : Promise.resolve([]),
       ]);
       setRows(documents);
@@ -310,9 +317,15 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           style={{ width: 220 }}
           value={listFilter}
           onChange={setListFilter}
-          options={LIST_FILTER_OPTIONS}
+          options={kind === "PURCHASE" && shop === "MANUFACTURING"
+            ? [...LIST_FILTER_OPTIONS, { value: "internal-history", label: "Lịch sử nhập nội bộ" }]
+            : LIST_FILTER_OPTIONS}
         />
       </Space>
+      {kind === "PURCHASE" && shop === "MANUFACTURING" && <Alert type="info" showIcon style={{ marginBottom: 16 }}
+        message={listFilter === "internal-history" ? "Đang xem phiếu nhập nội bộ theo ngày chuyển của Phân phối, gồm các phiếu ngoài kỳ đang chọn."
+          : "Phiếu chuyển từ Phân phối giữ ngày chuyển gốc. Phiếu ngoài kỳ đang chọn có thể xem trong lịch sử nhập nội bộ."}
+        action={listFilter !== "internal-history" ? <Button onClick={() => setListFilter("internal-history")}>Xem lịch sử nhập nội bộ</Button> : undefined} />}
       {workingPeriod && !workingPeriod.started ? <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={`Năm ${workingYear.year} chưa lưu ngày bắt đầu. Hãy mở Tổng quan để bắt đầu kỳ.`} /> : null}
       {monthStatus !== "OPEN" && <Alert type="info" showIcon style={{ marginBottom: 16 }}
         message={monthStatus === "CLOSED" ? `Tháng ${workingYear.month} đã khóa; chỉ xem chứng từ.` : "Tháng chưa mở. Vào Tổng quan, chọn tháng rồi bấm Mở tháng để lập phiếu."} />}
@@ -365,8 +378,9 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
               </div>
             ),
           },
-          { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
-          { title: text.counterparty, dataIndex: "counterpartyName", align: "center" },
+          { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
+          { title: text.counterparty, dataIndex: "counterpartyName", align: "center",
+            render: (name: string | null, row) => kind === "SALE" && row.internal ? "Nội bộ" : name || "—" },
           { title: "Tổng tiền", dataIndex: "totalAmount", align: "center", render: (v: number) => formatMoney(v) },
           {
             title: "Trạng thái",
@@ -399,7 +413,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
                 !dayjs(draft.values.documentDate).isAfter(dayjs(workingPeriod.periodTo), "day"));
               return <Space key={draft.parkedId} wrap>
                 <Button disabled={editing != null || !inPeriod} onClick={() => void resumeDraft(draft)}>
-                  Sửa phiếu nháp · {draft.values.counterpartyName || "Chưa nhập đối tác"} · {dayjs(draft.savedAt).format("DD/MM/YYYY HH:mm")}
+                  Sửa phiếu nháp · {draft.values.counterpartyName || "Chưa nhập đối tác"} · {dayjs(draft.savedAt).format("DD/MM/YYYY")}
                 </Button>
                 {!inPeriod && <Tag>Khác kỳ đang chọn</Tag>}
                 <Button danger disabled={editing != null} onClick={() => Modal.confirm({
@@ -421,6 +435,9 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
           parkedId={parkedId}
           document={editing === "new" ? null : editing}
           workingPeriod={workingPeriod}
+          recentSaleDate={lastCreatedSale?.periodKey === salePeriodKey
+            ? lastCreatedSale.date
+            : rows.find((row) => row.documentType === "SALE" && row.status === "CONFIRMED" && !row.trashedAt)?.documentDate}
           onPark={(draft, saved) => {
             const id = draft.parkedId ?? crypto.randomUUID();
             const others = readParkedDrafts(parkedKey).filter((row) => row.parkedId !== id
@@ -440,6 +457,9 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
             setEditing(null);
           }}
           onSaved={(saved) => {
+            if (kind === "SALE" && editing === "new" && saved.status === "CONFIRMED") {
+              setLastCreatedSale({ periodKey: salePeriodKey, date: saved.documentDate });
+            }
             if (parkedId) {
               try {
                 updateParked(parked.filter((draft) => draft.parkedId !== parkedId));
@@ -459,6 +479,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
         <DetailModal
           kind={kind}
           id={viewing}
+          internalHistory={listFilter === "internal-history"}
           onClose={() => setViewing(null)}
           onChanged={() => void load()}
           onEdit={(doc) => {
@@ -471,6 +492,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   );
 }
 type EditorValues = {
+  paperSource?: boolean;
   documentDate: Dayjs;
   counterpartyName?: string;
   customerId?: number;
@@ -483,6 +505,7 @@ type EditorValues = {
     unitId?: number;
     quantityDocument?: number;
     unitPrice?: number;
+    enteredCostPerKg?: number;
     lineDiscount?: number;
     weightInputUnit?: PurchaseWeightUnit;
     priceInputUnit?: PurchaseWeightUnit;
@@ -519,6 +542,7 @@ function EditorModal({
   parkedId,
   document,
   workingPeriod,
+  recentSaleDate,
   onPark,
   onClose,
   onSaved,
@@ -528,6 +552,7 @@ function EditorModal({
   parkedId?: string;
   document: StockDocument | null;
   workingPeriod: YearPeriod | null;
+  recentSaleDate?: string;
   onPark: (draft: DocumentDraft, saved: boolean) => void;
   onClose: () => void;
   onSaved: (document: StockDocument) => void;
@@ -554,8 +579,18 @@ function EditorModal({
   const autoReceiverRef = useRef(document?.receivedBy === document?.counterpartyName ? document?.receivedBy ?? "" : "");
   const items = Form.useWatch("items", form) ?? [];
   const internalTransfer = Form.useWatch("internal", form) === true;
+  const paperSource = Form.useWatch("paperSource", form) === true;
   const periodStart = workingPeriod?.started ? dayjs(workingPeriod.periodFrom) : null;
   const periodEnd = workingPeriod?.started ? dayjs(workingPeriod.periodTo) : null;
+  const today = dayjs();
+  const recentDate = kind === "SALE" && recentSaleDate ? dayjs(recentSaleDate) : null;
+  let defaultDocumentDate = today;
+  if (periodStart && periodEnd && (today.isBefore(periodStart, "day") || today.isAfter(periodEnd, "day"))) {
+    defaultDocumentDate = periodStart;
+    if (recentDate?.isValid() && !recentDate.isBefore(periodStart, "day") && !recentDate.isAfter(periodEnd, "day")) {
+      defaultDocumentDate = recentDate;
+    }
+  }
 
   function suggestReceiver(name: string) {
     if (kind !== "SALE") return;
@@ -590,18 +625,20 @@ function EditorModal({
   }, [draftKey, snapshotDraft]);
 
   const saveDraftDocument = useCallback((values: EditorValues, confirm = false) => {
+    const internal = canMarkInternal && Boolean(values.internal);
     const input: DocumentInput = {
       documentType: kind,
-      documentDate: values.documentDate.format("YYYY-MM-DDTHH:mm:ss"),
-      counterpartyName: values.counterpartyName,
-      customerId: kind === "SALE" ? values.customerId ?? null : undefined,
+      paperSource: values.paperSource ?? false,
+      documentDate: values.documentDate.format("YYYY-MM-DD[T00:00:00]"),
+      counterpartyName: internal ? "Nội bộ" : values.counterpartyName,
+      customerId: kind === "SALE" ? internal ? null : values.customerId ?? null : undefined,
       issuedBy: values.issuedBy,
       receivedBy: values.receivedBy,
       reason: document?.reason ?? undefined,
       discountAmount: document?.discountAmount ?? 0,
       paymentMethod: document?.paymentMethod ?? undefined,
       notes: document?.notes ?? undefined,
-      internal: canMarkInternal ? Boolean(values.internal) : false,
+      internal,
       idempotencyKey: document ? undefined : idempotencyKey,
       items: values.items.map((i) => {
         const unitPrice = Math.round(Number(i.unitPrice ?? 0));
@@ -614,6 +651,7 @@ function EditorModal({
           unitPrice,
           lineDiscount: i.lineDiscount ?? 0,
           billingUnit: "kg",
+          enteredCostPerKg: kind === "SALE" && values.paperSource && !values.internal ? i.enteredCostPerKg : undefined,
         };
       }),
     };
@@ -1025,11 +1063,14 @@ function EditorModal({
       open={!offerSaveCustomer && !saveCustomerForm}
       width={1120}
       title={
-        document
+        kind === "PURCHASE"
+          ? <Space wrap>
+              {document ? `Sửa ${document.documentCode}` : "Tạo phiếu nhập"}
+              <Tag color={document?.internal ? "blue" : undefined}>{document?.internal ? "Nội bộ" : "Nhà cung cấp"}</Tag>
+            </Space>
+          : document
           ? `Sửa ${document.documentCode}`
-          : kind === "PURCHASE"
-            ? "Tạo phiếu nhập"
-            : "Tạo phiếu bán"
+          : "Tạo phiếu bán"
       }
       okText={
         document
@@ -1082,6 +1123,7 @@ function EditorModal({
                 issuedBy: document.issuedBy ?? undefined,
                 receivedBy: document.receivedBy ?? undefined,
                 internal: document.internal ?? false,
+                paperSource: document.paperSource ?? false,
                 items: document.items.map((i) => {
                   const product = productMap.get(i.productId);
                   const billing: "kg" | "m2" =
@@ -1122,6 +1164,7 @@ function EditorModal({
                     quantityDocument,
                     unitPrice,
                     lineDiscount: i.lineDiscount,
+                    enteredCostPerKg: i.enteredCostPerKg ?? undefined,
                     weightInputUnit: weight,
                     priceInputUnit: weight,
                     suggestedPrice: unitPrice,
@@ -1129,8 +1172,7 @@ function EditorModal({
                 }),
               }
             : {
-                documentDate: periodStart && (dayjs().isBefore(periodStart) || periodEnd && dayjs().isAfter(periodEnd))
-                  ? periodStart : dayjs(),
+                documentDate: defaultDocumentDate,
                 internal: false,
                 items: [
                   {
@@ -1211,6 +1253,7 @@ function EditorModal({
             }
             if (
               kind === "SALE" &&
+              !saved.internal &&
               !saved.customerId &&
               saved.counterpartyName &&
               saved.counterpartyName.trim()
@@ -1230,6 +1273,10 @@ function EditorModal({
           <InputNumber />
         </Form.Item>
         <Space className="doc-form-meta-row" align="start" wrap size={[16, 32]}>
+          <Form.Item name="paperSource" label="Nguồn phiếu" initialValue={false}>
+            <Select style={{ width: 136 }}
+              options={[{ value: false, label: "Ghi từ app" }, { value: true, label: "Ghi từ sổ" }]} />
+          </Form.Item>
           <Form.Item name="documentDate" label="Ngày phiếu" rules={[{ required: true, message: "Chọn ngày" }, {
             validator: (_, value: Dayjs | null) => {
               if (!value || !periodStart) return Promise.resolve();
@@ -1239,10 +1286,14 @@ function EditorModal({
               return Promise.resolve();
             },
           }]}>
-            <DatePicker showTime needConfirm={false} format="DD/MM/YYYY HH:mm"
+            <DatePicker format="DD/MM/YYYY"
               minDate={periodStart ?? undefined} maxDate={periodEnd ?? undefined} />
           </Form.Item>
-          {kind === "SALE" ? (
+          {kind === "SALE" && internalTransfer ? (
+            <Form.Item label={text.counterparty}>
+              <Input value="Nội bộ" readOnly style={{ width: 280 }} />
+            </Form.Item>
+          ) : kind === "SALE" ? (
             <Form.Item name="counterpartyName" label={text.counterparty} rules={optionalNameRules(200)}>
               <AutoComplete
                 style={{ width: 280 }}
@@ -1302,16 +1353,13 @@ function EditorModal({
                 : optionalNameRules(50)
             }
           >
-            <Input style={{ width: 200 }} maxLength={50} showCount={kind === "PURCHASE"} />
+            {kind === "PURCHASE" ? (
+              <Select style={{ width: 200 }} options={staffOptions} placeholder={staffPlaceholder} />
+            ) : <Input style={{ width: 200 }} maxLength={50} />}
           </Form.Item>
           {canMarkInternal ? (
             <Form.Item name="internal" valuePropName="checked" label=" ">
-              <Checkbox
-                onChange={(e) => {
-                  if (e.target.checked) {
-                  }
-                }}
-              >
+              <Checkbox>
                 Giao dịch nội bộ
               </Checkbox>
             </Form.Item>
@@ -1442,13 +1490,12 @@ function EditorModal({
 
                 return (
                   <div key={field.key} className="sale-line-card">
-                    <div className="sale-line-card-top">
+                    <div className="sale-line-fields">
                       <Form.Item
                         name={[field.name, "productId"]}
                         label="Sản phẩm"
                         validateFirst
                         rules={[{ required: true, message: "Chọn sản phẩm" }]}
-                        style={{ flex: 1, marginBottom: 0 }}
                       >
                         <Select
                           showSearch
@@ -1466,7 +1513,6 @@ function EditorModal({
                         label="Loại nhôm"
                         validateFirst
                         rules={[{ required: true, message: "Chọn loại nhôm" }]}
-                        style={{ flex: 1, marginBottom: 0 }}
                       >
                         <Select
                           showSearch
@@ -1476,15 +1522,6 @@ function EditorModal({
                           options={categoryOptions(current?.categoryId)}
                         />
                       </Form.Item>
-                      {fields.length > 1 ? (
-                        <AppActionButton
-                          tone="delete"
-                          className="sale-line-remove"
-                          icon={<DeleteOutlined />}
-                          aria-label="Xóa dòng"
-                          onClick={() => remove(field.name)}
-                        />
-                      ) : null}
                     </div>
 
                     <div className="sale-line-fields sale-line-fields-kg">
@@ -1536,7 +1573,32 @@ function EditorModal({
                         </Form.Item>
                     </div>
 
-                    <div className="sale-line-total">{formatMoney(lineTotal)}</div>
+                    {paperSource && !internalTransfer && (() => {
+                      const unit = sellByKg ? current?.weightInputUnit ?? "kg" : "tấn";
+                      const factor = unit === "tấn" ? KG_PER_TON : unit === "tạ" ? 100 : 1;
+                      return <Form.Item name={[field.name, "enteredCostPerKg"]} label={`Giá vốn (đ/${unit})`}
+                        getValueProps={(cost: number | null | undefined) => ({
+                          value: cost == null ? null : Number((cost * factor).toFixed(6)),
+                        })}
+                        normalize={(value: number | null) => value == null ? null : Number((value / factor).toFixed(6))}>
+                        <InputNumber min={factor / 1000000} max={999999999999.999999 * factor}
+                          precision={6} formatter={(value) => {
+                            if (value == null) return "";
+                            const [whole, fraction] = String(value).split(".");
+                            const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                            return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+                          }} style={{ width: "100%" }} />
+                      </Form.Item>;
+                    })()}
+                    <div className="sale-line-footer">
+                      {fields.length > 1 && <AppActionButton
+                        tone="delete"
+                        icon={<DeleteOutlined />}
+                        aria-label="Xóa dòng"
+                        onClick={() => remove(field.name)}
+                      />}
+                      <div className="sale-line-total">{formatMoney(lineTotal)}</div>
+                    </div>
 
                     <Form.Item name={[field.name, "billingUnit"]} hidden initialValue="kg">
                       <Input />
@@ -1644,12 +1706,14 @@ function EditorModal({
 function DetailModal({
   kind,
   id,
+  internalHistory,
   onClose,
   onChanged,
   onEdit,
 }: {
   kind: Kind;
   id: number;
+  internalHistory: boolean;
   onClose: () => void;
   onChanged: () => void;
   onEdit: (document: StockDocument) => void;
@@ -1664,18 +1728,18 @@ function DetailModal({
 
   const refresh = useCallback(async () => {
     try {
-      setDoc(await getDocument(id));
+      setDoc(await getDocument(id, internalHistory));
     } catch (error) {
       message.error(toApiError(error).message);
     }
-  }, [id]);
+  }, [id, internalHistory]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   // Phải gọi hook trước mọi early-return — nếu để sau `if (!doc)` sẽ trắng màn hình.
-  const canWrite = useCanWrite();
+  const canWrite = useCanWrite() && !internalHistory;
 
   async function run(action: () => Promise<StockDocument>, success: string) {
     setBusy(true);
@@ -1701,7 +1765,10 @@ function DetailModal({
     <Modal
       open
       width={960}
-      title={`${doc.documentCode}`}
+      title={kind === "PURCHASE" ? <Space wrap>
+        {doc.documentCode}
+        <Tag color={doc.internal ? "blue" : undefined}>{doc.internal ? "Nội bộ" : "Nhà cung cấp"}</Tag>
+      </Space> : doc.documentCode}
       className="doc-detail-modal"
       onCancel={onClose}
       footer={
@@ -1829,8 +1896,9 @@ function DetailModal({
             </Tag>
           ) : null}
         </Descriptions.Item>
-        <Descriptions.Item label="Ngày">{dayjs(doc.documentDate).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
-        <Descriptions.Item label={text.counterparty}>{doc.counterpartyName}</Descriptions.Item>
+        <Descriptions.Item label="Nguồn phiếu">{doc.paperSource ? "Ghi từ sổ" : "Ghi từ app"}</Descriptions.Item>
+        <Descriptions.Item label="Ngày">{dayjs(doc.documentDate).format("DD/MM/YYYY")}</Descriptions.Item>
+        <Descriptions.Item label={text.counterparty}>{kind === "SALE" && doc.internal ? "Nội bộ" : doc.counterpartyName || "—"}</Descriptions.Item>
         <Descriptions.Item label="Người xuất / giao">{doc.issuedBy}</Descriptions.Item>
         <Descriptions.Item label="Người nhận / nhập">{doc.receivedBy}</Descriptions.Item>
         {doc.internalPairDocumentCode ? (
@@ -1917,10 +1985,15 @@ function DetailModal({
             dataSource={doc.payments}
             columns={[
               {
-                title: "Thời gian thanh toán",
+                title: "Ngày thanh toán",
                 dataIndex: "paymentDate",
                 align: "center",
-                render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
+                render: (v: string, payment) => <>
+                  {dayjs(v).format("DD/MM/YYYY")}
+                  {dayjs(v).isBefore(doc.documentDate, "day") && <Tag color="warning" style={{ marginInlineStart: 8 }}>Trước ngày lập phiếu</Tag>}
+                  {doc.status === "CONFIRMED" && !doc.reversedByDocumentId && !doc.reversalOfDocumentId &&
+                    <PaymentDateEditor document={doc} payment={payment} onSaved={(updated) => { setDoc(updated); onChanged(); }} />}
+                </>,
               },
               {
                 title: "Số tiền lần này",
@@ -1981,6 +2054,7 @@ function DetailModal({
         <PaymentModal
           label={text.payLabel}
           remaining={remaining}
+          documentDate={doc.documentDate}
           kind={kind}
           onClose={() => setPaying(false)}
           onSubmit={async (values) => {
@@ -2107,12 +2181,14 @@ function SaleInvoiceModal({ doc, onClose }: { doc: StockDocument; onClose: () =>
 export function PaymentModal({
   label,
   remaining,
+  documentDate,
   kind,
   onClose,
   onSubmit,
 }: {
   label: string;
   remaining: number;
+  documentDate: string;
   kind: Kind;
   onClose: () => void;
   onSubmit: (values: {
@@ -2128,17 +2204,25 @@ export function PaymentModal({
   const workingYear = useWorkingYear(useShop());
   const [form] = Form.useForm<{ amount: number; paymentMethod: string; paymentDate: Dayjs; note?: string; collectedBy?: string; paidBy?: string }>();
   const [paymentPeriod, setPaymentPeriod] = useState<YearPeriod | null>(null);
+  const documentDay = dayjs(documentDate);
+  const periodStart = paymentPeriod?.started ? dayjs(paymentPeriod.periodFrom) : null;
+  const minPaymentDay = periodStart?.isAfter(documentDay, "day") ? periodStart : documentDay;
   useEffect(() => {
     let active = true;
     getYearPeriod(workingYear.year).then((value) => {
       if (!active) return;
       const shown = visiblePeriod(value, workingYear.month);
       setPaymentPeriod(shown);
-      if (shown?.started && (dayjs().isBefore(dayjs(shown.periodFrom), "day") || dayjs().isAfter(dayjs(shown.periodTo), "day")))
-        form.setFieldValue("paymentDate", dayjs(shown.periodFrom));
+      if (shown?.started && !form.isFieldTouched("paymentDate")) {
+        const start = dayjs(shown.periodFrom);
+        const docDay = dayjs(documentDate);
+        if (start.isAfter(docDay, "day")) {
+          form.setFieldValue("paymentDate", start);
+        }
+      }
     }).catch((error) => { if (active) message.error(toApiError(error).message); });
     return () => { active = false; };
-  }, [form, workingYear.year, workingYear.month]);
+  }, [documentDate, form, workingYear.year, workingYear.month]);
   const key = useMemo(() => crypto.randomUUID(), []);
   const amountWatch = Form.useWatch("amount", form);
   const enteredAmount = Number(amountWatch ?? 0);
@@ -2165,7 +2249,7 @@ export function PaymentModal({
         initialValues={{
           amount: remaining,
           paymentMethod: "CASH",
-          paymentDate: dayjs(),
+          paymentDate: documentDay,
         }}
         onFinish={(values) =>
           Modal.confirm({
@@ -2177,7 +2261,7 @@ export function PaymentModal({
                   {values.paymentMethod === "TRANSFER" ? "Chuyển khoản" : "Tiền mặt"})
                 </p>
                 <p style={{ margin: "4px 0" }}>
-                  Thời gian: <b>{values.paymentDate.format("DD/MM/YYYY HH:mm")}</b>
+                  Thời gian: <b>{values.paymentDate.format("DD/MM/YYYY")}</b>
                 </p>
                 {kind === "SALE" ? (
                   <p style={{ margin: "4px 0" }}>
@@ -2197,7 +2281,7 @@ export function PaymentModal({
               onSubmit({
                 amount: values.amount,
                 paymentMethod: values.paymentMethod,
-                paymentDate: values.paymentDate.format("YYYY-MM-DDTHH:mm:ss"),
+                paymentDate: values.paymentDate.format("YYYY-MM-DD[T00:00:00]"),
                 note: values.note,
                 idempotencyKey: key,
                 collectedBy: values.collectedBy?.trim(),
@@ -2210,13 +2294,17 @@ export function PaymentModal({
           name="paymentDate"
           label="Thời gian thanh toán"
           rules={[{ required: true, message: "Chọn thời gian thanh toán" }, {
-            validator: (_, value: Dayjs | null) => value && paymentPeriod?.started &&
-              (value.isBefore(dayjs(paymentPeriod.periodFrom), "day") || value.isAfter(dayjs(paymentPeriod.periodTo), "day"))
-              ? Promise.reject(new Error("Ngày thanh toán phải nằm trong tháng/kỳ đang chọn")) : Promise.resolve(),
+            validator: async (_, value: Dayjs | null) => {
+              if (!value) return;
+              if (value.isBefore(documentDay, "day")) throw new Error("Ngày thanh toán không được trước ngày lập phiếu");
+              if (paymentPeriod?.started && (value.isBefore(paymentPeriod.periodFrom, "day") || value.isAfter(paymentPeriod.periodTo, "day"))) {
+                throw new Error("Ngày thanh toán phải nằm trong tháng/kỳ đang chọn");
+              }
+            },
           }]}
         >
-          <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: "100%" }}
-            minDate={paymentPeriod?.started ? dayjs(paymentPeriod.periodFrom) : undefined}
+          <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }}
+            minDate={minPaymentDay}
             maxDate={paymentPeriod?.started ? dayjs(paymentPeriod.periodTo) : undefined} />
         </Form.Item>
         <Form.Item
@@ -2260,12 +2348,11 @@ export function PaymentModal({
           rules={requiredNameRules(kind === "PURCHASE" ? "Nhập người nhận tiền" : "Nhập người thu tiền", 80)}
           extra={kind === "SALE" ? "Chọn Hải, Thuấn hoặc nhập tên khác; tên này sẽ in trên hóa đơn nợ" : undefined}
         >
-          {kind === "SALE" ? (
-            <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]}
-              placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
+          {kind === "PURCHASE" ? <Input maxLength={80} placeholder="Nhập tên người nhận tiền" /> : (
+            <AutoComplete options={staffOptions} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
               <Input maxLength={80} />
             </AutoComplete>
-          ) : <Input maxLength={80} />}
+          )}
         </Form.Item>
         <Form.Item
           name="paymentMethod"

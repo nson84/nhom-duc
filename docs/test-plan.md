@@ -1,5 +1,11 @@
 # Kiểm thử đã khóa và phần còn lại
 
+## Kết quả kiểm thử 26/11/2026
+
+- Workspace V46: 100 test Java và 49 test tích hợp MySQL trên instance riêng cổng 13307 đạt. 11 test frontend, build frontend và hai test script Windows build/recovered backend đạt.
+- Desktop Windows đã cài, revision `14672abb8f96`, khởi động trên DB QA riêng, báo schema V44. Xác nhận màn đăng nhập native, yêu cầu đổi mật khẩu lần đầu qua API, đăng nhập Admin vào màn Sao lưu, bấm **Sao lưu ngay** tạo `.ndbak` thành công và mở được hộp thoại **Dựng DB từ máy này**.
+- Chưa nghiệm thu phục hồi bằng UI từ đầu đến cuối: chưa hoàn tất dựng DB qua nút bấm, chuyển DB, mở lại, đối chiếu dữ liệu hoặc quay lại DB trước. Chưa kiểm thử R2 và cài/gỡ bản V46. Script `test-installed-desktop.ps1` đang yêu cầu cứng schema 44, cần cập nhật cách lấy phiên bản mong đợi khi chạy với bộ cài mới.
+
 ## Backup desktop và đăng nhập Windows
 
 - `DesktopBackupControlTest`: API backup lúc mở/đóng chỉ nhận loopback và mã đúng; từ chối thời điểm khác.
@@ -32,6 +38,11 @@
 | ATT-05 | 08:00–17:00 trừ 60 phút nghỉ bằng 8 giờ |
 | ATT-06 | Ca 22:00–06:00 được tính sang ngày hôm sau khi cấu hình cho phép |
 | ATT-07 | Tăng ca chưa duyệt không cộng vào tiền |
+| ATT-08 | Thêm/sửa tăng ca: bỏ trống đơn giá dùng cấu hình theo ngày; nhập 0 hoặc số dương dùng đúng giá nhập, tính thành tiền theo giờ và chỉ cộng vào lương khi đã duyệt; từ chối giá âm |
+| ATT-09 | Mức tăng ca theo buổi theo lịch sử nhân viên; bản ghi SESSION trả đúng một buổi, lưu 0 giờ, chỉ cộng tiền khi duyệt; bản ghi HOUR cũ giữ nguyên sau V46 |
+| BOOK-INT | Sổ Phân phối in phiếu xuất nội bộ có nhãn Nội bộ, Xưởng in phiếu nhập cùng cặp kể cả trước ngày đầu kỳ với nhãn Trước kỳ; tổng trong kỳ, doanh thu và công nợ không cộng sai giá chuyển. |
+| STOCK-INT | Sau chuyển nội bộ trước ngày đầu kỳ Xưởng: tồn sổ và tổng nhập tích lũy vẫn có kg từ phiếu, thẻ nhập trong kỳ không cộng phiếu đó; biến động mang nhãn Nội bộ. Phiếu nhập ngoài cùng loại cũng cộng tồn. |
+| MONTH-REOPEN | Mở lại tháng đã khóa khi tháng sau đang mở, kiểm tra quyền ghi tháng cũ rồi khóa lại. Từ chối mở lại tháng của sổ khác hoặc tháng có bản chốt từ tháng đó trở đi. |
 | ATT-08 | Điểm danh sáng hoặc chiều hoặc cả hai đều quy đổi một công |
 | FAC-01 | Hao hụt trừ số kg phế liệu đã bán và kg kiểm kê cuối năm |
 | FAC-02 | Tồn 10 tấn phân bổ 8 tấn lần nhập cuối và 2 tấn lần trước; từ chối khi lịch sử không đủ |
@@ -78,6 +89,7 @@ Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và b
 - Chọn năm 2025, mở Chấm công và Tiền công: mặc định tháng bắt đầu kỳ, không tự tạo kỳ công 2026. Chọn tháng khác trong cùng kỳ khi bỏ bộ lọc tháng.
 - Xưởng phải chốt kỳ công trước khi chốt tháng; Phân phối không cần kỳ công. Sau chốt, backend từ chối tạo/sửa/xác nhận/hủy/đảo phiếu, sửa chấm công và mở lại kỳ công tháng đó.
 - Thanh toán nợ của phiếu tháng đã chốt được phép ghi vào tháng mới đang mở; ngày thanh toán vẫn là ngày thực tế. Chốt tháng không thay đổi số dư tồn/công nợ hoặc trạng thái chốt năm.
+- Với phiếu lập 12/02, kiểm tra form gợi ý ngày từ 12/02 trở đi, API từ chối ghi khoản ngày 10/02, và khoản cũ ngày 10/02 được đánh dấu trong chi tiết. Với phiếu đã thanh toán, kiểm tra lần sửa dời ngày lập qua ngày thanh toán bị từ chối.
 
 # Rà soát backup/restore 15/11/2026
 
@@ -173,3 +185,19 @@ ProductionCopyUpgradeIT là test opt-in trên bản dump riêng, chỉ nhận127
 Workflow Test installed Windows candidate nhận run ID của workflow đóng gói đã đạt, kiểm tra nguồn artifact rồi dùng Windows runner mới. scripts/test-installed-desktop.ps1 từ chối chạy ngoài runner tạm. Kiểm tra NSIS cài/gỡ, JAR đi kèm, MySQL8.0.46 có chữ ký Oracle trên cổng13308, backend phiên bản đúng, cửa sổ native, ô mật khẩu/nút đăng nhập tiếng Việt qua Windows UI Automation và screenshot, tài khoản đầu tiên và việc đóng app dừng backend do nó tạo. Không dùng dữ liệu hoặc tài khoản thật; kết quả chỉ được ghi đạt khi workflow chạy thành công. Kênh CDP của release từ chối kết nối nên dùng UIA, không bỏ kiểm tra giao diện.
 
 Cargo.lock được lấy từ đúng artifact Windows đã build đạt và đưa vào repository; workflow đóng gói kiểm tra metadata --locked và từ chối nếu build tự đổi lockfile. Không cập nhật phiên bản crate ngoài bộ đã được build/kiểm tra.
+
+
+StockLifecycleMysqlIT có ca phiếu giấy với giá vốn nhập tay, sửa ngày thanh toán qua tháng đã khóa và đối chiếu lãi sau bảo dưỡng. Chạy opt-in trên MySQL riêng. Kiểm tra thêm Xưởng có công thợ và tiền ứng, không ghi hai lần chi phí công.
+
+Thử chốt sổ tháng Phân phối với tồn 1.000 kg, cân 970 kg và vụn 10 kg. Đối chiếu tồn mới 970 kg, hao hụt thuần 20 kg và chỉ một chứng từ giảm kho khi thử xác nhận lại. Kiểm tra chốt năm độc lập với bản chốt tháng.
+
+
+Kiểm tra menu Kiểm kê & chốt sổ có hai mục cho cả Xưởng và Phân phối. /chot-nam hiện phạm vi ngày của kỳ. Tổng quan mở/khóa tháng và dẫn đến Chốt năm.
+
+
+StockLifecycleMysqlIT kiểm tra từ chối mốc kết thúc loại chứng từ đã ghi, chấp nhận ngày bao gồm chứng từ và từ chối đổi ngày đầu khi tháng đã mở. Kiểm tra thêm trên Tổng quan rằng mốc đầu mới chuyển bộ chọn sang đúng tháng.
+
+
+Kiểm tra endpoint bàn giao từ chối thiếu token. Kiểm thử desktop cần build Tauri, chạy launcher dev mặc định, chọn bản phục hồi, xác nhận backend mới đúng tên DB và thử quay lại DB gốc/ảnh gốc. Kiểm tra backend không bật bàn giao và cổng của dịch vụ khác.
+
+StockLifecycleMysqlIT kiểm tra sửa phiếu chi giữ mã, đổi số tiền và người chi trên cùng chứng từ, từ chối khi tháng đã khóa.

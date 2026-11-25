@@ -37,6 +37,8 @@ function fixture(shopCode) {
     payments: sales.map(s => ({ documentId: s.id, date: '2025-02-21T09:00:00', amount: s.paidNow, method: 'CASH', collector: 'Hải', note: 'Khách trả sau ngày giao hàng' })),
     purchases: [{ id: 100, supplier: 'Phân phối', code: 'NOI-BO-001', date: '2025-02-18', total: 1000000, paidAsOf: 0, notes: '', internal: true }],
     purchaseItems: [{ documentId: 100, product: 'Nhôm 1', category: 'Loại 1', quantity: 100, unit: 'kg', quantityKg: 100, unitPrice: 10000, amount: 1000000 }],
+    transfersOut: [{ id: 101, code: 'CHUYEN-NOI-BO-001', date: '2025-02-20', total: 1000000 }],
+    transferItems: [{ documentId: 101, product: 'Nhôm 1', category: 'Loại 1', quantity: 100, unit: 'kg', quantityKg: 100, unitPrice: 10000, amount: 1000000 }],
     receipts: [], expenses: [], stock: [{ product: 'Nhôm 1', category: 'Loại 1', quantityKg: 600, value: 6000000 }],
     wages: [{ year: 2025, month: 2, employeeId: 1, employee: 'Thợ Nguyễn Văn Nam', days: 22, basePay: 7700000, overtimePay: 200000, bonusPay: 100000, allowances: 50000, deductions: 0, advanceAmount: 1000000, totalPay: 7050000 }],
     wageEvents: [{ year: 2025, month: 2, employeeId: 1, employee: 'Thợ Nguyễn Văn Nam', date: '2025-02-20', kind: 'Ứng lương', amount: 1000000, note: 'Đã nhận tiền mặt', received: true }],
@@ -57,9 +59,21 @@ for (const shopCode of ['DISTRIBUTION', 'MANUFACTURING']) {
     assert.ok(html.indexOf('TEST-003') < html.indexOf('TEST-001'), 'Print latest invoice dates first, regardless of API ordering');
     assert.ok(html.includes('Tiền mặt'), 'Use understandable payment method labels');
     assert.equal(html.includes('Thợ Nguyễn Văn Nam'), shopCode === 'MANUFACTURING');
+    if (shopCode === 'DISTRIBUTION') {
+      assert.match(html, /CHUYEN-NOI-BO-001 · 20\/0?2\/2025 · Nội bộ/);
+      assert.ok(!html.includes('Phiếu chưa gắn khách còn nợ đến lúc in <b>1.000.000'));
+    }
     if (process.env.AUDIT_PDF_DIRECTORY) {
       mkdirSync(process.env.AUDIT_PDF_DIRECTORY, { recursive: true });
       writeFileSync(resolve(process.env.AUDIT_PDF_DIRECTORY, `${shopCode}.html`), html);
     }
   });
 }
+
+test('factory shows an earlier internal receipt as before period without adding it to the period total', () => {
+  const book = fixture('MANUFACTURING');
+  book.purchases[0].date = '2025-02-10';
+  const html = buildAnnualBookHtml([book]);
+  assert.match(html, /NOI-BO-001 · 10\/0?2\/2025 · Nội bộ · Trước kỳ/);
+  assert.ok(html.includes('Tổng nhôm nhập nội bộ trong kỳ: 0 kg'));
+});

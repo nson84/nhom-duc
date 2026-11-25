@@ -4,6 +4,8 @@
 
 ## Chức năng hiện có
 
+`POST /api/v1/dashboard/month-reopen` mở lại tháng đã khóa của sổ hiện tại trong kỳ năm chưa chốt, kể cả khi tháng sau đang mở. API từ chối khi có bản chốt tháng, năm hoặc Phân phối từ tháng đó trở đi. Các quy tắc riêng về sửa phiếu và mở lại kỳ lương tiếp tục được kiểm tra ở luồng nghiệp vụ.
+
 `DashboardService` tổng hợp doanh thu, tiền thu, chi phí, kho và biểu đồ; phân phối không tính tiền công. Xưởng sử dụng quyết toán năm cho lãi.
 
 Tổng quan và biểu đồ theo kỳ gom tiền đã thu về **ngày lập phiếu bán** trong kỳ (mọi khoản trả đã ghi cho phiếu ấy); phần còn phải thu chỉ tính trên các phiếu bán trong kỳ, không kéo nợ kỳ khác vào. Phiếu nội bộ không tạo doanh thu/công nợ nhưng vẫn tính kg đã giao. `YearEndBalanceService` giữ bản chụp công nợ tại ngày chốt, còn Sổ Thu chi giữ ngày thực nhận tiền.
@@ -28,7 +30,7 @@ Bản chụp lưu ngày bắt đầu/kết thúc kỳ do cửa hàng chọn. N�
 
 Phân phối chỉ được chốt kỳ khi đã cân đủ từng SP/loại có biến động kho và lần cân mới nhất còn khớp tồn. Kiểm tra `distribution_inventory_count_evidence`: số cân, ngày cân, cả thời điểm tạo lẫn ngày nghiệp vụ của biến động sau kiểm kê, và các biến động sau ngày chốt. Không dùng tồn hiện tại để giả làm tồn quá khứ khi đã có giao dịch sau ngày chốt. Cần đối chiếu riêng dữ liệu lịch sử trước khi chốt.
 
-Chốt sổ tháng tùy chọn tại /chot-so-thang độc lập với Khóa tháng. Bản chụp gồm kiểm kê nguyên liệu/vụn, tồn đầu/cuối, doanh thu ngoài, nhập, chuyển nội bộ ra, chi hoạt động và tiền công theo tháng để tính lãi quản trị tháng. Ô trống kiểm kê tính là 0 sau xác nhận. Snapshot đã lưu không đổi theo giao dịch mới; muốn ngăn ghi thêm phải Khóa tháng. Chưa có thao tác ghi đè/mở lại snapshot. Popup ngày cuối tháng theo ngày máy, rộng 60vw; trạng thái nhắc lưu theo cửa hàng/tháng.
+Chốt sổ tháng tùy chọn tại /chot-so-thang độc lập với Khóa tháng. Bản chụp gồm kiểm kê nguyên liệu/vụn, tồn đầu/cuối, doanh thu ngoài, nhập, chuyển nội bộ ra, chi hoạt động và tiền công theo tháng để tính lãi quản trị tháng. Snapshot đã lưu không đổi theo giao dịch mới; muốn ngăn ghi thêm phải Khóa tháng. Chưa có thao tác ghi đè/mở lại snapshot. Popup ngày cuối tháng theo ngày máy, rộng 60vw; trạng thái nhắc lưu theo cửa hàng/tháng.
 
 ## Cập nhật rà soát 19/11/2026
 
@@ -53,3 +55,14 @@ Audit b290e3c: kiểm tra ngày ghi phiếu giữ khóa đọc dòng tháng đ�
 Audit b361221: transaction ghi ngày nghiệp vụ giữ khóa đọc dòng shop, dùng chung với khóa ghi của snapshot tháng/chốt năm. closeDistribution lấy khóa ghi trước khi đọc tổng. Guard đọc hiện hành bản chốt năm (FOR SHARE) để snapshot REPEATABLE READ được tạo trước đó không che mất kỳ vừa chốt. Test hai transaction bảo vệ cả writer trước close và close commit trước bước kiểm tra của khoản thu; không đổi ngày chốt, công thức hoặc snapshot lịch sử.
 
 Nếu nhập ngày đầu kỳ không sát kỳ trước, thông báo trả rõ ngày chốt kỳ trước và ngày hợp lệ kế tiếp theo dd/MM/yyyy, kể cả giao tháng/năm. Dùng cùng thông báo cho lưu ngày đầu và kiểm tra khoảng chốt.
+
+
+Sửa riêng ngày thanh toán cho phép ngày trong tháng đã mở hoặc đã khóa của kỳ năm còn mở. Thao tác giữ khóa kiểm tra kỳ, không mở lại tháng và không sửa ngày lập phiếu.
+
+POST /api/v1/dashboard/monthly-book/reconcile dùng cho Phân phối, nhận số cân theo cặp sản phẩm và loại nhôm. Tháng phải còn mở và kho không có biến động sau ngày cuối tháng. Dùng cùng giao dịch để điều chỉnh kho rồi lưu bản chốt. Kiểm kê còn hiệu lực và khớp số cân giữ nguyên chứng cứ hao hụt, không tạo điều chỉnh lần nữa. API bản chốt cũ vẫn lưu snapshot riêng. Chốt năm không yêu cầu bản chốt tháng.
+
+
+DELETE /api/v1/dashboard/year-period xóa mốc đầu và cuối dự kiến của kỳ chưa sử dụng thuộc sổ hiện tại. Kiểm tra ngày đầu đã xác nhận, tháng, chứng từ, thu chi và kiểm kê trước khi xóa. Kỳ đã chốt bị từ chối.
+
+
+Ngày bắt đầu bị khóa sau khi đã mở tháng. Ngày kết thúc dự kiến có thể đổi trước chốt nếu không loại tháng đã mở hoặc chứng từ, thu chi đã ghi trong kỳ.

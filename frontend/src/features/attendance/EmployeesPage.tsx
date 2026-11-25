@@ -78,6 +78,7 @@ export function EmployeesPage() {
             align: "center",
             render: (_, e) => (e.currentPayRate ? formatMoney(e.currentPayRate.overtimeWeekdayRate) : "—"),
           },
+          { title: "Tiền tăng ca mỗi buổi", align: "center", render: (_, e) => e.currentPayRate ? formatMoney(e.currentPayRate.overtimeSessionRate) : "—" },
           {
             title: "Trạng thái",
             align: "center",
@@ -131,6 +132,7 @@ type EmployeeFormValues = {
   notes?: string;
   initialDailyRate?: number;
   initialOvertimeWeekdayRate?: number;
+  initialOvertimeSessionRate?: number;
 };
 
 function EmployeeModal({
@@ -175,6 +177,7 @@ function EmployeeModal({
                 hireDate: dayjs(),
                 initialDailyRate: 350000,
                 initialOvertimeWeekdayRate: 50000,
+                initialOvertimeSessionRate: 0,
               }
         }
         onFinish={async (values) => {
@@ -190,6 +193,7 @@ function EmployeeModal({
               notes: values.notes,
               initialDailyRate: employee ? undefined : values.initialDailyRate,
               initialOvertimeWeekdayRate: employee ? undefined : values.initialOvertimeWeekdayRate,
+              initialOvertimeSessionRate: employee ? undefined : values.initialOvertimeSessionRate,
             });
             message.success("Đã lưu hồ sơ nhân viên");
             onSaved();
@@ -239,6 +243,9 @@ function EmployeeModal({
             <Form.Item name="initialOvertimeWeekdayRate" label="Tiền tăng ca mỗi giờ">
               <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
             </Form.Item>
+            <Form.Item name="initialOvertimeSessionRate" label="Tiền tăng ca mỗi buổi">
+              <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
+            </Form.Item>
           </Space>
         ) : null}
         <Form.Item name="notes" label="Ghi chú">
@@ -266,10 +273,34 @@ function PayRatesModal({
   onChanged: () => void;
 }) {
   const [rates, setRates] = useState<PayRate[]>([]);
+  const today = dayjs().format("YYYY-MM-DD");
+  const timeline: PayRate[] = [];
+  let nextStart: string | undefined;
+  for (const rate of rates) {
+    if (nextStart === rate.effectiveFrom) continue;
+    const next = timeline.at(-1);
+    const boundary = nextStart ? dayjs(nextStart).subtract(1, "day").format("YYYY-MM-DD") : null;
+    const end = boundary && (!rate.effectiveTo || rate.effectiveTo > boundary) ? boundary : rate.effectiveTo;
+    if (next && next.effectiveFrom <= today && end === boundary
+      && rate.dailyRate === next.dailyRate && rate.standardHoursPerDay === next.standardHoursPerDay
+      && rate.overtimeWeekdayRate === next.overtimeWeekdayRate
+      && rate.overtimeRestdayRate === next.overtimeRestdayRate
+      && rate.overtimeHolidayRate === next.overtimeHolidayRate
+      && rate.overtimeSessionRate === next.overtimeSessionRate) {
+      timeline[timeline.length - 1] = { ...next, effectiveFrom: rate.effectiveFrom };
+    } else {
+      timeline.push({ ...rate, effectiveTo: end });
+    }
+    nextStart = rate.effectiveFrom;
+  }
+  const currentRateId = timeline.find(rate =>
+    rate.effectiveFrom <= today && (!rate.effectiveTo || rate.effectiveTo >= today)
+  )?.id;
   const [form] = Form.useForm<{
     effectiveFrom: Dayjs;
     dailyRate: number;
     overtimeWeekdayRate: number;
+    overtimeSessionRate: number;
   }>();
 
   const load = useCallback(async () => {
@@ -293,19 +324,22 @@ function PayRatesModal({
         rowKey="id"
         size="small"
         pagination={false}
-        dataSource={rates}
+        dataSource={timeline}
         columns={[
           { title: "Từ ngày", dataIndex: "effectiveFrom", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
           {
             title: "Đến ngày",
             dataIndex: "effectiveTo",
             align: "center",
-            render: (v: string | null, rate: PayRate) => v ? dayjs(v).format("DD/MM/YYYY")
-              : dayjs(rate.effectiveFrom).isAfter(dayjs(), "day") ? <Tag color="blue">Chưa áp dụng</Tag>
-              : <Tag color="green">Đang áp dụng</Tag>,
+            render: (v: string | null, rate: PayRate) => rate.id === currentRateId
+              ? <Tag color="green">Đang áp dụng</Tag>
+              : v ? dayjs(v).format("DD/MM/YYYY")
+              : rate.effectiveFrom > today ? <Tag color="blue">Chưa áp dụng</Tag>
+              : <Tag>Đã thay thế</Tag>,
           },
           { title: "Tiền công mỗi ngày", dataIndex: "dailyRate", align: "center", render: (v: number) => formatMoney(v) },
           { title: "Tiền tăng ca mỗi giờ", dataIndex: "overtimeWeekdayRate", align: "center", render: (v: number) => formatMoney(v) },
+          { title: "Tiền tăng ca mỗi buổi", dataIndex: "overtimeSessionRate", align: "center", render: (v: number) => formatMoney(v) },
           {
             title: "Thao tác",
             align: "center",
@@ -340,6 +374,7 @@ function PayRatesModal({
           effectiveFrom: dayjs(),
           dailyRate: employee.currentPayRate?.dailyRate ?? 350000,
           overtimeWeekdayRate: employee.currentPayRate?.overtimeWeekdayRate ?? 50000,
+          overtimeSessionRate: employee.currentPayRate?.overtimeSessionRate ?? 0,
         }}
         onFinish={async (values) => {
           try {
@@ -348,6 +383,7 @@ function PayRatesModal({
               dailyRate: values.dailyRate,
               standardHoursPerDay: employee.currentPayRate?.standardHoursPerDay ?? 8,
               overtimeWeekdayRate: values.overtimeWeekdayRate,
+              overtimeSessionRate: values.overtimeSessionRate,
             });
             message.success("Đã thêm mức công mới");
             await load();
@@ -365,6 +401,9 @@ function PayRatesModal({
             <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
           </Form.Item>
           <Form.Item name="overtimeWeekdayRate" label="Tiền tăng ca mỗi giờ">
+            <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
+          </Form.Item>
+          <Form.Item name="overtimeSessionRate" label="Tiền tăng ca mỗi buổi">
             <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
           </Form.Item>
         </Space>

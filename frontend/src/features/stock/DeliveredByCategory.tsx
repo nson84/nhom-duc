@@ -3,7 +3,7 @@ import { getDeliveredByCategory, type DeliveredByCategoryRow } from "./stock-api
 
 const quantity = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
 
-export function DeliveredByCategory({ from, to, customerIds, categoryId, scope, shopKey, unit = "kg" }: {
+export function DeliveredByCategory({ from, to, customerIds, categoryId, scope, shopKey, unit = "kg", inline = false }: {
   from?: string;
   to?: string;
   customerIds?: number[];
@@ -11,6 +11,7 @@ export function DeliveredByCategory({ from, to, customerIds, categoryId, scope, 
   scope?: "all";
   shopKey?: string;
   unit?: "kg" | "tấn";
+  inline?: boolean;
 }) {
   const [rows, setRows] = useState<DeliveredByCategoryRow[]>([]);
   const ids = customerIds?.join(",");
@@ -26,7 +27,7 @@ export function DeliveredByCategory({ from, to, customerIds, categoryId, scope, 
   }, [from, to, ids, categoryId, scope, shopKey]);
 
   if (!rows.length) return null;
-  return <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 8, fontSize: 13 }}>
+  return <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: inline ? 0 : 8, fontSize: 13 }}>
     {rows.map((row) => <span key={row.categoryName}>
       {row.categoryName}: {quantity.format(unit === "tấn" ? row.quantityKg / 1000 : row.quantityKg)} {unit}
     </span>)}

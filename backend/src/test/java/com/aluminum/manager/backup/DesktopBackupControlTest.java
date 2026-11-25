@@ -10,10 +10,24 @@ import com.aluminum.manager.backup.BackupDtos.BackupLogDto;
 import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 class DesktopBackupControlTest {
+    @Test
+    void devHandoffRejectsAnUnauthenticatedLocalRequest() {
+        BackupService backups = mock(BackupService.class);
+        DesktopBackupControl control = new DesktopBackupControl(backups);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("127.0.0.1");
+        assertEquals(403, assertThrows(ResponseStatusException.class,
+                () -> control.handoffCheck(null, request)).getStatusCode().value());
+        assertEquals(403, assertThrows(ResponseStatusException.class,
+                () -> control.handoff(null, request, new MockHttpServletResponse())).getStatusCode().value());
+        org.mockito.Mockito.verifyNoInteractions(backups);
+    }
+
     @Test
     void requiresLoopbackAndValidTokenBeforeStartingBackup() {
         BackupService backups = mock(BackupService.class);

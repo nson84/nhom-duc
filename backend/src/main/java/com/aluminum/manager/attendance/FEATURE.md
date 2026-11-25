@@ -8,11 +8,19 @@
 
 Mở trang Tiền công có thể gọi tạo/lấy cùng kỳ nhiều lần. Lệnh tạo kỳ dùng khóa duy nhất `(period_year, period_month)` theo kiểu chèn hoặc lấy bản ghi đã có, nên các yêu cầu đồng thời không báo lỗi ràng buộc trùng kỳ.
 
+Khi thêm mức công, tính lại kỳ công đã lập còn mở nếu tháng làm việc còn mở và giao với khoảng hiệu lực của mức mới trong kỳ đang xem. Dùng cùng cách tính với màn Tiền công.
+
+Gửi lại mức công giống bản ghi mới nhất cùng ngày trả về bản ghi đó. Các bản ghi lịch sử tiếp tục được giữ để đối chiếu.
+
 ## Màn hình liên quan
 
 Thưởng lễ được lưu riêng theo ngày và nhân viên. Tiền công tháng chỉ cộng thưởng chưa nhận. Ngày lễ trong tháng đã chốt chỉ sửa được sau khi mở lại kỳ.
 
-Lần ghi tăng ca mới dùng một đơn giá theo giờ cho mọi ngày, lấy từ trường đơn giá ngày thường trước đây. Bản ghi đã có giữ đơn giá đã lưu.
+Lần ghi tăng ca mới mặc định dùng đơn giá giờ hiệu lực theo ngày công, lấy từ trường đơn giá ngày thường trước đây. Bản ghi đã có giữ đơn giá đã lưu cho đến khi người dùng sửa bản ghi đó.
+
+API thêm/sửa tăng ca nhận `hourlyRate` tùy chọn. Có giá trị thì dùng đơn giá đó (kể cả 0); bỏ trống thì lấy mức cấu hình hiệu lực vào ngày công. `hourly_rate_snapshot` và `amount` được tính và lưu cùng bản ghi; kỳ công chỉ cộng tăng ca đã duyệt.
+
+V46 thêm `employee_pay_rates.overtime_session_rate` và `overtime_records.pay_unit` (`HOUR` mặc định cho dữ liệu cũ, `SESSION` cho một buổi). Với bản ghi theo buổi, `overtime_hours` lưu 0, thành tiền bằng đơn giá buổi; tiền lương vẫn cộng khoản đã duyệt, còn tổng giờ không tăng. Mức buổi có hiệu lực theo lịch sử mức công của nhân viên.
 
 Xóa mức công chỉ áp dụng cho mốc tương lai chưa có bản ghi chấm công tham chiếu. Sau khi xóa, nối lại khoảng áp dụng liền trước nếu khoảng đó kết thúc ngay trước mốc bị xóa.
 

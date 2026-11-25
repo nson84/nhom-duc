@@ -12,6 +12,7 @@ export type PayRate = {
   overtimeWeekdayRate: number;
   overtimeRestdayRate?: number;
   overtimeHolidayRate?: number;
+  overtimeSessionRate: number;
 };
 
 export type Employee = {
@@ -39,6 +40,7 @@ export type EmployeeInput = {
   initialOvertimeWeekdayRate?: number;
   initialOvertimeRestdayRate?: number;
   initialOvertimeHolidayRate?: number;
+  initialOvertimeSessionRate?: number;
 };
 
 export type PayRateInput = {
@@ -49,6 +51,7 @@ export type PayRateInput = {
   overtimeWeekdayRate: number;
   overtimeRestdayRate?: number;
   overtimeHolidayRate?: number;
+  overtimeSessionRate?: number;
 };
 
 export type HolidayKind = "SHOP_CLOSED" | "NATIONAL_HOLIDAY" | "CATHOLIC_HOLIDAY";
@@ -91,6 +94,7 @@ export type OvertimeRecord = {
   overtimeHours: number;
   hourlyRateSnapshot: number;
   amount: number;
+  payUnit: "HOUR" | "SESSION";
   approved: boolean;
   notes: string | null;
 };
@@ -223,7 +227,7 @@ export async function bulkSaveAttendance(
 export async function saveOvertime(
   attendanceId: number,
   overtimeId: number | undefined,
-  input: { overtimeHours: number; approved: boolean; notes?: string },
+  input: { overtimeHours: number; hourlyRate?: number | null; payUnit: "HOUR" | "SESSION"; approved: boolean; notes?: string },
 ): Promise<AttendanceDay> {
   const response = overtimeId
     ? await api.put<Envelope<AttendanceDay>>(`/api/v1/overtime/${overtimeId}`, input)

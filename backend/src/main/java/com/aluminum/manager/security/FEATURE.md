@@ -15,3 +15,6 @@ Hai lệnh desktop `POST /api/v1/system/desktop-backup/{startup|shutdown}` khôn
 ## Màn hình liên quan
 
 [auth](../../../../../../../../frontend/src/features/auth/FEATURE.md), [shop](../../../../../../../../frontend/src/features/shop/FEATURE.md)
+
+
+Hai endpoint desktop-backup/dev-handoff-check và desktop-backup/dev-handoff kiểm tra địa chỉ loopback, token local và cờ cho phép bàn giao do launcher dev đặt. Tiến trình ngoài không bật cờ bị từ chối.

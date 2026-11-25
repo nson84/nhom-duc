@@ -19,6 +19,8 @@ import {
   downloadReportCsv,
   getInventoryReport,
   getInvoiceMargins,
+  getMonthlyMargins,
+  type MonthlyMargin,
   getPayrollReport,
   getPriceVarianceReport,
   getProfitReport,
@@ -142,6 +144,7 @@ export function ReportsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [profit, setProfit] = useState<ProfitReport | null>(null);
   const [invoiceMargins, setInvoiceMargins] = useState<InvoiceGrossMargin[]>([]);
+  const [monthlyMargins, setMonthlyMargins] = useState<MonthlyMargin[]>([]);
   const [productSales, setProductSales] = useState<ProductSalesRow[]>([]);
   const [inventoryRows, setInventoryRows] = useState<InventoryReportRow[]>([]);
   const [payrollRows, setPayrollRows] = useState<PayrollReportRow[]>([]);
@@ -202,6 +205,7 @@ export function ReportsPage() {
     if (!period?.started) {
       setProfit(null);
       setInvoiceMargins([]);
+      setMonthlyMargins([]);
       setProductSales([]);
       setInventoryRows([]);
       setVarianceRows([]);
@@ -213,16 +217,18 @@ export function ReportsPage() {
     try {
       const from = range[0].format("YYYY-MM-DD");
       const to = range[1].format("YYYY-MM-DD");
-      const [pr, sp, inv, pv, pay, invoices] = await Promise.all([
+      const [pr, sp, inv, pv, pay, invoices, months] = await Promise.all([
         getProfitReport(from, to, scope),
         getSalesByProductReport({ from, to, productId, categoryId, scope }),
         getInventoryReport({ from, to, categoryId, scope }),
         getPriceVarianceReport({ from, to, categoryId, scope }),
         canViewPayroll ? getPayrollReport(year, scope, from, to) : Promise.resolve([] as PayrollReportRow[]),
         book === "shop" ? getInvoiceMargins(from, to) : Promise.resolve([] as InvoiceGrossMargin[]),
+        book === "shop" ? getMonthlyMargins(from, to) : Promise.resolve([]),
       ]);
       setProfit(pr);
       setInvoiceMargins(invoices);
+      setMonthlyMargins(months);
       setProductSales(sp);
       setInventoryRows(inv);
       setVarianceRows(pv);
@@ -314,23 +320,31 @@ export function ReportsPage() {
             label: "Lãi gộp hóa đơn / tháng",
             children: <>
               <Alert type="info" showIcon style={{ marginBottom: 16 }}
-                message="Lãi ước tính theo giá nhập chuẩn — chưa phải lãi quyết toán"
-                description="Giá vật tư ở đây là khối lượng × giá nhập chuẩn đã lưu tại ngày lập phiếu, không phải giá vốn thực tế của lô hàng. Lãi ước tính = tiền bán − giá vật tư này; chưa trừ tiền công, phế liệu và hao hụt. Phiếu chuyển Xưởng được liệt kê riêng với lãi 0 và không cộng vào doanh thu/lãi tháng."
+                message="Lãi hóa đơn và lãi tháng là số tạm tính"
+                description="Giá vốn dùng giá đã nhập trên dòng hàng hoặc giá nhập tham chiếu nếu để trống. Lãi tháng sau chi phí trừ các khoản đã ghi nhận. Phiếu nội bộ không cộng vào doanh thu/lãi tháng. Lãi quyết toán còn phụ thuộc kiểm kê cuối kỳ."
               />
               <h3>Lãi gộp theo tháng (chưa trừ chi phí hoạt động)</h3>
               <PagedTable rowKey="month" size="small" loading={loading} dataSource={invoiceMonths} columns={[
                 { title: "Tháng", dataIndex: "month", align: "center" },
                 { title: "Số phiếu (gồm nội bộ)", dataIndex: "count", align: "center" },
                 { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
-                { title: "Giá vật tư theo giá nhập chuẩn", dataIndex: "cost", align: "center", render: (v: number, row) => row.missing ? "Thiếu giá nhập chuẩn" : formatMoney(v) },
+                { title: "Giá vốn vật tư", dataIndex: "cost", align: "center", render: (v: number, row) => row.missing ? "Thiếu giá vốn" : formatMoney(v) },
                 { title: "Lãi gộp ước tính", dataIndex: "profit", align: "center", render: (v: number, row) => row.missing ? "Chưa đủ dữ liệu" : formatMoney(v) },
+              ]} />
+              <h3 style={{ marginTop: 20 }}>Lãi tháng sau chi phí (tạm tính)</h3>
+              <PagedTable<MonthlyMargin> rowKey="month" size="small" loading={loading} dataSource={monthlyMargins} columns={[
+                { title: "Tháng", dataIndex: "month" },
+                { title: "Lãi gộp", dataIndex: "grossProfit", render: (v: number | null) => v == null ? "Thiếu giá vốn" : formatMoney(v) },
+                { title: "Chi hoạt động", dataIndex: "operatingCost", render: (v: number) => formatMoney(v) },
+                { title: "Chi phí công thợ", dataIndex: "payrollCost", render: (v: number) => formatMoney(v) },
+                { title: "Lãi sau chi phí", dataIndex: "profitAfterExpenses", render: (v: number | null) => v == null ? "Chưa đủ dữ liệu" : formatMoney(v) },
               ]} />
               <h3 style={{ marginTop: 20 }}>Chi tiết từng hóa đơn</h3>
               <PagedTable<InvoiceGrossMargin> rowKey="documentId" size="small" loading={loading}
                 dataSource={invoiceMargins} columns={[
                   { title: "Ngày", dataIndex: "documentDate", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
                   { title: "Số phiếu", dataIndex: "documentCode", align: "center" },
-                  { title: "Khách / nơi nhận", dataIndex: "customerName", render: (v: string, row) => row.internal ? <>{v} <Tag color="blue">Nội bộ</Tag></> : v },
+                  { title: "Khách / nơi nhận", dataIndex: "customerName", render: (v: string, row) => row.internal ? <Tag color="blue">Nội bộ</Tag> : v },
                   { title: "Tiền bán / giá chuyển", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
                   { title: "Giá vật tư / giá chuyển", dataIndex: "estimatedMaterialCost", align: "center", render: (v: number | null) => v == null ? "Thiếu giá" : formatMoney(v) },
                   { title: "Lãi gộp ước tính", dataIndex: "estimatedGrossProfit", align: "center", render: (v: number | null) => v == null ? "Chưa đủ dữ liệu" : formatMoney(v) },
@@ -350,7 +364,7 @@ export function ReportsPage() {
                 <>
                 <DistributionProfitSummary year={year} />
                 <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-                  <Col xs={24} md={6}>
+                  <Col xs={24} md={8}>
                     <Card size="small">
                       <Statistic title="Doanh thu bán hàng" value={formatMoney(profit?.revenue ?? 0)} />
                     </Card>
@@ -358,7 +372,7 @@ export function ReportsPage() {
 
 
 
-                  <Col xs={24} md={6}>
+                  <Col xs={24} md={8}>
                     <Card size="small">
                       <Statistic
                         title={canViewPayroll ? "Chi phí hoạt động & lương" : "Chi phí hoạt động"}
@@ -366,17 +380,17 @@ export function ReportsPage() {
                       />
                     </Card>
                   </Col>
-                  <Col xs={24} md={6}>
+                  <Col xs={24} md={8}>
                     <Card size="small">
                       <Statistic title="Đã thu từ hóa đơn trong kỳ" value={formatMoney(profit?.cashCollected ?? 0)} />
                     </Card>
                   </Col>
-                  <Col xs={24} md={6}>
+                  <Col xs={24} md={12}>
                     <Card size="small">
                       <Statistic title="Tiền còn phải thu từ phiếu bán trong kỳ" value={formatMoney(profit?.uncollectedRevenue ?? 0)} />
                     </Card>
                   </Col>
-                  <Col xs={24} md={6}>
+                  <Col xs={24} md={12}>
                     <Card size="small">
                       <Statistic title="Nhập kho trong kỳ (Vào tồn kho)" value={formatMoney(profit?.purchaseStockValue ?? 0)} />
                     </Card>
@@ -606,10 +620,18 @@ export function ReportsPage() {
               <Alert type="info" showIcon style={{ marginBottom: 16 }}
                 message="Hao hụt theo các lần kiểm kê trong khoảng ngày đã chọn"
                 description={<span>Nhập số cân thực tế tại <Link to="/ton-kho">Tồn kho → Kiểm kê / Hao hụt</Link>. Hệ thống ghi phần chênh lệch thành phiếu điều chỉnh và tổng hợp tại đây.</span>} />
-              <Space style={{ marginBottom: 16 }} wrap>
-                <Statistic title="Hao hụt" value={kgToTon(shrinkageRows.reduce((sum, row) => sum + row.shortageKg, 0))} suffix="tấn" precision={3} />
-                <Statistic title="Thừa kiểm kê" value={kgToTon(shrinkageRows.reduce((sum, row) => sum + row.surplusKg, 0))} suffix="tấn" precision={3} />
-              </Space>
+              <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col xs={24} sm={12}>
+                  <Card size="small" style={{ height: "100%" }}>
+                    <Statistic title="Hao hụt" value={kgToTon(shrinkageRows.reduce((sum, row) => sum + row.shortageKg, 0))} suffix="tấn" precision={3} />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Card size="small" style={{ height: "100%" }}>
+                    <Statistic title="Thừa kiểm kê" value={kgToTon(shrinkageRows.reduce((sum, row) => sum + row.surplusKg, 0))} suffix="tấn" precision={3} />
+                  </Card>
+                </Col>
+              </Row>
               <PagedTable rowKey="key" dataSource={shrinkageRows} columns={[
                 { title: "Ngày kiểm kê", dataIndex: "date", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY") },
                 { title: "Phiếu điều chỉnh", dataIndex: "code", align: "center" },

@@ -85,13 +85,18 @@ public class StockDocumentService {
 	 */
 	@Transactional(readOnly = true)
 	public List<DocumentSummary> list(String type, String filter, LocalDate from, LocalDate to, String query) {
-		YearEndBalanceService.Period working = workingPeriod();
+		String bucket = filter == null || filter.isBlank() ? "all" : filter.trim().toLowerCase();
+		boolean internalHistory = "internal-history".equals(bucket);
+		if (internalHistory) {
+			shops.requireManufacturing();
+			type = "PURCHASE";
+		}
+		YearEndBalanceService.Period working = internalHistory ? null : workingPeriod();
 		if (working != null) {
 			if (!working.started()) return List.of();
 			from = working.periodFrom();
 			to = working.periodTo();
 		}
-		String bucket = filter == null || filter.isBlank() ? "all" : filter.trim().toLowerCase();
 		if ("trash".equals(bucket)) {
 			purgeExpiredTrash();
 		}
@@ -110,6 +115,7 @@ public class StockDocumentService {
 			args.add(type);
 		}
 		switch (bucket) {
+			case "internal-history" -> sql.append(" AND d.is_internal = 1 AND d.status = 'CONFIRMED' AND d.trashed_at IS NULL");
 			case "trash" -> sql.append(" AND d.trashed_at IS NOT NULL");
 			case "draft" -> sql.append(" AND d.trashed_at IS NULL AND d.status = 'DRAFT'");
 			case "voided" -> sql.append(" AND d.trashed_at IS NULL AND d.status = 'CANCELLED'");
@@ -250,6 +256,16 @@ public class StockDocumentService {
 		return dto;
 	}
 
+	@Transactional(readOnly = true)
+	public DocumentDto getInternalPurchaseHistory(long id) {
+		shops.requireManufacturing();
+		DocumentDto doc = get(id);
+		if (!doc.internal() || !"PURCHASE".equals(doc.documentType()) || !"CONFIRMED".equals(doc.status()) || doc.trashedAt() != null) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy phiếu nhập nội bộ", null);
+		}
+		return doc;
+	}
+
 	private DocumentDto loadDocument(long id) {
 		List<DocumentDto> rows = jdbc.query("""
 				SELECT d.*, p.document_code AS pair_code
@@ -282,7 +298,8 @@ public class StockDocumentService {
 				rs.getBoolean("is_internal"),
 				(Long) rs.getObject("internal_pair_document_id"),
 				rs.getString("pair_code"),
-				rs.getTimestamp("trashed_at") == null ? null : rs.getTimestamp("trashed_at").toLocalDateTime()), id);
+				rs.getTimestamp("trashed_at") == null ? null : rs.getTimestamp("trashed_at").toLocalDateTime(),
+				rs.getBoolean("paper_source")), id);
 		if (rows.isEmpty()) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy phiếu", null);
 		}
@@ -323,14 +340,14 @@ public class StockDocumentService {
 		long id = insertReturningId("""
 				INSERT INTO stock_documents (document_code, document_type, status, document_date,
 				    counterparty_name, customer_id, issued_by, received_by, reason, subtotal, discount_amount,
-				    total_amount, payment_status, payment_method, idempotency_key, notes, shop_id, is_internal)
-				VALUES (?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?)
+				    total_amount, payment_status, payment_method, idempotency_key, notes, shop_id, is_internal, paper_source)
+				VALUES (?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?, ?)
 				""",
 				code, request.documentType(), Timestamp.valueOf(request.documentDate()),
 				counterparty, customerId, blank(request.issuedBy()), blank(request.receivedBy()),
 				blank(request.reason()), totals.subtotal(), totals.discount(), totals.total(),
 				blank(request.paymentMethod()), blank(request.idempotencyKey()), blank(request.notes()),
-				shops.currentId(), internal);
+				shops.currentId(), internal, Boolean.TRUE.equals(request.paperSource()));
 		insertLines(id, lines);
 		audit.record(CurrentAdmin.get().id(), "CREATE_" + request.documentType(), "stock_documents",
 				String.valueOf(id), "Tạo phiếu nháp " + code);
@@ -362,13 +379,13 @@ public class StockDocumentService {
 				UPDATE stock_documents
 				SET document_date = ?, counterparty_name = ?, customer_id = ?, issued_by = ?, received_by = ?, reason = ?,
 				    subtotal = ?, discount_amount = ?, total_amount = ?, payment_method = ?, notes = ?,
-				    is_internal = ?
+				    is_internal = ?, paper_source = COALESCE(?, paper_source)
 				WHERE id = ?
 				""",
 				Timestamp.valueOf(request.documentDate()), counterparty, customerId,
 				blank(request.issuedBy()), blank(request.receivedBy()), blank(request.reason()),
 				totals.subtotal(), totals.discount(), totals.total(), blank(request.paymentMethod()),
-				blank(request.notes()), internal, id);
+				blank(request.notes()), internal, request.paperSource(), id);
 		jdbc.update("DELETE FROM stock_document_items WHERE document_id = ?", id);
 		insertLines(id, lines);
 		audit.record(CurrentAdmin.get().id(), "UPDATE_" + doc.type(), "stock_documents",
@@ -400,6 +417,12 @@ public class StockDocumentService {
 		}
 		assertYearNotClosed(doc.date());
 		assertYearNotClosed(request.documentDate());
+		if (request.documentDate().toLocalDate().isAfter(doc.date().toLocalDate())
+				&& payments(id, doc.type()).stream().anyMatch(payment ->
+						payment.paymentDate().toLocalDate().isBefore(request.documentDate().toLocalDate()))) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Ngày lập phiếu không được sau ngày đã thanh toán", null);
+		}
 		BigDecimal paidAmount = paid(id, doc.type());
 		BigDecimal newTotal = totals(buildLines(request), request.discountAmount()).total();
 		if (paidAmount.compareTo(newTotal) > 0) {
@@ -833,6 +856,10 @@ public class StockDocumentService {
 					"Số tiền phải là bội 500 đ (VD: 1.000 hoặc 1.500)", null);
 		}
 		LocalDateTime when = request.paymentDate() == null ? LocalDateTime.now(clock) : request.paymentDate();
+		if (when.toLocalDate().isBefore(doc.date().toLocalDate())) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Ngày thanh toán không được trước ngày lập phiếu", null);
+		}
 		yearPeriods.requireWorkingDate(when);
 		if (!shops.isDistribution()) assertFactoryYearOpen(when);
 		String methodVi = localizePaymentMethod(request.paymentMethod());
@@ -870,6 +897,56 @@ public class StockDocumentService {
 	}
 
 	// ---------- Stock views ----------
+
+	@Transactional
+	public DocumentDto editPaymentDate(long id, long paymentId, LocalDate date) {
+		jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shops.currentId());
+		DocRow doc = lock(id);
+		requireSupported(doc.type());
+		if (!"CONFIRMED".equals(doc.status()) || reversedBy(id) != null || date.isBefore(doc.date().toLocalDate())
+				|| date.isAfter(LocalDate.now(clock))) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày trả phải từ ngày lập phiếu đến hôm nay", null);
+		}
+		boolean sale = "SALE".equals(doc.type());
+		var links = jdbc.query(sale ? """
+				SELECT f.id, f.transaction_date, p.payment_date
+				FROM sales_payments p JOIN financial_transactions f ON f.id = p.financial_transaction_id
+				WHERE p.id = ? AND f.reference_id = p.document_id
+				  AND f.reference_type = 'STOCK_DOCUMENT' AND f.reference_id = ?
+				  AND f.shop_id = ? AND f.category = 'SALE_RECEIPT' AND f.status = 'CONFIRMED'
+				  AND f.is_internal = 0 FOR UPDATE
+				""" : """
+				SELECT id, transaction_date, transaction_date AS payment_date FROM financial_transactions
+				WHERE id = ? AND reference_type = 'STOCK_DOCUMENT' AND reference_id = ?
+				  AND shop_id = ? AND category = 'PURCHASE_PAYMENT' AND status = 'CONFIRMED'
+				  AND is_internal = 0 FOR UPDATE
+				""", (rs, index) -> new PaymentLink(rs.getLong("id"),
+				rs.getTimestamp("transaction_date").toLocalDateTime(),
+				rs.getTimestamp("payment_date").toLocalDateTime()), paymentId, id, shops.currentId());
+		if (links.isEmpty()) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy khoản thanh toán hợp lệ", null);
+		}
+		PaymentLink payment = links.get(0);
+		if (date.equals(payment.paymentDate().toLocalDate()) && date.equals(payment.financeDate().toLocalDate())) {
+			return get(id);
+		}
+		yearPeriods.requirePaymentDateCorrection(payment.paymentDate());
+		yearPeriods.requirePaymentDateCorrection(payment.financeDate());
+		yearPeriods.requirePaymentDateCorrection(date.atStartOfDay());
+		if (!shops.isDistribution()) {
+			assertFactoryYearOpen(payment.paymentDate());
+			assertFactoryYearOpen(payment.financeDate());
+			assertFactoryYearOpen(date.atStartOfDay());
+		}
+		Timestamp updated = Timestamp.valueOf(date.atStartOfDay());
+		jdbc.update("UPDATE financial_transactions SET transaction_date = ? WHERE id = ?", updated, payment.id());
+		if (sale) jdbc.update("UPDATE sales_payments SET payment_date = ? WHERE id = ?", updated, paymentId);
+		audit.record(CurrentAdmin.get().id(), "EDIT_PAYMENT_DATE", "financial_transactions",
+				String.valueOf(payment.id()), payment.paymentDate().toLocalDate() + " → " + date);
+		return get(id);
+	}
+
+	private record PaymentLink(long id, LocalDateTime financeDate, LocalDateTime paymentDate) {}
 
 	@Transactional(readOnly = true)
 	public List<StockBalanceDto> balances(String query, boolean onlyInStock) {
@@ -998,14 +1075,14 @@ public class StockDocumentService {
 				Integer.class, productId, shops.currentId());
 		if (owned == null || owned == 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy sản phẩm", null);
 		return jdbc.query("""
-				SELECT m.id, m.movement_at, d.document_code, m.movement_type, m.quantity_delta_base, m.unit_cost
+				SELECT m.id, m.movement_at, d.document_code, d.is_internal, m.movement_type, m.quantity_delta_base, m.unit_cost
 				FROM stock_movements m
 				JOIN stock_documents d ON d.id = m.document_id
 				WHERE m.product_id = ?
 				ORDER BY m.movement_at DESC, m.id DESC
 				LIMIT 500
 				""", (rs, i) -> new MovementDto(
-				rs.getLong("id"), rs.getTimestamp("movement_at").toLocalDateTime(), rs.getString("document_code"),
+				rs.getLong("id"), rs.getTimestamp("movement_at").toLocalDateTime(), rs.getString("document_code"), rs.getBoolean("is_internal"),
 				rs.getString("movement_type"), rs.getBigDecimal("quantity_delta_base"), rs.getBigDecimal("unit_cost")),
 				productId);
 	}
@@ -1130,6 +1207,7 @@ public class StockDocumentService {
 			lines.add(new Line(
 					product, category, unit, billing, width, height, unitNameSnapshot, quantity, factor, quantityBase,
 					unitPrice, discount, sourceItemId, referenceCost,
+					"SALE".equals(request.documentType()) && !internalSale ? item.enteredCostPerKg() : null,
 					InventoryMath.lineTotal(quantity, unitPrice, discount)));
 		}
 		return lines;
@@ -1166,14 +1244,14 @@ public class StockDocumentService {
 					    unit_name_snapshot, billing_unit, width_m, height_m,
 					    quantity_document, factor_to_base_snapshot,
 				    quantity_base, unit_price, line_discount, line_total,
-				    factory_purchase_item_id, factory_reference_cost_per_kg)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				    factory_purchase_item_id, factory_reference_cost_per_kg, entered_cost_per_kg)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""", documentId, line.product().id(), line.category().id(), line.unit().id(),
 					line.product().code(), line.product().name(), line.category().name(),
 					line.unitNameSnapshot(), line.billingUnit(), line.widthM(), line.heightM(),
 					line.quantity(), line.factor(),
 					line.quantityBase(), line.unitPrice(), line.discount(), line.lineTotal(),
-					line.factoryPurchaseItemId(), line.factoryReferenceCostPerKg());
+					line.factoryPurchaseItemId(), line.factoryReferenceCostPerKg(), line.enteredCostPerKg());
 		}
 	}
 
@@ -1260,7 +1338,7 @@ public class StockDocumentService {
 				rs.getBigDecimal("standard_cost_per_base_snapshot"),
 				rs.getBigDecimal("standard_cost_total_snapshot"),
 				(Long) rs.getObject("factory_purchase_item_id"),
-				rs.getBigDecimal("factory_reference_cost_per_kg")), documentId);
+				rs.getBigDecimal("factory_reference_cost_per_kg"), rs.getBigDecimal("entered_cost_per_kg")), documentId);
 	}
 
 	private BigDecimal paid(long documentId, String type) {
@@ -1716,7 +1794,7 @@ public class StockDocumentService {
 			BigDecimal widthM, BigDecimal heightM,
 			String unitNameSnapshot, BigDecimal quantity, BigDecimal factor, BigDecimal quantityBase,
 			BigDecimal unitPrice, BigDecimal discount, Long factoryPurchaseItemId,
-			BigDecimal factoryReferenceCostPerKg, BigDecimal lineTotal) {
+			BigDecimal factoryReferenceCostPerKg, BigDecimal enteredCostPerKg, BigDecimal lineTotal) {
 	}
 
 	private record Totals(BigDecimal subtotal, BigDecimal discount, BigDecimal total) {

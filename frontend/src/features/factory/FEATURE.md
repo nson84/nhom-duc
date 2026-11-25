@@ -22,9 +22,9 @@ Màn hình mặc định mở năm vừa kết thúc để xem lại lãi và ki
 - Năm đã chốt khóa việc sửa phiếu thuộc năm đó; cho phép thu nợ của năm cũ vào kỳ mới
 - Có thể chốt năm hiện tại ngay khi đã lưu kiểm kê và đáp ứng điều kiện chốt.
 - Chọn ngày đầu kỳ và ngày chốt khi kiểm kê; kỳ có thể đi qua 31/12 và năm nhuận âm. Kỳ sau bắt đầu ngày kế tiếp. Năm trên bộ chọn là tên kỳ, không buộc trùng năm dương lịch của ngày đầu kỳ.
-- Nút Chốt năm trên Tổng quan dẫn đến phần kiểm kê của đúng năm đang chọn qua tham số `year`; chốt chỉ hoàn tất sau khi lưu kiểm kê và xác nhận tại trang này.
+- Nút Mở kiểm kê Xưởng trên trang Chốt năm dẫn đến phần kiểm kê của đúng năm đang chọn qua tham số `year`; chốt chỉ hoàn tất sau khi lưu kiểm kê và xác nhận tại trang này.
 - Hộp thoại chốt năm Xưởng hỏi đã kiểm kê tồn kho chưa và hiển thị khoảng ngày của kỳ. Chọn **Đã kiểm kê, chốt năm** để tiếp tục hoặc **Quay lại** để kiểm tra.
-- Ngày kỳ đã lưu trên Tổng quan được nạp vào kiểm kê Xưởng, kể cả khi chưa từng lập kiểm kê; báo cáo Xưởng dùng cùng mốc. Ngày trong kiểm kê chỉ đọc, muốn đổi phải lưu lại ở Tổng quan. Cần lưu ngày kết thúc trước khi lưu kiểm kê.
+- Ngày kỳ đã lưu trên trang Chốt năm được nạp vào kiểm kê Xưởng, kể cả khi chưa từng lập kiểm kê; báo cáo Xưởng dùng cùng mốc. Ngày trong kiểm kê chỉ đọc, muốn đổi phải lưu lại ở trang Chốt năm. Cần lưu ngày kết thúc trước khi lưu kiểm kê.
 
 ## Bổ sung theo code hiện tại
 

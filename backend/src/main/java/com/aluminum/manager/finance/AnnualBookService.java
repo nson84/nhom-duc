@@ -40,6 +40,7 @@ public class AnnualBookService {
                            String unit, BigDecimal quantityKg, BigDecimal unitPrice, BigDecimal amount) {}
     public record Purchase(long id, String supplier, String code, LocalDateTime date, BigDecimal total,
                            BigDecimal paidAsOf, String notes, boolean internal) {}
+    public record Transfer(long id, String code, LocalDateTime date, BigDecimal total) {}
     public record Payment(long documentId, LocalDateTime date, BigDecimal amount, String method,
                           String collector, String note) {}
     public record DebtPayment(LocalDateTime date, BigDecimal amount) {}
@@ -104,7 +105,8 @@ public class AnnualBookService {
         return new Carryover(period.periodFrom(), period.periodTo(), List.copyOf(invoices.values()));
     }
     public record Transaction(String code, LocalDateTime date, String category, BigDecimal amount,
-                              String counterparty, String spentBy, String description, String reference) {}
+                              String counterparty, String spentBy, String description, String reference,
+                              boolean monthlySummary) {}
     public record Stock(String product, String category, BigDecimal quantityKg, BigDecimal value) {}
     public record Wage(int year, int month, long employeeId, String employee, BigDecimal days, BigDecimal basePay,
                        BigDecimal overtimePay, BigDecimal bonusPay, BigDecimal allowances,
@@ -114,6 +116,7 @@ public class AnnualBookService {
     public record Book(int year, String periodName, LocalDate periodFrom, LocalDate periodTo, String shopCode, String shopName, List<Customer> customers,
                        List<Sale> sales, List<SaleItem> saleItems, List<Payment> payments,
                        List<Purchase> purchases, List<SaleItem> purchaseItems,
+                       List<Transfer> transfersOut, List<SaleItem> transferItems,
                        List<Transaction> receipts, List<Transaction> expenses, List<Stock> stock, List<Wage> wages,
                        List<WageEvent> wageEvents,
                        BigDecimal inventoryValue, BigDecimal profit, boolean closed) {}
@@ -210,7 +213,7 @@ public class AnnualBookService {
                 FROM stock_documents d
                 WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
                   AND d.document_date < ?
-                  AND (d.document_date >= ? OR (d.is_internal = 0 AND d.total_amount > COALESCE((SELECT SUM(f.amount)
+                  AND (d.is_internal = 1 OR d.document_date >= ? OR (d.is_internal = 0 AND d.total_amount > COALESCE((SELECT SUM(f.amount)
                     FROM financial_transactions f WHERE f.reference_type = 'STOCK_DOCUMENT'
                       AND f.reference_id = d.id AND f.category = 'PURCHASE_PAYMENT'
                       AND f.status = 'CONFIRMED' AND f.transaction_date < ?), 0))
@@ -232,6 +235,24 @@ public class AnnualBookService {
                 """, (rs, i) -> new SaleItem(rs.getLong(1), rs.getString(2), rs.getString(3),
                 rs.getBigDecimal(4), rs.getString(5), rs.getBigDecimal(6), rs.getBigDecimal(7), rs.getBigDecimal(8)), shopId, end);
 
+        List<Transfer> transfersOut = ShopContext.DISTRIBUTION.equals(code) ? jdbc.query("""
+                SELECT id, document_code, document_date, total_amount
+                FROM stock_documents
+                WHERE shop_id = ? AND document_type = 'SALE' AND status = 'CONFIRMED'
+                  AND is_internal = 1 AND document_date >= ? AND document_date < ?
+                ORDER BY document_date, id
+                """, (rs, i) -> new Transfer(rs.getLong(1), rs.getString(2),
+                rs.getTimestamp(3).toLocalDateTime(), rs.getBigDecimal(4)), shopId, start, end) : List.of();
+        List<SaleItem> transferItems = transfersOut.isEmpty() ? List.of() : jdbc.query("""
+                SELECT i.document_id, i.product_name_snapshot, COALESCE(i.category_name_snapshot, ''),
+                  i.quantity_document, i.unit_name_snapshot, i.quantity_base, i.unit_price, i.line_total
+                FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+                WHERE d.shop_id = ? AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+                  AND d.is_internal = 1 AND d.document_date >= ? AND d.document_date < ?
+                ORDER BY i.document_id, i.id
+                """, (rs, i) -> new SaleItem(rs.getLong(1), rs.getString(2), rs.getString(3),
+                rs.getBigDecimal(4), rs.getString(5), rs.getBigDecimal(6), rs.getBigDecimal(7), rs.getBigDecimal(8)), shopId, start, end);
+
         List<Transaction> receipts = transactions(shopId, start, end, "INCOME");
         List<Transaction> expenses = transactions(shopId, start, end, "EXPENSE");
         List<Stock> stock = ShopContext.DISTRIBUTION.equals(code) ? distributionStock(shopId, end) : factoryStock(year);
@@ -241,7 +262,7 @@ public class AnnualBookService {
                 SELECT inventory_value, profit FROM year_end_balances WHERE shop_id = ? AND year_number = ?
                 """, (rs, i) -> new BigDecimal[]{rs.getBigDecimal(1), rs.getBigDecimal(2)}, shopId, year)
                 .stream().findFirst().orElse(null);
-        return new Book(year, selectedPeriod.periodName(), period[0], period[1], code, shops.shopName(code), customers, sales, items, payments, purchases, purchaseItems,
+        return new Book(year, selectedPeriod.periodName(), period[0], period[1], code, shops.shopName(code), customers, sales, items, payments, purchases, purchaseItems, transfersOut, transferItems,
                 receipts, expenses, stock, wages, wageEvents, closing == null ? null : closing[0],
                 closing == null ? null : closing[1], closing != null);
     }
@@ -251,7 +272,8 @@ public class AnnualBookService {
                 SELECT f.transaction_code, f.transaction_date, f.category, f.amount,
                   COALESCE(c.name, d.counterparty_name, s.buyer_name, '') AS counterparty,
                   f.spent_by, f.description,
-                  COALESCE(d.document_code, CASE WHEN s.id IS NOT NULL THEN CONCAT('Phế liệu #', s.id) ELSE '' END) AS reference
+                  COALESCE(d.document_code, CASE WHEN s.id IS NOT NULL THEN CONCAT('Phế liệu #', s.id) ELSE '' END) AS reference,
+                  f.monthly_summary
                 FROM financial_transactions f
                 LEFT JOIN stock_documents d ON f.reference_type = 'STOCK_DOCUMENT' AND f.reference_id = d.id
                 LEFT JOIN customers c ON c.id = d.customer_id
@@ -261,7 +283,7 @@ public class AnnualBookService {
                 ORDER BY f.transaction_date, f.id
                 """, (rs, i) -> new Transaction(rs.getString(1), rs.getTimestamp(2).toLocalDateTime(),
                 rs.getString(3), rs.getBigDecimal(4), rs.getString(5), rs.getString(6),
-                rs.getString(7), rs.getString(8)), shopId, type, start, end);
+                rs.getString(7), rs.getString(8), rs.getBoolean(9)), shopId, type, start, end);
     }
 
     private List<Stock> distributionStock(long shopId, Timestamp end) {

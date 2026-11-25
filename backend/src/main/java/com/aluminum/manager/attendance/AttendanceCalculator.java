@@ -97,6 +97,10 @@ public final class AttendanceCalculator {
 		return total.setScale(4, ROUNDING);
 	}
 
+	public static BigDecimal overtimeAmount(String payUnit, BigDecimal hours, BigDecimal rate) {
+		return (payUnit.equals("SESSION") ? BigDecimal.ONE : hours).multiply(rate).setScale(4, ROUNDING);
+	}
+
 	public static boolean isLeapFebruary(LocalDate date) {
 		return date.getMonthValue() == 2 && daysInMonth(date.getYear(), 2) == 29;
 	}

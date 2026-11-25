@@ -179,7 +179,12 @@ fn start_backend(active: Option<&ActiveRecovery>) -> Result<(), String> {
     let data_dir = app_data_dir();
     let profile = active.map(|selection| validate_profile(&selection.profile_path)).transpose()?;
     let image_dir = profile.as_ref().map(|(_, item)| PathBuf::from(&item.image_directory))
-        .unwrap_or_else(|| data_dir.join("image"));
+        .unwrap_or_else(|| {
+            fs::read_to_string(data_dir.join("dev-original-image.json")).ok()
+                .and_then(|value| serde_json::from_str::<PathBuf>(&value).ok())
+                .filter(|path| path.is_absolute())
+                .unwrap_or_else(|| data_dir.join("image"))
+        });
     fs::create_dir_all(&image_dir).map_err(|err| format!("Không tạo được thư mục ảnh: {err}"))?;
     let mut command = Command::new("java");
     command
@@ -343,22 +348,28 @@ fn switch_to_inner(target: Option<ActiveRecovery>, save_previous: bool) -> Resul
     let target_profile = target.as_ref().map(|selection| validate_profile(&selection.profile_path)).transpose()?;
     let default_name = std::env::var("ALUMINUM_DB_NAME").unwrap_or_else(|_| "aluminum_app".to_string());
     let target_name = target_profile.as_ref().map(|(_, profile)| profile.database_name.as_str()).unwrap_or(&default_name);
+    if find_jar().is_none() {
+        return Err("Không tìm thấy JAR backend để mở database sau khi bàn giao.".to_string());
+    }
     let mut guard = CHILD.lock().map_err(|err| err.to_string())?;
-    if guard.is_none() { return Err("Ứng dụng không sở hữu backend đang chạy; đóng backend ngoài trước khi chuyển dữ liệu".to_string()); }
     let started = std::time::SystemTime::now();
     let result = (|| {
-        if let Some(child) = guard.as_mut() { stop_owned(child)?; }
+        if let Some(child) = guard.as_mut() {
+            stop_owned(child)?;
+        } else {
+            if current.is_some() || default_name != "aluminum_app" || ready_database()?.as_deref() != Some("aluminum_app") {
+                return Err("Backend bên ngoài không khớp cấu hình database dev mặc định.".to_string());
+            }
+            handoff_dev_backend()?;
+        }
         *guard = None;
         drop(guard);
         let launched = start_backend(target.as_ref()).and_then(|_| wait_for_database(target_name));
         if let Err(error) = launched {
             if let Some(mut child) = CHILD.lock().map_err(|err| err.to_string())?.take() { let _ = child.kill(); let _ = child.wait(); }
-            let rollback = start_backend(current.as_ref());
-            if rollback.is_ok() {
-                let old_name = current.as_ref().map(|selection| validate_profile(&selection.profile_path))
-                    .transpose()?.map(|(_, profile)| profile.database_name).unwrap_or_else(|| default_name.clone());
-                let _ = wait_for_database(&old_name);
-            }
+            let old_name = current.as_ref().map(|selection| validate_profile(&selection.profile_path))
+                .transpose()?.map(|(_, profile)| profile.database_name).unwrap_or_else(|| default_name.clone());
+            let rollback = start_backend(current.as_ref()).and_then(|_| wait_for_database(&old_name));
             return Err(format!("Không chuyển được dữ liệu: {error}. {}", if rollback.is_ok() { "Đã mở lại database trước." } else { "Không mở lại được backend cũ; kiểm tra backend.log." }));
         }
         let persistence = (|| {
@@ -367,7 +378,9 @@ fn switch_to_inner(target: Option<ActiveRecovery>, save_previous: bool) -> Resul
         })();
         if let Err(error) = persistence {
             if let Some(mut child) = CHILD.lock().map_err(|err| err.to_string())?.take() { let _ = child.kill(); let _ = child.wait(); }
-            let rollback = start_backend(current.as_ref());
+            let old_name = current.as_ref().map(|selection| validate_profile(&selection.profile_path))
+                .transpose()?.map(|(_, profile)| profile.database_name).unwrap_or_else(|| default_name.clone());
+            let rollback = start_backend(current.as_ref()).and_then(|_| wait_for_database(&old_name));
             if rollback.is_ok() { let _ = write_selection(&active_file(), &current); }
             return Err(format!("Không lưu được trạng thái chuyển DB: {error}. {}", if rollback.is_ok() { "Đã mở lại database trước." } else { "Không mở lại được backend cũ; kiểm tra backend.log." }));
         }
@@ -423,6 +436,30 @@ pub fn backup_after_start() {
 }
 
 fn desktop_backup(reason: &str) -> Result<(), String> {
+    desktop_control(reason).map(|_| ())
+}
+
+fn handoff_dev_backend() -> Result<(), String> {
+    let info = desktop_control("dev-handoff-check")
+        .map_err(|error| format!("Backend đang chạy chưa hỗ trợ bàn giao từ dev-backend.ps1: {error}"))?;
+    let profile: serde_json::Value = serde_json::from_str(&info).map_err(|err| err.to_string())?;
+    let image = profile["imageDirectory"].as_str().map(PathBuf::from)
+        .filter(|path| path.is_absolute() && path.is_dir())
+        .ok_or("Không tìm thấy thư mục ảnh của backend dev")?;
+    let saved_image = serde_json::to_string(&image).map_err(|err| err.to_string())?;
+    fs::write(app_data_dir().join("dev-original-image.json"), saved_image).map_err(|err| err.to_string())?;
+    desktop_control("dev-handoff")?;
+    let port = std::env::var("ALUMINUM_API_PORT").unwrap_or_else(|_| "8080".to_string());
+    let addr = format!("127.0.0.1:{port}").parse::<SocketAddr>().map_err(|err| err.to_string())?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        if TcpStream::connect_timeout(&addr, Duration::from_millis(400)).is_err() { return Ok(()); }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    Err("Backend dev chưa nhường cổng sau 30 giây.".to_string())
+}
+
+fn desktop_control(reason: &str) -> Result<String, String> {
     let token_dir = read_active_recovery()?.map(|selection| {
         let (path, _) = validate_profile(&selection.profile_path)?;
         Ok::<PathBuf, String>(path.parent().ok_or("Hồ sơ không có thư mục")?.join("runtime").join("AluminumManager"))
@@ -442,7 +479,7 @@ fn desktop_backup(reason: &str) -> Result<(), String> {
     if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
         return Err(format!("Backend trả về {}", response.lines().next().unwrap_or("không có phản hồi")));
     }
-    Ok(())
+    Ok(response.split_once("\r\n\r\n").map(|(_, body)| body).unwrap_or("").to_string())
 }
 
 fn find_jar() -> Option<PathBuf> {

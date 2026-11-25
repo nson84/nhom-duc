@@ -21,6 +21,8 @@ export type AnnualBook = {
   purchases: { id: number; supplier: string | null; code: string; date: string;
     total: Money; paidAsOf: Money; notes: string | null; internal: boolean }[];
   purchaseItems: AnnualBook["saleItems"];
+  transfersOut: { id: number; code: string; date: string; total: Money }[];
+  transferItems: AnnualBook["saleItems"];
   receipts: Transaction[];
   expenses: Transaction[];
   stock: { product: string; category: string; quantityKg: number; value: Money | null }[];
@@ -34,7 +36,7 @@ export type AnnualBook = {
 };
 
 type Transaction = { code: string; date: string; category: string; amount: Money;
-  counterparty: string; spentBy: string | null; description: string | null; reference: string };
+  counterparty: string; spentBy: string | null; description: string | null; reference: string; monthlySummary?: boolean };
 
 export async function getAnnualBook(year: number, shopCode: ShopCode): Promise<AnnualBook> {
   return (await api.get<{ data: AnnualBook }>("/api/v1/reports/annual-book", { params: { year, shopCode }, timeout: 120000 })).data.data;
