@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { ApiError } from "../../services/error-handler";
 import { shopStore } from "../shop/shop-store";
-import { login } from "./auth-api";
+import { getFirstRunStatus, login } from "./auth-api";
 import { authStore } from "./auth-store";
 import { getLastLogin, passwordForAccount, rememberLogin } from "./login-memory";
 import { savedPassword, savePassword } from "./saved-password";
@@ -31,6 +31,7 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [pendingAccounts, setPendingAccounts] = useState<Array<FormValues["username"]>>([]);
   const { control, handleSubmit, formState, getValues, setValue, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: (() => {
@@ -38,6 +39,24 @@ export function LoginPage() {
       return { username: last.username, password: last.password || DEV_PASSWORD };
     })(),
   });
+
+  useEffect(() => {
+    let active = true;
+    getFirstRunStatus()
+      .then((status) => {
+        if (!active) return;
+        setPendingAccounts(status.pendingAccounts);
+        if (status.pendingAccounts.length === 0) return;
+        const selected = getValues("username");
+        if (status.pendingAccounts.length === ACCOUNT_OPTIONS.length || status.pendingAccounts.includes(selected)) {
+          navigate("/doi-mat-khau", { replace: true });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [getValues, navigate]);
 
   useEffect(() => {
     const account = getValues("username");
@@ -108,6 +127,10 @@ export function LoginPage() {
                         aria-label="Tài khoản"
                         onChange={async (value: FormValues["username"]) => {
                           field.onChange(value);
+                          if (pendingAccounts.includes(value)) {
+                            navigate("/doi-mat-khau", { replace: true });
+                            return;
+                          }
                           setValue("password", passwordForAccount(value) || DEV_PASSWORD, {
                             shouldDirty: true,
                             shouldValidate: true,

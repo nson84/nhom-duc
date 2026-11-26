@@ -7,6 +7,8 @@ import com.aluminum.manager.security.CurrentAdmin;
 import com.aluminum.manager.security.JwtService;
 import com.aluminum.manager.system.AuditService;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,7 @@ public class AuthService {
 
 	private static final String DUMMY_PASSWORD_HASH =
 			"$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+	private static final List<String> OPERATIONAL_ACCOUNTS = List.of("admin", "phanphoi", "xuong");
 
 	private final AdminUserRepository adminUsers;
 	private final PasswordEncoder passwordEncoder;
@@ -48,6 +51,57 @@ public class AuthService {
 		adminUsers.save(user);
 		auditService.record(user.getId(), "LOGIN", "admin_users", String.valueOf(user.getId()), "Đăng nhập");
 		return tokenFor(user);
+	}
+
+	@Transactional(readOnly = true)
+	public FirstRunStatusResponse firstRunStatus() {
+		List<String> pending = new ArrayList<>();
+		for (String name : OPERATIONAL_ACCOUNTS) {
+			adminUsers.findByUsername(name)
+					.filter(AuthService::isPendingFirstRun)
+					.ifPresent(user -> pending.add(user.getUsername()));
+		}
+		return new FirstRunStatusResponse(pending);
+	}
+
+	@Transactional
+	public LoginResponse setupFirstRunPassword(FirstRunPasswordRequest request) {
+		String username = request.username().trim();
+		AdminUser target = adminUsers.findByUsername(username).orElse(null);
+		if (target == null || !isPendingFirstRun(target)) {
+			throw new BusinessException(
+					ErrorCode.INVALID_CREDENTIALS,
+					"Tài khoản đã được thiết lập mật khẩu, vui lòng đăng nhập bằng mật khẩu hiện có",
+					null);
+		}
+		String encoded = passwordEncoder.encode(request.newPassword());
+		LocalDateTime now = LocalDateTime.now();
+		if (request.applyToAllPending()) {
+			for (String name : OPERATIONAL_ACCOUNTS) {
+				if (name.equals(username)) continue;
+				adminUsers.findByUsername(name)
+						.filter(AuthService::isPendingFirstRun)
+						.ifPresent(other -> {
+							other.setPasswordHash(encoded);
+							other.setMustChangePassword(false);
+							other.setLastLoginAt(now);
+							adminUsers.save(other);
+							auditService.record(target.getId(), "SETUP_PASSWORD", "admin_users",
+									String.valueOf(other.getId()), "Thiết lập mật khẩu lần đầu cho " + other.getUsername());
+						});
+			}
+		}
+		target.setPasswordHash(encoded);
+		target.setMustChangePassword(false);
+		target.setLastLoginAt(now);
+		adminUsers.save(target);
+		auditService.record(target.getId(), "SETUP_PASSWORD", "admin_users",
+				String.valueOf(target.getId()), "Thiết lập mật khẩu lần đầu");
+		return tokenFor(target);
+	}
+
+	private static boolean isPendingFirstRun(AdminUser user) {
+		return user.isActive() && user.isMustChangePassword() && user.getLastLoginAt() == null;
 	}
 
 	@Transactional(readOnly = true)

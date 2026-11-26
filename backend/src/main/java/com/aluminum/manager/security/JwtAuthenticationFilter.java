@@ -77,8 +77,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private static boolean isPublic(HttpServletRequest request) {
 		String path = request.getRequestURI();
-		return (HttpMethod.POST.matches(request.getMethod()) && "/api/v1/auth/login".equals(path))
-				|| (HttpMethod.GET.matches(request.getMethod()) && "/api/v1/system/ready".equals(path));
+		return (HttpMethod.POST.matches(request.getMethod())
+						&& ("/api/v1/auth/login".equals(path) || "/api/v1/auth/first-run-password".equals(path)))
+				|| (HttpMethod.GET.matches(request.getMethod())
+						&& ("/api/v1/auth/first-run".equals(path) || "/api/v1/system/ready".equals(path)));
 	}
 
 	private static boolean allowedWhilePasswordChange(HttpServletRequest request) {

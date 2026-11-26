@@ -101,13 +101,17 @@ export function BackupsPage() {
       title: `Đã chuyển sang ${databaseName}`,
       width: 600,
       content: <>
-        <p>Đăng nhập lại để xem dữ liệu vừa phục hồi. Database trước vẫn được giữ để quay lại.</p>
-        {firstRunCredentials ? <><p>Thông tin đăng nhập lần đầu trên máy mới:</p>
-          <Input.TextArea readOnly value={firstRunCredentials} autoSize={{ minRows: 4 }} />
-          <p>Hãy cất thông tin này, đăng nhập và đổi mật khẩu ngay.</p></> :
-          <p>Dùng mật khẩu đăng nhập cũ nếu bản backup được tạo bằng phiên bản mới. Với bản backup cũ, xem mật khẩu lần đầu trong thư mục <code>runtime/credentials</code> cạnh hồ sơ phục hồi.</p>}
+        <p>Database trước vẫn được giữ để quay lại.</p>
+        {firstRunCredentials ? (
+          <p>Tài khoản mới chưa có mật khẩu. Bấm OK để vào thẳng trang đặt mật khẩu mới.</p>
+        ) : (
+          <p>Bấm OK để đăng nhập lại bằng mật khẩu cũ (nếu tài khoản chưa có mật khẩu, ứng dụng sẽ tự chuyển sang trang đặt mật khẩu mới).</p>
+        )}
       </>,
-      onOk: () => { authStore.clear(); window.location.assign("/dang-nhap"); },
+      onOk: () => {
+        authStore.clear();
+        window.location.assign(firstRunCredentials ? "/doi-mat-khau" : "/dang-nhap");
+      },
     });
   };
 

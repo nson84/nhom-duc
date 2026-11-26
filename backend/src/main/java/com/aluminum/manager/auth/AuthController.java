@@ -25,6 +25,16 @@ public class AuthController {
 		return ApiResponse.ok(authService.login(request), "Đăng nhập thành công");
 	}
 
+	@GetMapping("/first-run")
+	public ApiResponse<FirstRunStatusResponse> firstRun() {
+		return ApiResponse.ok(authService.firstRunStatus(), null);
+	}
+
+	@PostMapping("/first-run-password")
+	public ApiResponse<LoginResponse> setupFirstRunPassword(@Valid @RequestBody FirstRunPasswordRequest request) {
+		return ApiResponse.ok(authService.setupFirstRunPassword(request), "Đã thiết lập mật khẩu");
+	}
+
 	@PostMapping("/logout")
 	public ApiResponse<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
 		authService.logout(bearer(authorization));

@@ -18,8 +18,30 @@ type Envelope<T> = {
   message?: string;
 };
 
+export type FirstRunStatus = {
+  pendingAccounts: Array<"admin" | "phanphoi" | "xuong">;
+};
+
 export async function login(username: string, password: string): Promise<LoginResult> {
   const response = await api.post<Envelope<LoginResult>>("/api/v1/auth/login", { username, password });
+  return response.data.data;
+}
+
+export async function getFirstRunStatus(): Promise<FirstRunStatus> {
+  const response = await api.get<Envelope<FirstRunStatus>>("/api/v1/auth/first-run");
+  return response.data.data;
+}
+
+export async function setupFirstRunPassword(
+  username: string,
+  newPassword: string,
+  applyToAllPending: boolean,
+): Promise<LoginResult> {
+  const response = await api.post<Envelope<LoginResult>>("/api/v1/auth/first-run-password", {
+    username,
+    newPassword,
+    applyToAllPending,
+  });
   return response.data.data;
 }
 

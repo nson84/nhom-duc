@@ -35,6 +35,14 @@ function LoginRoute() {
   return <LoginPage />;
 }
 
+function ChangePasswordRoute() {
+  const session = useSession();
+  if (session && !session.mustChangePassword) {
+    return <Navigate to="/" replace />;
+  }
+  return <ChangePasswordPage />;
+}
+
 function Guard() {
   const session = useSession();
   const location = useLocation();
@@ -78,8 +86,8 @@ export const appRouter = createBrowserRouter(createRoutesFromElements(
     <>
       <Route path="/gioi-thieu" element={<LandingPage />} />
       <Route path="/dang-nhap" element={<LoginRoute />} />
+      <Route path="/doi-mat-khau" element={<ChangePasswordRoute />} />
       <Route element={<Guard />}>
-        <Route path="/doi-mat-khau" element={<ChangePasswordPage />} />
         <Route element={<AppShell />}>
           <Route index element={<HomePage />} />
           <Route element={<OperationsOnly><Outlet /></OperationsOnly>}>

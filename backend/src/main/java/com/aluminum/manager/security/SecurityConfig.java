@@ -37,7 +37,8 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(
 						org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
-						.requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+						.requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/first-run-password").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/auth/first-run").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/system/ready").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/system/desktop-backup/startup", "/api/v1/system/desktop-backup/shutdown",
 								"/api/v1/system/desktop-backup/dev-handoff", "/api/v1/system/desktop-backup/dev-handoff-check").permitAll()

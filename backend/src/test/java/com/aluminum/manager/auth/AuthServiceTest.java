@@ -96,16 +96,74 @@ class AuthServiceTest {
 		verify(jwtService).revoke("old-token");
 	}
 
+	@Test
+	void firstRunStatusListsOnlyNeverLoggedInPendingAccounts() {
+		AdminUser admin = savedUser(1L, "admin", UserRole.ADMIN, null);
+		AdminUser phanphoi = savedUser(2L, "phanphoi", UserRole.DISTRIBUTION, "DISTRIBUTION");
+		phanphoi.setMustChangePassword(false);
+		AdminUser xuong = savedUser(3L, "xuong", UserRole.MANUFACTURING, "MANUFACTURING");
+		xuong.setLastLoginAt(java.time.LocalDateTime.now());
+		when(adminUsers.findByUsername("admin")).thenReturn(Optional.of(admin));
+		when(adminUsers.findByUsername("phanphoi")).thenReturn(Optional.of(phanphoi));
+		when(adminUsers.findByUsername("xuong")).thenReturn(Optional.of(xuong));
+
+		FirstRunStatusResponse status = service().firstRunStatus();
+
+		assertEquals(List.of("admin"), status.pendingAccounts());
+	}
+
+	@Test
+	void setupFirstRunPasswordUpdatesPendingAccountsAndLogsIn() {
+		AdminUser admin = savedUser(1L, "admin", UserRole.ADMIN, null);
+		AdminUser phanphoi = savedUser(2L, "phanphoi", UserRole.DISTRIBUTION, "DISTRIBUTION");
+		AdminUser xuong = savedUser(3L, "xuong", UserRole.MANUFACTURING, "MANUFACTURING");
+		when(adminUsers.findByUsername("admin")).thenReturn(Optional.of(admin));
+		when(adminUsers.findByUsername("phanphoi")).thenReturn(Optional.of(phanphoi));
+		when(adminUsers.findByUsername("xuong")).thenReturn(Optional.of(xuong));
+		when(passwordEncoder.encode("MatKhauMoi1")).thenReturn("encoded-hash");
+		when(jwtService.issue(1L, "admin", "ADMIN", null)).thenReturn("fresh-token");
+		when(jwtService.ttlSeconds()).thenReturn(-1L);
+
+		LoginResponse response = service().setupFirstRunPassword(
+				new FirstRunPasswordRequest("admin", "MatKhauMoi1", true));
+
+		assertEquals("fresh-token", response.token());
+		assertFalse(response.mustChangePassword());
+		assertFalse(admin.isMustChangePassword());
+		assertFalse(phanphoi.isMustChangePassword());
+		assertFalse(xuong.isMustChangePassword());
+		assertEquals("encoded-hash", admin.getPasswordHash());
+		assertEquals("encoded-hash", phanphoi.getPasswordHash());
+		assertEquals("encoded-hash", xuong.getPasswordHash());
+	}
+
+	@Test
+	void setupFirstRunPasswordRejectsAlreadyConfiguredAccount() {
+		AdminUser admin = savedUser(1L, "admin", UserRole.ADMIN, null);
+		admin.setMustChangePassword(false);
+		when(adminUsers.findByUsername("admin")).thenReturn(Optional.of(admin));
+
+		BusinessException ex = assertThrows(BusinessException.class,
+				() -> service().setupFirstRunPassword(new FirstRunPasswordRequest("admin", "MatKhauMoi1", false)));
+
+		assertEquals(ErrorCode.INVALID_CREDENTIALS, ex.getCode());
+		verify(adminUsers, never()).save(any());
+	}
+
 	private AuthService service() {
 		return new AuthService(adminUsers, passwordEncoder, jwtService, auditService);
 	}
 
 	private static AdminUser savedUser() {
-		AdminUser user = new AdminUser("admin", "stored-hash", UserRole.ADMIN, null);
+		return savedUser(1L, "admin", UserRole.ADMIN, null);
+	}
+
+	private static AdminUser savedUser(long idValue, String username, UserRole role, String shopCode) {
+		AdminUser user = new AdminUser(username, "stored-hash", role, shopCode);
 		try {
 			Field id = AdminUser.class.getDeclaredField("id");
 			id.setAccessible(true);
-			id.set(user, 1L);
+			id.set(user, idValue);
 		} catch (ReflectiveOperationException ex) {
 			throw new IllegalStateException(ex);
 		}

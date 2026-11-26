@@ -109,6 +109,10 @@ public class AdminUser {
 		this.mustChangePassword = mustChangePassword;
 	}
 
+	public LocalDateTime getLastLoginAt() {
+		return lastLoginAt;
+	}
+
 	public void setLastLoginAt(LocalDateTime lastLoginAt) {
 		this.lastLoginAt = lastLoginAt;
 	}
