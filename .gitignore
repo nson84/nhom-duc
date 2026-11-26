@@ -14,7 +14,7 @@ scripts/test-mysql-env.local.ps1
 backend/.runtime/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
-frontend/src-tauri/resources/aluminum-manager.jar
+frontend/src-tauri/resources/
 
 backend-run.err
 backend-run.log
