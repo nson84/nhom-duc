@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, InputNumber } from "antd";
+import { Button, Card, Form, Input } from "antd";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -97,15 +97,7 @@ export function SettingsPage() {
             </Form.Item>
           )}
         />
-        <Controller
-          name="backupRetentionDays"
-          control={control}
-          render={({ field, fieldState }) => (
-            <Form.Item label="Số ngày giữ bản sao lưu" validateStatus={fieldState.error ? "error" : ""} help={fieldState.error?.message}>
-              <InputNumber {...field} min={1} max={3650} style={{ width: "100%" }} />
-            </Form.Item>
-          )}
-        />
+        <Form.Item label="Giữ bản sao lưu trên máy">50 bản thành công mới nhất</Form.Item>
         <Controller
           name="backupDirectory"
           control={control}

@@ -34,12 +34,13 @@ import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { useWorkingYear } from "../dashboard/working-year";
 import { getYearPeriod } from "../dashboard/dashboard-api";
 import { visiblePeriod } from "../dashboard/working-period";
-import { addPayment, getDocument, type StockDocument } from "../stock/stock-api";
+import { addPayment, collectCustomerDebt, getDocument, type StockDocument } from "../stock/stock-api";
 import { DeliveredByCategory } from "../stock/DeliveredByCategory";
 import { bankName } from "../../utils/vietqr";
 import { buildDebtListHtml, hasBankAccount, openDebtDocuments } from "./debt-print";
 import { PrintDocument } from "../../components/print-document";
 import { buildCustomerHistoryHtml } from "./customer-history-print";
+import { buildCollectionReceipt, receivingAccountQr } from "./collection-receipt";
 import { CustomerFormModal } from "./CustomersPage";
 import {
   createCustomerReminder,
@@ -66,6 +67,16 @@ function paymentMethodLabel(raw: string | null | undefined): string {
   if (upper === "TRANSFER" || upper.includes("TRANSFER") || value === "Chuyển khoản") return "Chuyển khoản";
   if (upper === "OTHER" || value === "Khác") return "Khác";
   return value;
+}
+
+type Receipt = Parameters<typeof buildCollectionReceipt>[2];
+const canCollectInvoice = (row: CustomerDocument) =>
+  row.status === "CONFIRMED" && !row.internalTransfer && Number(row.remainingAmount) > 0 &&
+  (row.paymentStatus === "UNPAID" || row.paymentStatus === "PARTIAL");
+
+async function defaultReceivingAccount() {
+  const accounts = await listBankAccounts().catch(() => []);
+  return accounts.find(account => account.isDefault && hasBankAccount(account)) ?? accounts.find(hasBankAccount);
 }
 
 export function CustomerDetailPage() {
@@ -97,18 +108,29 @@ export function CustomerDetailPage() {
   const [printingDebt, setPrintingDebt] = useState(false);
   const [historyHtml, setHistoryHtml] = useState<string | null>(null);
   const [printingHistory, setPrintingHistory] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [batch, setBatch] = useState<CustomerDocument[]>();
+  const [receiptHtml, setReceiptHtml] = useState<string>();
+  const selectable = docs.filter(canCollectInvoice);
+  const selected = selectable.filter(row => selectedIds.includes(row.id));
+  useEffect(() => setSelectedIds([]), [customerId, shop, paymentFilter, selectedRange]);
 
   const printHistory = async () => {
     setPrintingHistory(true);
     try {
-      const full = await Promise.all(docs.map((row) => getDocument(row.id)));
-      setHistoryHtml(buildCustomerHistoryHtml(summary!, docs, full, selectedRange));
+      const [full, bank] = await Promise.all([Promise.all(docs.map((row) => getDocument(row.id))), defaultReceivingAccount()]);
+      setHistoryHtml(buildCustomerHistoryHtml(summary!, docs, full, selectedRange, await receivingAccountQr(bank)));
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
       setPrintingHistory(false);
     }
   };
+
+  async function showReceipt(receipt: Receipt) {
+    if (!summary) return;
+    setReceiptHtml(await buildCollectionReceipt(summary.name, summary.shopName, receipt, await defaultReceivingAccount()));
+  }
 
   useEffect(() => {
     let active = true;
@@ -255,6 +277,10 @@ export function CustomerDetailPage() {
         title="Hóa đơn"
         extra={
           <Space wrap>
+          <DatePicker picker="month" format="MM/YYYY" placeholder="Lọc tháng lập phiếu" allowClear={false}
+            onChange={month => {
+              if (month) setSelectedRange([month.startOf("month").format("YYYY-MM-DD"), month.endOf("month").format("YYYY-MM-DD")]);
+            }} />
           <DatePicker.RangePicker
             format="DD/MM/YYYY"
             value={selectedRange ? [dayjs(selectedRange[0]), dayjs(selectedRange[1])] : null}
@@ -276,6 +302,16 @@ export function CustomerDetailPage() {
           <AppActionButton tone="print" icon={<PrinterOutlined />} loading={printingHistory} onClick={() => void printHistory()}>
             In hóa đơn đã lọc
           </AppActionButton>
+          {canWrite && <>
+            <Checkbox checked={selectable.length > 0 && selected.length === selectable.length}
+              indeterminate={selected.length > 0 && selected.length < selectable.length} disabled={!selectable.length || loading}
+              onChange={event => setSelectedIds(event.target.checked ? selectable.map(row => row.id) : [])}>
+              Chọn tất cả phiếu còn nợ đã lọc
+            </Checkbox>
+            <AppActionButton tone="pay" icon={<DollarOutlined />} disabled={!selected.length || loading} onClick={() => setBatch(selected)}>
+              Thu nợ các phiếu đã chọn ({selected.length})
+            </AppActionButton>
+          </>}
           </Space>
         }
       >
@@ -283,6 +319,13 @@ export function CustomerDetailPage() {
           rowKey="id"
           loading={loading}
           dataSource={docs}
+          rowSelection={canWrite ? {
+            hideSelectAll: true,
+            selectedRowKeys: selectedIds,
+            preserveSelectedRowKeys: true,
+            onChange: keys => setSelectedIds(keys.map(Number)),
+            getCheckboxProps: row => ({ disabled: !canCollectInvoice(row), "aria-label": `Chọn phiếu ${row.documentCode}` }),
+          } : undefined}
           size="middle"
           onRow={(row) => ({
             className: "app-row-clickable",
@@ -421,12 +464,22 @@ export function CustomerDetailPage() {
         <PayDebtModal
           doc={payingDoc}
           onClose={() => setPayingDoc(null)}
-          onPaid={() => {
+          onPaid={receipt => {
             setPayingDoc(null);
             void load();
+            void showReceipt(receipt);
           }}
         />
       ) : null}
+      {batch && <BatchDebtModal customerId={customerId} year={workingYear.year} invoices={batch}
+        onClose={() => setBatch(undefined)}
+        onPaid={receipt => {
+          setBatch(undefined);
+          setSelectedIds([]);
+          void load();
+          void showReceipt(receipt);
+        }} />}
+      {receiptHtml && <PrintDocument title="Biên nhận thu nợ" html={receiptHtml} onClose={() => setReceiptHtml(undefined)} />}
 
       {addingReminder ? (
         <ReminderModal
@@ -446,6 +499,72 @@ export function CustomerDetailPage() {
       {historyHtml ? <PrintDocument title={`Lịch sử mua hàng — ${summary.name}`} html={historyHtml} onClose={() => setHistoryHtml(null)} /> : null}
     </Space>
   );
+}
+
+function BatchDebtModal({ customerId, year, invoices, onClose, onPaid }: {
+  customerId: number;
+  year: number;
+  invoices: CustomerDocument[];
+  onClose: () => void;
+  onPaid: (receipt: Receipt) => void;
+}) {
+  const [form] = Form.useForm<{ paymentDate: Dayjs; paymentMethod: string; collectedBy: string }>();
+  const [range, setRange] = useState<[string, string]>();
+  const [saving, setSaving] = useState(false);
+  const running = useRef(false);
+  const [receiptId] = useState(() => crypto.randomUUID());
+  const total = invoices.reduce((sum, invoice) => sum + Number(invoice.remainingAmount), 0);
+  useEffect(() => {
+    let active = true;
+    getYearPeriod(year).then(period => {
+      if (!active || !period.started || period.closed) return;
+      const days: [string, string] = [period.periodFrom, period.periodTo];
+      setRange(days);
+      const today = dayjs();
+      if (!today.isBefore(days[0], "day") && !today.isAfter(days[1], "day") && !form.isFieldTouched("paymentDate")) {
+        form.setFieldValue("paymentDate", today);
+      }
+    }).catch(error => { if (active) message.error(toApiError(error).message); });
+    return () => { active = false; };
+  }, [form, year]);
+
+  return <Modal title={`Thu nợ ${invoices.length} hóa đơn`} open onCancel={saving ? undefined : onClose}
+    confirmLoading={saving} okText="Ghi thu và xem biên nhận" cancelText="Quay lại"
+    okButtonProps={{ disabled: !range || invoices.length > 500 }} cancelButtonProps={{ disabled: saving }}
+    onOk={() => form.submit()}>
+    <p>Thu hết số còn nợ của các phiếu đã chọn: <strong>{formatMoney(total)}</strong>.</p>
+    {invoices.length > 500 && <Alert type="warning" message="Chọn tối đa 500 hóa đơn trong một đợt thu." />}
+    <Form form={form} layout="vertical" initialValues={{ paymentMethod: "CASH" }}
+      onFinish={async values => {
+        if (!range || running.current) return;
+        running.current = true;
+        setSaving(true);
+        const paymentDate = values.paymentDate.format("YYYY-MM-DD[T00:00:00]");
+        try {
+          const items = await collectCustomerDebt({
+            customerId, paymentDate, paymentMethod: values.paymentMethod, collectedBy: values.collectedBy.trim(), receiptId,
+            invoices: invoices.map(invoice => ({ documentId: invoice.id, amount: Number(invoice.remainingAmount) })),
+          }, year);
+          onPaid({ date: paymentDate, method: paymentMethodLabel(values.paymentMethod), collector: values.collectedBy.trim(), items });
+        } catch (error) {
+          message.error(toApiError(error).message);
+        } finally {
+          running.current = false;
+          setSaving(false);
+        }
+      }}>
+      <Form.Item name="paymentDate" label="Ngày thực nhận tiền" rules={[{ required: true, message: "Chọn ngày nhận tiền" }]}>
+        <DatePicker format="DD/MM/YYYY" disabled={!range}
+          minDate={range ? dayjs(range[0]) : undefined} maxDate={range ? dayjs(range[1]) : undefined} />
+      </Form.Item>
+      <Form.Item name="paymentMethod" label="Hình thức thanh toán">
+        <Select options={[{ value: "CASH", label: "Tiền mặt" }, { value: "TRANSFER", label: "Chuyển khoản" }]} />
+      </Form.Item>
+      <Form.Item name="collectedBy" label="Người thu tiền" rules={requiredNameRules("Nhập người thu tiền", 80)}>
+        <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]}><Input maxLength={80} /></AutoComplete>
+      </Form.Item>
+    </Form>
+  </Modal>;
 }
 
 function DebtPrintModal({
@@ -693,7 +812,7 @@ function PayDebtModal({
 }: {
   doc: CustomerDocument;
   onClose: () => void;
-  onPaid: () => void;
+  onPaid: (receipt: Receipt) => void;
 }) {
   const [form] = Form.useForm<{ mode: "full" | "partial"; amount?: number; paymentMethod: string; collectedBy: string; note?: string; paymentDate: Dayjs }>();
   const [saving, setSaving] = useState(false);
@@ -706,14 +825,14 @@ function PayDebtModal({
   useEffect(() => {
     let active = true;
     getYearPeriod(working.year).then(period => {
-      const visible = visiblePeriod(period, working.month);
+      const visible = period.closed ? null : period;
       if (!active || !visible?.started) return;
       setPaymentRange([visible.periodFrom, visible.periodTo]);
       const today = dayjs();
       form.setFieldValue("paymentDate", today.isBefore(dayjs(visible.periodFrom), "day") || today.isAfter(dayjs(visible.periodTo), "day") ? dayjs(visible.periodFrom) : today);
     }).catch(error => { if (active) message.error(toApiError(error).message); });
     return () => { active=false; };
-  }, [working.year,working.month,form]);
+  }, [working.year, form]);
   const remaining = doc.remainingAmount;
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -842,9 +961,13 @@ function PayDebtModal({
                   collectedBy: values.collectedBy.trim(),
                   paymentDate: values.paymentDate.format("YYYY-MM-DD[T00:00:00]"),
                   idempotencyKey,
-                });
+                }, { workingYear: working.year, workingMonth: values.paymentDate.format("YYYY-MM") });
                 message.success("Đã ghi lần trả nợ");
-                onPaid();
+                onPaid({
+                  date: values.paymentDate.format("YYYY-MM-DD"), method: paymentMethodLabel(values.paymentMethod),
+                  collector: values.collectedBy.trim(),
+                  items: [{ documentId: doc.id, documentCode: doc.documentCode, documentDate: doc.documentDate, amount }],
+                });
               } catch (error) {
                 message.error(toApiError(error).message);
               } finally {

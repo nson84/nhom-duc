@@ -4,6 +4,8 @@
 
 ## Chức năng hiện có
 
+`POST /stock-documents/payments/batch` thu hết số còn nợ của các phiếu bán ngoài đã chọn của một khách trong shop đăng nhập. Kiểm tra số dư sau khi khóa phiếu, lưu cả đợt trong một transaction, và dùng khóa đợt trên từng phiếu để gửi lại an toàn. Ngày nhận tiền phải thuộc tháng mở của kỳ đang làm việc.
+
 `StockDocumentService` quản lý nháp/xác nhận/đảo/thu chi, theo dõi tồn Phân phối theo số lượng và chuyển nội bộ. Phiếu bán xưởng không trừ tồn; có giá nhập tham chiếu riêng, không phải giá vốn hằng ngày.
 
 `GET /stock-balances` cộng cả phiếu nhập Xưởng nội bộ và ngoài vào tồn sổ hiện tại; ngày đầu kỳ không lọc tồn hiện tại. `GET /stock-movements` trả `internal` từ phiếu gốc để màn Tồn kho gắn nhãn trên dòng biến động.
@@ -48,3 +50,6 @@ Chốt sổ tháng Phân phối gọi lại luồng kiểm kê hao hụt để �
 
 
 Bộ lọc internal-history chỉ truy vấn phiếu nhập nội bộ đã xác nhận, chưa vào thùng rác của Xưởng. Chi tiết internalHistory chỉ đọc đúng loại phiếu và phạm vi sổ.
+# Thanh toán nợ chuyển kỳ qua khóa tháng
+
+`StockDocumentService.addPayment` nhận xác nhận riêng cho phiếu gốc trước ngày đầu kỳ đang chọn. Client cũ có thể bỏ trường xác nhận và giữ quy tắc ghi trong tháng mở. Khoản thu hoặc trả vẫn kiểm tra quyền cửa hàng, số còn nợ và ngày thanh toán; nhật ký ghi nhận xác nhận qua khóa tháng.

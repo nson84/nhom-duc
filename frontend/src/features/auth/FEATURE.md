@@ -22,7 +22,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 | Ai dùng | User đang bị bắt đổi MK |
 | API | `PUT /api/v1/auth/password` |
 
-**Chức năng:** đổi mật khẩu lần đầu / bắt buộc; sau thành công vào app.
+**Chức năng:** xác nhận lại mật khẩu hiện tại hoặc đặt mật khẩu mới trong bước bắt buộc; sau thành công vào app.
 
 ## Bổ sung theo code hiện tại
 
@@ -32,6 +32,6 @@ Form chỉ tự điền `1234567` khi Vite chạy ở chế độ dev. Bản pro
 
 Giao diện đăng nhập dùng ảnh nền phủ tối, điểm nhấn champagne, nhãn tài khoản/mật khẩu, chuyển động mở trang và ánh sáng nền nhẹ. Hover/focus và trạng thái đang gửi được hiển thị; lỗi có role alert. Tắt animation khi prefers-reduced-motion. Màn nhỏ cuộn tự nhiên, không cố định chiều cao form. Không thay API hay quy tắc tài khoản.
 
-Sau đăng nhập thành công, ghi nhớ tài khoản gần nhất trong localStorage. Trên desktop Windows, mật khẩu đã đăng nhập thành công được lưu riêng theo tài khoản trong Windows Credential Manager để tự điền khi chọn tài khoản ở lần mở sau; đổi mật khẩu thành công cập nhật mục đã lưu. Bản web chỉ giữ mật khẩu trong RAM của tab. Không lưu mật khẩu vào localStorage/sessionStorage hoặc backup/R2. Fallback 1234567 vẫn chỉ ở dev. Hồi quy: tests/login-memory.test.mjs.
+Sau đăng nhập thành công, ghi nhớ tài khoản gần nhất trong localStorage. Trên desktop Windows, mật khẩu đã đăng nhập thành công được lưu riêng theo tài khoản trong Windows Credential Manager để tự điền khi chọn tài khoản ở lần mở sau; đổi mật khẩu thành công cập nhật mục đã lưu. Bản web chỉ giữ mật khẩu trong RAM của tab. Không lưu mật khẩu rõ vào localStorage/sessionStorage hoặc backup/R2; backend lưu hash trong bản backup mã hóa. Fallback 1234567 vẫn chỉ ở dev. Hồi quy: tests/login-memory.test.mjs.
 
 Ghi nhớ tài khoản cũng lấy từ phiên đang tồn tại khi khởi động, cập nhật phiên và trước khi clear/logout; áp dụng cả phiên được tạo trước bản sửa giao diện. Không cần đăng nhập lại để chuyển phiên cũ sang cơ chế nhớ tài khoản.

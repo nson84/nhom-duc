@@ -56,6 +56,12 @@ public class DashboardService {
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED'
 				  AND d.document_date >= ? AND d.document_date < ?
 				""", range);
+		BigDecimal purchaseKg = money("""
+				SELECT COALESCE(SUM(i.quantity_base), 0)
+				FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+				WHERE d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
+				  AND d.document_date >= ? AND d.document_date < ?
+				""", range);
 		BigDecimal cogs = jdbc.queryForObject(shops.apply("""
 				SELECT CASE WHEN COUNT(*) = COUNT(i.cost_total_snapshot) THEN COALESCE(SUM(i.cost_total_snapshot), 0) ELSE NULL END
 				FROM stock_document_items i
@@ -110,6 +116,7 @@ public class DashboardService {
 				shops.isDistribution() ? cashExpenses(range) : null,
 				shops.isDistribution() ? closing(range) : null,
 				purchaseAmount,
+				purchaseKg,
 				deliveredKg);
 	}
 

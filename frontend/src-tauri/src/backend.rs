@@ -191,6 +191,7 @@ fn start_backend(active: Option<&ActiveRecovery>) -> Result<(), String> {
         .arg("-jar")
         .arg(&jar)
         .current_dir(&data_dir)
+        .env("ALUMINUM_RESTORE_STAGING_DIR", java_compatible_path(&data_dir.join("restore-staging")))
         .env("ALUMINUM_IMAGE_DIR", java_compatible_path(&image_dir))
         .stdin(Stdio::piped());
 

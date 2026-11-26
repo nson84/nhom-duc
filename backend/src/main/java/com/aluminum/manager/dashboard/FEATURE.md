@@ -4,9 +4,13 @@
 
 ## Chức năng hiện có
 
+`requireConfirmedCarryoverPaymentDate` cho phép khoản thanh toán nợ chuyển kỳ được xác nhận riêng trong tháng đã khóa, vẫn kiểm tra tháng đang chọn và kỳ năm chưa chốt.
+
 `POST /api/v1/dashboard/month-reopen` mở lại tháng đã khóa của sổ hiện tại trong kỳ năm chưa chốt, kể cả khi tháng sau đang mở. API từ chối khi có bản chốt tháng, năm hoặc Phân phối từ tháng đó trở đi. Các quy tắc riêng về sửa phiếu và mở lại kỳ lương tiếp tục được kiểm tra ở luồng nghiệp vụ.
 
 `DashboardService` tổng hợp doanh thu, tiền thu, chi phí, kho và biểu đồ; phân phối không tính tiền công. Xưởng sử dụng quyết toán năm cho lãi.
+
+`summary.purchaseKg` cộng kg từ phiếu nhập đã xác nhận trong đúng cửa hàng và khoảng ngày yêu cầu, gồm các phiếu nhập nội bộ.
 
 Tổng quan và biểu đồ theo kỳ gom tiền đã thu về **ngày lập phiếu bán** trong kỳ (mọi khoản trả đã ghi cho phiếu ấy); phần còn phải thu chỉ tính trên các phiếu bán trong kỳ, không kéo nợ kỳ khác vào. Phiếu nội bộ không tạo doanh thu/công nợ nhưng vẫn tính kg đã giao. `YearEndBalanceService` giữ bản chụp công nợ tại ngày chốt, còn Sổ Thu chi giữ ngày thực nhận tiền.
 

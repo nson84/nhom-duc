@@ -58,6 +58,25 @@ class AuthServiceTest {
 	}
 
 	@Test
+	void samePasswordConfirmsFirstLoginWithoutChangingHash() {
+		AdminUser user = savedUser();
+		when(adminUsers.findById(1L)).thenReturn(Optional.of(user));
+		when(passwordEncoder.matches("123456", "stored-hash")).thenReturn(true);
+		when(jwtService.issue(1L, "admin", "ADMIN", null)).thenReturn("new-token");
+		when(jwtService.ttlSeconds()).thenReturn(3600L);
+		signIn();
+
+		LoginResponse response = service().changePassword(
+				new ChangePasswordRequest("123456", "123456"), "old-token");
+
+		assertFalse(user.isMustChangePassword());
+		assertEquals("stored-hash", user.getPasswordHash());
+		assertEquals("new-token", response.token());
+		verify(passwordEncoder, never()).encode(any());
+		verify(jwtService).revoke("old-token");
+	}
+
+	@Test
 	void changingPasswordClearsTheFirstLoginFlag() {
 		AdminUser user = savedUser();
 		when(adminUsers.findById(1L)).thenReturn(Optional.of(user));

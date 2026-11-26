@@ -71,13 +71,9 @@ public class AuthService {
 		if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
 			throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "Mật khẩu hiện tại không đúng", null);
 		}
-		if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
-			throw new BusinessException(
-					ErrorCode.VALIDATION_ERROR,
-					"Mật khẩu mới phải khác mật khẩu hiện tại",
-					null);
+		if (!passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+			user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
 		}
-		user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
 		user.setMustChangePassword(false);
 		adminUsers.save(user);
 		auditService.record(user.getId(), "CHANGE_PASSWORD", "admin_users", String.valueOf(user.getId()), "Đổi mật khẩu");

@@ -7,6 +7,7 @@ export type DashboardSummary = {
   cashCollected: string;
   purchaseAmount: string;
   deliveredKg: string;
+  purchaseKg: string;
   cogs: string;
   grossProfit: string;
   operatingExpenses: string;

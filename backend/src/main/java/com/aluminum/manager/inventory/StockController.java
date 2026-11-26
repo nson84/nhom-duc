@@ -134,6 +134,12 @@ public class StockController {
 		return ApiResponse.ok(service.addPayment(id, request), "Đã ghi thanh toán");
 	}
 
+	@PostMapping("/stock-documents/payments/batch")
+	public ApiResponse<List<StockDtos.BatchCollectionItem>> collectBatch(
+			@Valid @RequestBody StockDtos.BatchCollectionRequest request) {
+		return ApiResponse.ok(service.collectBatch(request), "Đã ghi thu các hóa đơn đã chọn");
+	}
+
 	public record PaymentDateRequest(@jakarta.validation.constraints.NotNull LocalDate date) {}
 
 	@PutMapping("/stock-documents/{id}/payments/{paymentId}/date")

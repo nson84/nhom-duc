@@ -1,5 +1,9 @@
 # Chức năng stock
 
+VietQR trên hóa đơn bán ngoài chỉ điền số còn phải trả. Hóa đơn đã trả đủ hiện QR tài khoản nhận với số tiền trống và nhãn đã thanh toán.
+
+Màn Công nợ đọc chi tiết phiếu kỳ trước qua `getCarryoverDocument`. Form cho chọn ngày thực thu hoặc thực trả trong kỳ báo cáo; yêu cầu thanh toán gửi tháng tương ứng với ngày đó và cờ xác nhận nếu tháng đã khóa. Tên người thu, trả hoặc nhận có thể bổ sung nếu cần in. Với phiếu bán, khi để trống người thu, backend dùng tên tài khoản theo quy tắc hiện có. Form từ màn phiếu vẫn theo tháng làm việc.
+
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
 Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi cần; modal nhập/bán ở cửa sổ thấp cuộn phần thân, giữ nút lưu/đóng ở footer trong màn hình.
@@ -55,7 +59,7 @@ Các thẻ thống kê tồn kho có cùng kích cỡ. Phân phối hiển thị
 - Danh sách: nhãn **Nội bộ** / **Khách hàng** trên số phiếu; lọc mặc định **Chưa thanh toán**; Thùng rác cho phiếu **đã hủy / đã đảo**
 - Khách hàng: **dropdown tìm kiếm** sổ khách; gõ tên mới được; sau lưu phiếu nếu chưa gắn khách → hỏi **Lưu khách hàng?**
 - Ô **Người xuất** trên phiếu bán của cả Phân phối và Xưởng gợi ý Hải, Thuấn; vẫn nhập được tên khác.
-- Mỗi dòng: chọn **SP → loại nhôm** → đơn giá autofill từ loại
+- Mỗi dòng: chọn **sản phẩm** và **loại nhôm** độc lập. Đổi sản phẩm giữ loại đã chọn trên dòng. Đơn giá gợi ý lấy từ loại nhôm.
 - **Cách bán**: chỉ theo cân. Xưởng nhập kg/tạ/tấn thành phẩm đã giao (quy đổi kg nhôm, không gồm phụ kiện); Phân phối bán tấn. Phiếu bán xưởng mới không trừ tồn; Phân phối trừ tồn ngay khi xác nhận phiếu bán (thiếu tồn sẽ báo lỗi). Đơn giá lấy từ loại nhôm và có thể sửa trên phiếu
 - Xưởng phải gắn khách mua trước khi xác nhận để cộng sản lượng và công nợ theo người. Phiếu xác nhận là hàng đã giao, không tạo đơn đặt hàng hoặc số còn phải giao
 - Khi tạo hoặc sửa phiếu bán Xưởng, ô chọn đơn vị nằm ngang hàng với ô khối lượng trên màn hình rộng. Giá nhập tham chiếu được lưu nội bộ và ẩn trên biểu mẫu lẫn chi tiết phiếu bán.

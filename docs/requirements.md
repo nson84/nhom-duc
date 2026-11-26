@@ -1,10 +1,20 @@
 # Phạm vi MVP
 
+Khách có thể thanh toán hết số nợ của nhiều hóa đơn trong một đợt. Bộ lọc theo ngày lập phiếu quyết định các hóa đơn được chọn, ngày thực nhận tiền quyết định tháng ghi Thu chi. Nếu có phiếu sai khách, sai quyền hoặc số nợ thay đổi, cả đợt phải hoàn tác. Biên nhận đã thu dùng VietQR tài khoản nhận không điền số tiền nếu cửa hàng đã cấu hình.
+
+Ứng dụng dọn các bản `.ndbak` trên máy vượt quá 50 bản thành công mới nhất của database hiện tại trong thư mục đang cấu hình, sau khi lần sao lưu mới thành công. Bản trên R2 có vòng đời riêng.
+
+Tổng quan có chế độ theo tháng và từ ngày bắt đầu kỳ đến hôm nay hoặc tới ngày chốt với kỳ đã đóng. Bảng lãi gộp hóa đơn ở hai sổ nhóm theo ngày lập phiếu hoặc tháng, tính doanh thu bán ngoài trừ giá vốn vật tư trước các khoản chi hoạt động và tiền công.
+
 Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xưởng và Phân phối. Phần mềm quản lý sản phẩm, phiếu nhập/bán, khách mua, nhân sự xưởng, thu chi, báo cáo và sao lưu. Admin chỉ quản lý Sao lưu và Cài đặt; phân phối do chủ quản lý, không có nhân viên hay tiền công.
+
+Màn xác nhận mật khẩu sau lần đầu hoặc reset cho phép dùng lại mật khẩu hiện tại. Backend chỉ xóa cờ bắt buộc sau khi xác thực mật khẩu hiện tại thành công; nếu dùng cùng mật khẩu thì hash không đổi.
 
 Mỗi lần mở desktop, sau khoảng 30 giây tạo một bản backup kể cả khi backend đã chạy sẵn. Khi desktop đóng bình thường, tạo một bản cuối và đợi thử đồng bộ R2; backend dùng chung được giữ chạy. Ngoài ra backend tự sao lưu theo tần suất đã cấu hình. Lỗi mạng giữ bản local và được thử lại khi backend còn chạy hoặc lần chạy sau.
 
 Reset thủ công dữ liệu nghiệp vụ qua `scripts/reset-business-data.sql` xóa phiếu, khách hàng, nhân sự, kiểm kê, bản chốt và kỳ tháng/năm làm việc; giữ tài khoản, cấu hình ứng dụng/cửa hàng/ngân hàng, danh mục và sản phẩm. Chỉ chạy sau khi tạo và xác minh bản sao lưu đầy đủ.
+
+Danh mục sản phẩm ở hai sổ dùng tên, ảnh và trạng thái với mã nội bộ tự cấp. Trên phiếu nhập hoặc bán, chọn sản phẩm và loại nhôm độc lập cho mỗi dòng. Loại nhôm trên dòng quyết định giá gợi ý, số liệu tồn và cách nhóm báo cáo theo loại.
 
 ## Đã khóa
 
@@ -27,6 +37,7 @@ Reset thủ công dữ liệu nghiệp vụ qua `scripts/reset-business-data.sql
 - Kỳ chốt năm là khoảng ngày do từng cửa hàng chọn, có thể theo Tết âm lịch và đi qua 31/12. Năm trên màn hình là tên kỳ. Kỳ sau bắt đầu ngay sau ngày chốt kỳ trước. Tồn và công nợ chuyển tiếp theo chứng từ gốc; thu/trả nợ cũ sau ngày chốt không tính lãi lần hai. Tiền công tháng thuộc kỳ chứa ngày cuối tháng.
 - Tháng là kỳ làm việc chính nằm trong kỳ năm: chọn tháng và bấm Mở tháng trước khi ghi phiếu. Mọi màn nghiệp vụ theo ngày dùng phần giao của tháng và kỳ năm; ví dụ năm bắt đầu 18/02 thì tháng đầu tính từ 18/02. Khóa tháng khóa ghi/sửa chứng từ của tháng đó và chỉ sau đó mới mở tháng tiếp; Xưởng phải chốt kỳ công trước. Phiếu thanh toán nợ cũ ghi vào tháng nhận/trả thực tế đang mở. Có thể chốt năm khi tháng cuối vẫn mở. Cần xử lý phiếu kho nháp trong khoảng chốt.
 - Có thể mở lại tháng đã khóa trong kỳ chưa chốt để chỉnh chứng từ, kể cả khi tháng sau đang mở. Từ chối mở lại nếu có bản chốt sổ từ tháng đó trở đi. Sau khi chỉnh xong có thể khóa lại tháng đó.
+- Với nợ chuyển kỳ, ngày thực thu hoặc thực trả quyết định tháng ghi sổ. Chọn ngày ngay trên form, độc lập với tháng đang xem ở Tổng quan. Nếu tháng đã khóa trong kỳ năm còn mở, xác nhận một lần để ghi khoản thanh toán. Thao tác giữ trạng thái khóa và bản chốt kiểm kê, cập nhật Thu chi và công nợ, đồng thời ghi nhật ký.
 - Sổ Thu chi lọc và cộng tiền theo ngày nhận/trả thực tế. Khoản trả cho hóa đơn cũ không xuất hiện trong Sổ Thu chi của tháng lập hóa đơn; báo cáo công nợ vẫn gắn khoản trả với hóa đơn gốc.
 - Ngày thu hoặc trả trên phiếu bán và phiếu nhập phải từ ngày lập phiếu trở đi. Khoản cũ lệch ngày được đánh dấu để người dùng đối chiếu trước khi sửa.
 - Ngày thanh toán gợi ý là ngày lập phiếu hoặc ngày đầu khoảng làm việc đang mở nếu phiếu lập trước khoảng đó. Có thể đổi sang ngày thực thu hoặc trả.
@@ -72,7 +83,7 @@ Audit tiếp theo b361221 giữ nguyên nghiệp vụ và công thức: ghi/ch�
 
 ## Hoàn thiện 20/11/2026
 
-V44 thêm historical_username vào admin_users. Backup mới chỉ mang tác giả đang được nghiệp vụ/nhật ký tham chiếu dưới dạng danh tính lịch sử: ID và tên gốc được giữ, username đăng nhập riêng __historical_ID, is_active=false, password_hash cố định !HISTORICAL_ACTOR. CHECK không cho kích hoạt danh tính này. Không mang mật khẩu, quyền, phiên hay thông tin đăng nhập cũ; tài khoản máy mới và DB đang dùng không bị thay thế. Nhật ký thao tác được giữ trong backup mới. Backup cũ thiếu tác giả tiếp tục bị từ chối FK; không tự đoán tác giả.
+V44 thêm historical_username vào admin_users. Backup mới giữ ba tài khoản vận hành `admin`, `phanphoi`, `xuong` cùng hash mật khẩu, quyền và trạng thái trong archive mã hóa để phục hồi vẫn dùng mật khẩu cũ; không mang phiên. Các tác giả khác đang được nghiệp vụ/nhật ký tham chiếu được giữ dưới dạng danh tính lịch sử: ID và tên gốc được giữ, username đăng nhập riêng __historical_ID, is_active=false, password_hash cố định !HISTORICAL_ACTOR. CHECK không cho kích hoạt danh tính này. DB đang dùng không bị thay thế. Nhật ký thao tác được giữ. Backup cũ thiếu tài khoản vận hành sẽ tạo mật khẩu lần đầu khi khởi động DB phục hồi.
 
 Đảo phiếu là sửa sai trong tháng gốc đang mở: ngày phiếu đảo và biến động dùng ngày nghiệp vụ gốc; confirmed_at/cancelled_at và nhật ký giữ thời điểm thao tác thực tế. Cặp nội bộ được khóa theo thứ tự cố định. Không dùng đảo phiếu để điều chỉnh một kỳ đã khóa.
 

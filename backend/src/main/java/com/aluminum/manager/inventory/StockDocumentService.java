@@ -819,6 +819,55 @@ public class StockDocumentService {
 	// ---------- Payments ----------
 
 	@Transactional
+	public List<StockDtos.BatchCollectionItem> collectBatch(StockDtos.BatchCollectionRequest request) {
+		var lines = request.invoices().stream()
+				.sorted(java.util.Comparator.comparingLong(StockDtos.BatchCollectionLine::documentId)).toList();
+		if (lines.stream().map(StockDtos.BatchCollectionLine::documentId).distinct().count() != lines.size()) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Danh sách có phiếu trùng", null);
+		}
+		jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shops.currentId());
+		var documents = lines.stream().map(line -> lock(line.documentId())).toList();
+		yearPeriods.requireWorkingDate(request.paymentDate());
+		for (var doc : documents) {
+			Integer valid = jdbc.queryForObject("""
+					SELECT COUNT(*) FROM stock_documents
+					WHERE id = ? AND customer_id = ? AND document_type = 'SALE'
+					  AND status = 'CONFIRMED' AND is_internal = 0 AND trashed_at IS NULL
+					  AND reversal_of_document_id IS NULL
+					  AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = ? AND r.status = 'CONFIRMED')
+					""", Integer.class, doc.id(), request.customerId(), doc.id());
+			if (valid == null || valid != 1) {
+				throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Có phiếu không còn hợp lệ để thu nợ của khách này", null);
+			}
+		}
+		var result = new ArrayList<StockDtos.BatchCollectionItem>();
+		for (int i = 0; i < lines.size(); i++) {
+			var line = lines.get(i);
+			var doc = documents.get(i);
+			var key = "batch-" + request.receiptId() + "-" + doc.id();
+			var existing = jdbc.query("""
+					SELECT amount, payment_date FROM sales_payments WHERE document_id = ? AND idempotency_key = ? FOR UPDATE
+					""", (rs, index) -> new StockDtos.BatchCollectionItem(doc.id(), doc.code(),
+						rs.getTimestamp("payment_date").toLocalDateTime(), rs.getBigDecimal("amount")), doc.id(), key);
+			if (!existing.isEmpty()) {
+				var previous = existing.get(0);
+				if (previous.amount().compareTo(line.amount()) != 0 || !previous.documentDate().equals(request.paymentDate())) {
+					throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Đợt thu đã được ghi với thông tin khác", null);
+				}
+			} else {
+				BigDecimal outstanding = jdbc.queryForObject("SELECT total_amount FROM stock_documents WHERE id = ?",
+						BigDecimal.class, doc.id()).subtract(paid(doc.id(), doc.type()));
+				if (outstanding.compareTo(line.amount()) != 0)
+					throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Số còn nợ đã thay đổi. Hãy tải lại danh sách phiếu", null);
+				addPayment(doc.id(), new PaymentRequest(line.amount(), request.paymentMethod(), request.paymentDate(),
+						"Thu nợ theo đợt " + request.receiptId(), key, request.collectedBy(), null));
+			}
+			result.add(new StockDtos.BatchCollectionItem(doc.id(), doc.code(), doc.date(), line.amount()));
+		}
+		return result;
+	}
+
+	@Transactional
 	public DocumentDto addPayment(long id, PaymentRequest request) {
 		DocRow doc = lock(id);
 		if (!"CONFIRMED".equals(doc.status())) {
@@ -860,7 +909,17 @@ public class StockDocumentService {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 					"Ngày thanh toán không được trước ngày lập phiếu", null);
 		}
-		yearPeriods.requireWorkingDate(when);
+		boolean confirmedLockedMonth = Boolean.TRUE.equals(request.confirmLockedCarryoverMonth());
+		if (confirmedLockedMonth) {
+			var period = workingPeriod();
+			if (period == null || !period.started() || !doc.date().toLocalDate().isBefore(period.periodFrom())) {
+				throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+						"Chỉ xác nhận thanh toán tháng đã khóa cho phiếu nợ chuyển kỳ", null);
+			}
+			yearPeriods.requireConfirmedCarryoverPaymentDate(when);
+		} else {
+			yearPeriods.requireWorkingDate(when);
+		}
 		if (!shops.isDistribution()) assertFactoryYearOpen(when);
 		String methodVi = localizePaymentMethod(request.paymentMethod());
 		String userNote = blank(request.note());
@@ -892,7 +951,8 @@ public class StockDocumentService {
 		String status = newPaid.compareTo(total) >= 0 ? "PAID" : "PARTIAL";
 		jdbc.update("UPDATE stock_documents SET payment_status = ? WHERE id = ?", status, id);
 		audit.record(CurrentAdmin.get().id(), sale ? "RECEIVE_PAYMENT" : "MAKE_PAYMENT", "stock_documents",
-				String.valueOf(id), description);
+				String.valueOf(id), confirmedLockedMonth
+						? "Xác nhận thanh toán nợ chuyển kỳ qua khóa tháng: " + description : description);
 		return get(id);
 	}
 

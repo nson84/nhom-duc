@@ -1,5 +1,7 @@
 # Chức năng customers
 
+Chi tiết khách cho lọc theo tháng lập phiếu, chọn từng phiếu nợ hoặc tất cả phiếu còn nợ trong bộ lọc và thu hết số còn nợ trong một đợt (tối đa 500 phiếu). Ngày thực nhận xác định tháng ghi Thu chi. Sau khi thu từng phiếu hoặc theo đợt, màn hình mở biên nhận để in/PDF. Biên nhận và lịch sử in có VietQR tài khoản nhận nếu đã cấu hình, với số tiền để trống. Danh sách nợ vẫn dùng QR điền số còn nợ.
+
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
 Bảng khách, hóa đơn và nhắc nợ cuộn ngang bên trong bảng khi cửa sổ hẹp; các modal chi tiết cuộn nội dung theo chiều cao viewport.

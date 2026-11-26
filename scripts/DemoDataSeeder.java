@@ -431,7 +431,7 @@ public final class DemoDataSeeder {
         for (LocalDate day = LocalDate.of(year, 1, 1); day.getYear() == year; day = day.plusDays(1)) {
             insertFinance(distribution, day.atTime(12, 5), "EXPENSE", "OPERATING_EXPENSE", 10_000,
                     "Tiền nước + bánh kẹo giữa giờ: nước uống dữ liệu mẫu", null, null, "Chủ cửa hàng");
-            insertFinance(factory, day.atTime(12, 10), "EXPENSE", "OPERATING_EXPENSE", 40_000,
+            insertFinance(factory, day.atTime(12, 10), "EXPENSE", "OPERATING_EXPENSE", 30_000,
                     "Tiền nước + bánh kẹo giữa giờ: nước uống cho thợ dữ liệu mẫu", null, null, "Quản đốc xưởng");
         }
         for (int month = 1; month <= 12; month++) {
@@ -491,12 +491,14 @@ public final class DemoDataSeeder {
                 Collections.shuffle(dates, random);
                 int workedDays = Math.min(dates.size(), 20 + (month + i) % 5);
                 dates = new ArrayList<>(dates.subList(0, workedDays));
+                var overtimeDays = List.copyOf(dates.subList(0, 4));
                 Collections.sort(dates);
                 BigDecimal hourlyOvertime = BigDecimal.valueOf(worker.dailyRate())
                         .divide(BigDecimal.valueOf(8), 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(1.5));
-                for (int dayIndex = 0; dayIndex < dates.size(); dayIndex++) {
-                    LocalDate day = dates.get(dayIndex);
+                int overtimeMinutes = 0;
+                BigDecimal overtimeTotal = BigDecimal.ZERO;
+                for (LocalDate day : dates) {
                     long attendanceId = insert("""
                             INSERT INTO attendance_records (employee_id, work_date, attendance_status,
                               morning_present, afternoon_present, clock_in, clock_out, worked_hours,
@@ -504,26 +506,31 @@ public final class DemoDataSeeder {
                             VALUES (?, ?, 'PRESENT', 1, 1, ?, ?, 8, 1, ?, ?, 1, ?)
                             """, worker.id(), day, day.atTime(7, 30), day.atTime(17, 0),
                             worker.rateId(), worker.dailyRate(), "Đủ sáng và chiều - dữ liệu mẫu");
-                    if (dayIndex < 4) {
+                    if (overtimeDays.contains(day)) {
+                        int minutes = 60 + random.nextInt(3) * 30;
+                        BigDecimal hours = BigDecimal.valueOf(minutes).divide(BigDecimal.valueOf(60));
+                        BigDecimal amount = hourlyOvertime.multiply(hours).setScale(0, RoundingMode.HALF_UP);
+                        overtimeMinutes += minutes;
+                        overtimeTotal = overtimeTotal.add(amount);
                         exec("""
                                 INSERT INTO overtime_records (attendance_id, overtime_type, start_at, end_at,
                                   overtime_hours, hourly_rate_snapshot, amount, is_approved, notes)
-                                VALUES (?, 'WEEKDAY', ?, ?, 1, ?, ?, 1, ?)
-                                """, attendanceId, day.atTime(17, 0), day.atTime(18, 0), hourlyOvertime,
-                                hourlyOvertime, "Tăng ca mẫu 1 giờ");
+                                VALUES (?, 'WEEKDAY', ?, ?, ?, ?, ?, 1, ?)
+                                """, attendanceId, day.atTime(17, 0), day.atTime(17, 0).plusMinutes(minutes),
+                                hours, hourlyOvertime, amount, "Tăng ca dữ liệu mẫu");
                     }
                 }
                 long base = workedDays * worker.dailyRate();
-                long overtime = hourlyOvertime.multiply(BigDecimal.valueOf(4))
-                        .setScale(0, RoundingMode.HALF_UP).longValueExact();
+                long overtime = overtimeTotal.longValueExact();
                 long total = base + overtime;
                 grandTotal += total;
                 exec("""
                         INSERT INTO payroll_details (payroll_period_id, employee_id, credited_days,
                           base_pay, overtime_pay, bonus_pay, allowances, deductions, total_pay,
                           holiday_bonus_pay, overtime_hours, holiday_bonus_received, advance_amount)
-                        VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?, 0, 4, 0, 0)
-                        """, periodId, worker.id(), workedDays, base, overtime, total);
+                        VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?, 0, ?, 0, 0)
+                        """, periodId, worker.id(), workedDays, base, overtime, total,
+                        BigDecimal.valueOf(overtimeMinutes).divide(BigDecimal.valueOf(60)));
             }
             insertFinance(factory, last.atTime(18, 30), "EXPENSE", "PAYROLL", grandTotal,
                     "Chi trả tiền công tháng " + month + "/" + year + " dữ liệu mẫu",
@@ -615,8 +622,13 @@ public final class DemoDataSeeder {
                 SELECT COUNT(*) FROM financial_transactions WHERE shop_id=(SELECT id FROM shops WHERE code='MANUFACTURING')
                   AND description LIKE 'Tiền nước + bánh kẹo giữa giờ:%'
                 """);
+        check("Chi nước Xưởng đúng 30.000 đồng", LocalDate.of(year, 1, 1).lengthOfYear(), """
+                SELECT COUNT(*) FROM financial_transactions WHERE shop_id=(SELECT id FROM shops WHERE code='MANUFACTURING')
+                  AND description LIKE 'Tiền nước + bánh kẹo giữa giờ:%' AND amount=30000
+                """);
         check("Kỳ công", 12, "SELECT COUNT(*) FROM payroll_periods WHERE period_year=?", year);
         check("Tăng ca", 240, "SELECT COUNT(*) FROM overtime_records WHERE is_approved=1");
+        check("Số mức giờ tăng ca", 3, "SELECT COUNT(DISTINCT overtime_hours) FROM overtime_records WHERE is_approved=1");
         for (String shop : List.of("DISTRIBUTION", "MANUFACTURING")) {
             for (String status : List.of("PAID", "PARTIAL", "UNPAID")) {
                 if (oneLong("""

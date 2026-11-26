@@ -41,19 +41,23 @@ public class YearEndBalanceService {
     }
 
     public void requireWorkingDate(LocalDateTime date) {
-        requireWorkingDate(date, false);
+        requireWorkingDate(date, false, false);
     }
 
     public void requirePaymentDateCorrection(LocalDateTime date) {
-        requireWorkingDate(date, true);
+        requireWorkingDate(date, true, true);
     }
 
-    private void requireWorkingDate(LocalDateTime date, boolean correctingPaymentDate) {
+    public void requireConfirmedCarryoverPaymentDate(LocalDateTime date) {
+        requireWorkingDate(date, true, false);
+    }
+
+    private void requireWorkingDate(LocalDateTime date, boolean allowLockedMonth, boolean correctingPaymentDate) {
         // Closing snapshots lock this same row before reading their business totals.
         jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shops.currentId());
         // Keep the validated month open until this business transaction commits.
         String monthStatus = monthStatus(YearMonth.from(date), true);
-        if (!"OPEN".equals(monthStatus) && !(correctingPaymentDate && "CLOSED".equals(monthStatus)))
+        if (!"OPEN".equals(monthStatus) && !(allowLockedMonth && "CLOSED".equals(monthStatus)))
             throw invalid("Tháng " + YearMonth.from(date) + ("CLOSED".equals(monthStatus)
                     ? " đã khóa" : " chưa mở") + "; không thể ghi phiếu");
         // A payment may have established a REPEATABLE READ snapshot before waiting for the shop lock.

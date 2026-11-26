@@ -46,7 +46,15 @@ try {
     $executables = @(Get-ChildItem -LiteralPath $installDirectory -Filter '*.exe' | Where-Object { $_.Name -notmatch '(?i)uninstall|webview' })
     if ($executables.Count -ne 1) { throw 'Expected exactly one installed desktop executable' }
     $executable = $executables[0].FullName
-    if (-not (Get-ChildItem -LiteralPath $installDirectory -Filter 'aluminum-manager.jar' -Recurse)) { throw 'Installed backend JAR is missing' }
+    $installedJar = Get-ChildItem -LiteralPath $installDirectory -Filter 'aluminum-manager.jar' -Recurse | Select-Object -First 1
+    if (!$installedJar) { throw 'Installed backend JAR is missing' }
+    $jarArchive = [IO.Compression.ZipFile]::OpenRead($installedJar.FullName)
+    try {
+        $expectedSchema = ($jarArchive.Entries |
+            ForEach-Object { if ($_.FullName -match '^BOOT-INF/classes/db/migration/V(\d+)__.+\.sql$') { [int]$Matches[1] } } |
+            Measure-Object -Maximum).Maximum
+    } finally { $jarArchive.Dispose() }
+    if (!$expectedSchema) { throw 'Expected schema version could not be determined from installed JAR' }
     Write-Host 'Installed executable and backend JAR found; preparing private MySQL...'
     New-Item -ItemType Directory -Path $mysqlData | Out-Null
     & $server --no-defaults --initialize-insecure "--basedir=$MysqlDirectory" "--datadir=$mysqlData" --console *> (Join-Path $ResultDirectory 'mysql-initialize.log')
@@ -78,7 +86,7 @@ try {
         try { $ready = Invoke-RestMethod 'http://127.0.0.1:8080/api/v1/system/ready' -TimeoutSec 2; if ($ready.data.database -eq 'UP') { break } } catch {}
         Start-Sleep -Seconds 1
     }
-    if ($ready.data.application -ne 'aluminum-manager' -or $ready.data.schemaVersion -ne '44' -or
+    if ($ready.data.application -ne 'aluminum-manager' -or $ready.data.schemaVersion -ne [string]$expectedSchema -or
         -not $ready.data.revision.StartsWith($ExpectedRevision.Substring(0,12))) { throw 'Installed backend identity/schema/revision did not match the artifact' }
     $backendProcessId = (Get-NetTCPConnection -State Listen -LocalPort 8080).OwningProcess | Select-Object -First 1
     $window = [DesktopSmokeWindow]::Find($app.Id)

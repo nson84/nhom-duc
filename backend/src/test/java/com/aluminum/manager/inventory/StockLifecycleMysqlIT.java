@@ -106,6 +106,34 @@ class StockLifecycleMysqlIT {
     }
 
     @Test
+    void collectsSelectedCustomerInvoicesAtomicallyAndDoesNotChargeAgainOnRetry() {
+        confirm("PURCHASE", "10", "75000000");
+        var first = confirm("SALE", "1", "76000000");
+        var second = confirm("SALE", "1", "77000000");
+        var other = confirm("SALE", "1", "78000000");
+        transaction(() -> periods.closeMonth(2025, java.time.YearMonth.of(2025, 2)));
+        transaction(() -> periods.openMonth(2025, java.time.YearMonth.of(2025, 3)));
+        LocalDateTime receiptDate = LocalDateTime.of(2025, 3, 6, 10, 0);
+        var key = UUID.randomUUID();
+        var line1 = new StockDtos.BatchCollectionLine(first.id(), first.totalAmount());
+        var stale = new StockDtos.BatchCollectionLine(second.id(), second.totalAmount().subtract(BigDecimal.ONE));
+        var invalid = new StockDtos.BatchCollectionRequest(customer, receiptDate, "CASH", "Hải", key, List.of(line1, stale));
+        assertThrows(BusinessException.class, () -> transaction(() -> service.collectBatch(invalid)));
+        assertEquals("UNPAID", service.get(first.id()).paymentStatus(), "Earlier invoice must roll back");
+
+        var valid = new StockDtos.BatchCollectionRequest(customer, receiptDate, "CASH", "Hải", key,
+                List.of(line1, new StockDtos.BatchCollectionLine(second.id(), second.totalAmount())));
+        assertEquals(2, transaction(() -> service.collectBatch(valid)).size());
+        assertEquals(2, transaction(() -> service.collectBatch(valid)).size());
+        assertEquals("PAID", service.get(first.id()).paymentStatus());
+        assertEquals("PAID", service.get(second.id()).paymentStatus());
+        assertEquals("UNPAID", service.get(other.id()).paymentStatus());
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM sales_payments", Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions WHERE category = 'SALE_RECEIPT'", Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions WHERE transaction_date >= '2025-03-01' AND transaction_date < '2025-04-01'", Integer.class));
+    }
+
+    @Test
     void manualExpenseEditKeepsCodeAndRejectsLockedMonth() {
         var finance = new FinanceService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), clock, shops, periods);
         var original = new com.aluminum.manager.finance.FinanceDtos.CreateTransactionRequest(
@@ -315,6 +343,32 @@ class StockLifecycleMysqlIT {
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM stock_documents WHERE reversal_of_document_id IN (?, ?)", Integer.class, transfer.id(), transfer.internalPairDocumentId()));
         assertEquals(0, new BigDecimal("10000").compareTo(jdbc.queryForObject("SELECT quantity_base FROM stock_balances WHERE product_id = ? AND category_id = ?", BigDecimal.class, product, category)));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM financial_transactions", Integer.class));
+    }
+
+    @Test
+    void uncategorizedProductUsesEachDocumentCategoryInReports() {
+        jdbc.update("UPDATE products SET category_id = NULL WHERE id = ?", product);
+        long firstCategory = category;
+        confirm("PURCHASE", "10", "75000000");
+        confirm("SALE", "2", "76000000");
+        jdbc.update("INSERT INTO product_categories (shop_id, name) VALUES (?, 'Second aluminium')", shops.currentId());
+        category = jdbc.queryForObject("SELECT id FROM product_categories WHERE shop_id = ? AND name = 'Second aluminium'",
+                Long.class, shops.currentId());
+        confirm("PURCHASE", "5", "75000000");
+        confirm("SALE", "1", "76000000");
+
+        var finance = new FinanceService(jdbc, new DocumentSequenceService(jdbc), mock(AuditService.class), clock, shops, periods);
+        var date = day.toLocalDate();
+        assertEquals(2, finance.salesByProduct(date, date, product, null).size());
+        var sales = finance.salesByProduct(date, date, product, category);
+        assertEquals(1, sales.size());
+        assertEquals("Second aluminium", sales.get(0).categoryName());
+        assertEquals(0, new BigDecimal("76000000").compareTo(sales.get(0).revenue()));
+
+        var stock = finance.inventoryReport(date, date, firstCategory);
+        assertEquals(1, stock.size());
+        assertEquals("Test aluminium", stock.get(0).categoryName());
+        assertEquals(0, new BigDecimal("8000").compareTo(stock.get(0).closingQuantityBase()));
     }
 
     @Test

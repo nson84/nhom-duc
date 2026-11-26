@@ -1,4 +1,4 @@
-import { Alert, Card, Col, DatePicker, Input, Row, Statistic, Modal, Space, Tag, Typography, message } from "antd";
+import { Alert, Card, Col, DatePicker, Input, Row, Segmented, Statistic, Modal, Space, Tag, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -49,6 +49,7 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
   const colors = useThemeColors();
   const viewYear = workingYear.year;
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [summaryMode, setSummaryMode] = useState<"month" | "period">("month");
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [periodName, setPeriodName] = useState("");
@@ -115,12 +116,15 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
     return () => { active = false; };
   }, [workingYear.month, shop, yearEndRefresh, annualOnly]);
 
+  const summaryFrom = summaryMode === "period" && period?.started ? period.periodFrom : range?.[0].format("YYYY-MM-DD");
+  const summaryTo = summaryMode === "period" && period?.started ? period.periodTo : range?.[1].format("YYYY-MM-DD");
+
   useEffect(() => {
-    if (annualOnly || !range) return;
+    if (annualOnly || !summaryFrom || !summaryTo) return;
     let active = true;
-    const from = range[0].format("YYYY-MM-DD");
-    const to = range[1].format("YYYY-MM-DD");
-    Promise.all([getSummary(from, to), getCharts(from, to), getBackupStatus().catch(() => null)])
+    setSummary(null);
+    setPoints([]);
+    Promise.all([getSummary(summaryFrom, summaryTo), getCharts(summaryFrom, summaryTo), getBackupStatus().catch(() => null)])
       .then(([nextSummary, chart, backupStatus]) => {
         if (!active) {
           return;
@@ -146,7 +150,7 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
     return () => {
       active = false;
     };
-  }, [range, annualOnly]);
+  }, [summaryFrom, summaryTo, shop, annualOnly]);
 
   const activePoints = useMemo(
     () => points.filter((p) => p.revenue > 0 || p.cash > 0),
@@ -375,14 +379,22 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
           style={{ marginBottom: 16 }}
         />
       ) : null}
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Segmented aria-label="Khoảng số liệu tổng quan" value={summaryMode} onChange={setSummaryMode}
+          options={[{ label: "Theo tháng", value: "month" }, { label: "Từ đầu kỳ", value: "period" }]} />
+        {summaryFrom && summaryTo && <Typography.Text type="secondary">
+          {dayjs(summaryFrom).format("DD/MM/YYYY")} – {dayjs(summaryTo).format("DD/MM/YYYY")}
+        </Typography.Text>}
+      </Space>
       <div className="dashboard-stat-grid">
         <Card><Statistic title="Tổng tiền hàng nhập" value={formatMoney(summary?.purchaseAmount ?? 0)} /></Card>
+        <Card><Statistic title="Tổng nhôm nhập (gồm nội bộ)" value={summary ? `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary.purchaseKg ?? 0) / 1000)} tấn` : "—"} /></Card>
         <Card><Statistic title="Tổng tiền thu dự kiến" value={formatMoney(summary?.revenue ?? 0)} /></Card>
         <Card><Statistic title="Đã thu từ phiếu bán trong kỳ" value={formatMoney(summary?.cashCollected ?? 0)} /></Card>
         <Card><Statistic title="Còn phải thu từ phiếu bán trong kỳ" value={formatMoney(summary?.customerDebt ?? 0)} /></Card>
         <Card><Statistic title="Doanh nghiệp còn nợ nhà cung cấp" value={formatMoney(summary?.supplierDebt ?? 0)} /></Card>
         <Card><Statistic title={shop === "DISTRIBUTION" ? "Tổng đã giao (gồm chuyển Xưởng)" : "Tổng khối lượng hàng đã giao"} value={`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary?.deliveredKg ?? 0) / 1000)} tấn`} />
-          {period?.started && range && <DeliveredByCategory from={range[0].format("YYYY-MM-DD")} to={range[1].format("YYYY-MM-DD")} shopKey={shop} unit="tấn" />}
+          {period?.started && summaryFrom && summaryTo && <DeliveredByCategory from={summaryFrom} to={summaryTo} shopKey={shop} unit="tấn" />}
         </Card>
       </div>
 

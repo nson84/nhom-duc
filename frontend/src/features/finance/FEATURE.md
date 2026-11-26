@@ -1,10 +1,16 @@
 # Chức năng finance
 
+Hai nhóm Công nợ hiển thị mỗi phiếu trong một thẻ tự xuống dòng theo chiều rộng khung. Lịch sử hiển thị một dòng tổng tiền cho mỗi ngày thu hoặc trả, bỏ phần giờ. Các giao dịch gốc vẫn được lưu riêng.
+
+Tab **Lãi gộp hóa đơn** ở cả hai sổ cho nhóm theo ngày lập phiếu hoặc theo tháng. Bảng nhóm cộng doanh thu và giá vật tư của hóa đơn bán ngoài, trước chi hoạt động và tiền công. Nhóm thiếu giá vốn hiện trạng thái thiếu dữ liệu.
+
+Nút **Thu nợ** và **Trả nhà cung cấp** mở phiếu gốc trực tiếp. Ngày thực thu hoặc thực trả quyết định tháng ghi sổ, độc lập với tháng đang xem ở Tổng quan. Form gợi ý hôm nay trong kỳ đang làm việc và số nợ còn lại. **Ghi nhận** lưu ngay nếu tháng đã mở. Tháng khóa cần xác nhận thêm; tháng chưa mở hoặc kỳ năm đã chốt từ chối ghi.
+
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
 Khung Báo cáo giãn theo nội dung; bảng nhiều cột, gồm bảng tiền công, cuộn ngang trong bảng ở cửa sổ hẹp. Modal Thu chi dài cuộn thân và giữ footer nhìn thấy.
 
-Tab **Công nợ chuyển kỳ** ở Báo cáo hiển thị cả kỳ năm đã chọn của cửa hàng. Hai bảng nợ khách và nợ nhà cung cấp ghi số phiếu, nợ đầu kỳ, số thu hoặc trả trong kỳ, nợ cũ cuối kỳ và ngày giờ từng lần thanh toán.
+Tab **Công nợ chuyển kỳ** ở Báo cáo hiển thị cả kỳ năm đã chọn của cửa hàng. Nợ khách và nợ nhà cung cấp ghi số phiếu, nợ đầu kỳ, số thu hoặc trả trong kỳ, nợ cũ cuối kỳ và tổng thanh toán theo ngày.
 
 Menu **Công nợ** mở trang riêng `/cong-no` cho Xưởng và Phân phối. Trang dùng kỳ năm đang chọn ở Tổng quan và hiển thị toàn bộ công nợ chuyển kỳ của cửa hàng.
 Form thanh toán công nợ dùng ngày lập phiếu gốc và khoảng kỳ đang mở để giới hạn ngày thu hoặc trả. Với phiếu lập trước khoảng đó, form gợi ý ngày đầu khoảng đang mở.
@@ -41,8 +47,8 @@ Phân phối hiển thị năm thẻ tổng hợp doanh thu và công nợ theo 
 **Tabs**
 1. **Doanh thu & lợi nhuận** — doanh thu, COGS, lãi gộp, LN thuần dự kiến, đã thu từ các hóa đơn lập trong kỳ (cộng cả lần trả sau ngày lập phiếu), chưa thu, nhập kỳ, lãi theo giá chuẩn, chênh lệch giá nhập; bảng theo ngày lập phiếu xếp ngày mới nhất trước. Cột số phiếu bán đếm cả phiếu chuyển nội bộ; doanh thu và đã thu loại chuyển nội bộ. Chi tiết phiếu nội bộ vẫn có trong tab lãi gộp hóa đơn với lãi bằng 0.
 2. **Chênh lệch giá nhập** — thực tế vs chuẩn theo SP/phiếu
-3. **Bán theo sản phẩm**
-4. **Tồn / biến động kho**
+3. **Bán theo sản phẩm** — mỗi cặp sản phẩm và loại nhôm trên phiếu là một dòng.
+4. **Tồn / biến động kho** — mỗi cặp sản phẩm và loại nhôm trong kho là một dòng.
 5. **Hao hụt Phân phối** — tổng hao hụt và thừa kiểm kê hiển thị theo tấn trong hai thẻ cùng kích thước, kèm phiếu điều chỉnh trong khoảng ngày và liên kết đến Tồn kho để nhập số cân thực tế.
 6. **Tiền công** — Admin + Xưởng; theo năm
 

@@ -36,6 +36,8 @@ Phiếu chi thưởng lễ dùng nhóm chi lương và được cập nhật t�
 
 Giao dịch Thu chi Xưởng chỉ bị khóa khi ngày giao dịch thuộc khoảng ngày của kỳ xưởng đã chốt; thu nợ cũ sau ngày chốt vẫn ghi vào kỳ mới.
 
+Báo cáo bán theo sản phẩm lấy loại từ dòng phiếu. Báo cáo tồn và biến động lấy loại từ cặp sản phẩm và loại trên số dư, đồng thời cộng biến động theo đúng cặp đó.
+
 ## Màn hình liên quan
 
 [finance](../../../../../../../../frontend/src/features/finance/FEATURE.md)

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Tabs, Tag, message } from "antd";
+import { Alert, Button, Card, Col, DatePicker, Row, Segmented, Select, Space, Statistic, Tabs, Tag, message } from "antd";
 import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -144,6 +144,7 @@ export function ReportsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [profit, setProfit] = useState<ProfitReport | null>(null);
   const [invoiceMargins, setInvoiceMargins] = useState<InvoiceGrossMargin[]>([]);
+  const [invoiceGrouping, setInvoiceGrouping] = useState<"day" | "month">("month");
   const [monthlyMargins, setMonthlyMargins] = useState<MonthlyMargin[]>([]);
   const [productSales, setProductSales] = useState<ProductSalesRow[]>([]);
   const [inventoryRows, setInventoryRows] = useState<InventoryReportRow[]>([]);
@@ -244,11 +245,11 @@ export function ReportsPage() {
     void load();
   }, [load]);
 
-  const invoiceMonths = Object.values(invoiceMargins.reduce<Record<string, { month: string; revenue: number; cost: number; profit: number; missing: boolean; count: number }>>((all, invoice) => {
-    const month = invoice.documentDate.slice(0, 7);
-    const item = all[month] ?? (all[month] = { month, revenue: 0, cost: 0, profit: 0, missing: false, count: 0 });
-    item.count += 1;
+  const invoiceGroups = Object.values(invoiceMargins.reduce<Record<string, { date: string; revenue: number; cost: number; profit: number; missing: boolean; count: number }>>((all, invoice) => {
     if (invoice.internal) return all;
+    const date = invoice.documentDate.slice(0, invoiceGrouping === "day" ? 10 : 7);
+    const item = all[date] ?? (all[date] = { date, revenue: 0, cost: 0, profit: 0, missing: false, count: 0 });
+    item.count += 1;
     item.revenue += Number(invoice.revenue);
     if (!invoice.costComplete || invoice.estimatedMaterialCost == null || invoice.estimatedGrossProfit == null) item.missing = true;
     else {
@@ -256,7 +257,7 @@ export function ReportsPage() {
       item.profit += Number(invoice.estimatedGrossProfit);
     }
     return all;
-  }, {})).sort((a, b) => a.month.localeCompare(b.month));
+  }, {})).sort((a, b) => a.date.localeCompare(b.date));
 
   const fromStr = range[0].format("YYYY-MM-DD");
   const toStr = range[1].format("YYYY-MM-DD");
@@ -317,16 +318,19 @@ export function ReportsPage() {
           },
           {
             key: "invoice-margins",
-            label: "Lãi gộp hóa đơn / tháng",
+            label: "Lãi gộp hóa đơn",
             children: <>
               <Alert type="info" showIcon style={{ marginBottom: 16 }}
                 message="Lãi hóa đơn và lãi tháng là số tạm tính"
                 description="Giá vốn dùng giá đã nhập trên dòng hàng hoặc giá nhập tham chiếu nếu để trống. Lãi tháng sau chi phí trừ các khoản đã ghi nhận. Phiếu nội bộ không cộng vào doanh thu/lãi tháng. Lãi quyết toán còn phụ thuộc kiểm kê cuối kỳ."
               />
-              <h3>Lãi gộp theo tháng (chưa trừ chi phí hoạt động)</h3>
-              <PagedTable rowKey="month" size="small" loading={loading} dataSource={invoiceMonths} columns={[
-                { title: "Tháng", dataIndex: "month", align: "center" },
-                { title: "Số phiếu (gồm nội bộ)", dataIndex: "count", align: "center" },
+              <h3>Lãi gộp trước chi phí hoạt động và tiền công</h3>
+              <Segmented aria-label="Nhóm lãi gộp hóa đơn" value={invoiceGrouping} onChange={setInvoiceGrouping}
+                options={[{ label: "Theo tháng", value: "month" }, { label: "Theo ngày", value: "day" }]} />
+              <PagedTable rowKey="date" size="small" loading={loading} dataSource={invoiceGroups} columns={[
+                { title: invoiceGrouping === "day" ? "Ngày lập phiếu" : "Tháng", dataIndex: "date", align: "center",
+                  render: (value: string) => dayjs(value).format(invoiceGrouping === "day" ? "DD/MM/YYYY" : "MM/YYYY") },
+                { title: "Số hóa đơn", dataIndex: "count", align: "center" },
                 { title: "Doanh thu", dataIndex: "revenue", align: "center", render: (v: number) => formatMoney(v) },
                 { title: "Giá vốn vật tư", dataIndex: "cost", align: "center", render: (v: number, row) => row.missing ? "Thiếu giá vốn" : formatMoney(v) },
                 { title: "Lãi gộp ước tính", dataIndex: "profit", align: "center", render: (v: number, row) => row.missing ? "Chưa đủ dữ liệu" : formatMoney(v) },
@@ -539,7 +543,7 @@ export function ReportsPage() {
                   />
                 </Space>
                 <PagedTable<ProductSalesRow>
-                  rowKey="productId"
+                  rowKey={(row) => `${row.productId}-${row.categoryName}`}
                   loading={loading}
                   dataSource={productSales}
                   columns={[
@@ -577,7 +581,7 @@ export function ReportsPage() {
                   </span>
                 </Space>
                 <PagedTable<InventoryReportRow>
-                  rowKey="productId"
+                  rowKey={(row) => `${row.productId}-${row.categoryName}`}
                   loading={loading}
                   dataSource={inventoryRows}
                   columns={[

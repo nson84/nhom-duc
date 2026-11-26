@@ -77,9 +77,30 @@ public final class StockDtos {
 			@Size(max = 500) String note,
 			@Size(max = 80) String idempotencyKey,
 			@Size(max = 80, message = "Người thu tối đa 80 ký tự") String collectedBy,
-			@Size(max = 80) String paidBy
+			@Size(max = 80) String paidBy,
+			Boolean confirmLockedCarryoverMonth
 	) {
+		public PaymentRequest(BigDecimal amount, String paymentMethod, LocalDateTime paymentDate, String note,
+				String idempotencyKey, String collectedBy, String paidBy) {
+			this(amount, paymentMethod, paymentDate, note, idempotencyKey, collectedBy, paidBy, false);
+		}
 	}
+
+	public record BatchCollectionLine(
+			@NotNull Long documentId,
+			@NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal amount
+	) {}
+
+	public record BatchCollectionRequest(
+			@NotNull Long customerId,
+			@NotNull LocalDateTime paymentDate,
+			@NotBlank @Size(max = 30) String paymentMethod,
+			@NotBlank @Size(max = 80) String collectedBy,
+			@NotNull java.util.UUID receiptId,
+			@NotEmpty @Size(max = 500) List<@NotNull @Valid BatchCollectionLine> invoices
+	) {}
+
+	public record BatchCollectionItem(long documentId, String documentCode, LocalDateTime documentDate, BigDecimal amount) {}
 
 
 	public record ItemDto(

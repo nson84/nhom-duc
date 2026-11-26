@@ -10,6 +10,8 @@ Khi đồng bộ lại, sản phẩm Xưởng đã có chỉ nhận tên/ảnh; 
 
 Đổi sang giá khác tạo mốc lịch sử mới, kể cả cùng ngày, để còn tra được giá cũ và ngày bắt đầu áp dụng. Nếu nhiều mốc cùng ngày, mốc có ID mới nhất là giá dùng để tính theo ngày; phiếu đã xác nhận giữ snapshot giá chuẩn đã lưu.
 
+Ứng dụng tạo sản phẩm mới với loại mặc định để trống. Khi sửa sản phẩm cũ, ứng dụng giữ trường loại cũ để tương thích dữ liệu; trường này không dùng để chọn loại trên phiếu.
+
 ## Màn hình liên quan
 
 Ảnh mới lưu thành file, database giữ tham chiếu. Đồng bộ Phân phối sang Xưởng dùng chung file ảnh và chuyển ảnh base64 cũ của Phân phối sang thư mục ảnh khi đồng bộ.

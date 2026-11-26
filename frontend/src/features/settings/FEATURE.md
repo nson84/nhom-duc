@@ -1,5 +1,7 @@
 # Chức năng settings
 
+Cài đặt hiển thị giới hạn 50 bản sao lưu thành công gần nhất trên máy.
+
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
 ### `/cai-dat` — Cài đặt

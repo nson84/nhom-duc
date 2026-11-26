@@ -2,6 +2,8 @@
 
 JWT mới mặc định không hết hạn theo thời gian. Phiên đã thu hồi được lưu trong cơ sở dữ liệu để tiếp tục bị chặn sau khi khởi động lại.
 
+Bản backup mới mã hóa hash của ba tài khoản vận hành để phục hồi giữ mật khẩu cũ; `revoked_login_sessions` không được xuất cùng archive, nên phiên đăng nhập cũ không được chuyển sang database mới.
+
 Đọc tài liệu này trước khi sửa code trong thư mục; cập nhật cùng thay đổi.
 
 ## Chức năng hiện có

@@ -11,8 +11,8 @@ Hai API tăng ca nhận thêm `payUnit: HOUR | SESSION` (thiếu thì mặc đ�
 | POST | `/auth/login` | Công khai |
 | POST | `/auth/logout` | Thu hồi phiên trong bộ nhớ |
 | GET | `/auth/me` | Tài khoản hiện tại |
-| PUT | `/auth/password` | Đổi mật khẩu, trả phiên mới |
-| GET | `/system/ready` | Công khai, dùng cho màn hình khởi động |
+| PUT | `/auth/password` | Xác nhận mật khẩu hiện tại hoặc đổi mật khẩu, trả phiên mới; chấp nhận mật khẩu mới trùng mật khẩu hiện tại |
+| GET | `/system/ready` | Công khai, trả 503 trong lúc khởi tạo và trả thông tin sẵn sàng khi database dùng được |
 | POST | `/system/desktop-backup/{startup\|shutdown}` | Desktop nội bộ: loopback và mã ngẫu nhiên riêng của backend, tạo bản backup khi mở/đóng app |
 | GET | `/settings` | Cấu hình cửa hàng và lịch sao lưu |
 | PUT | `/settings` | Cập nhật cấu hình |
@@ -22,7 +22,7 @@ Hai API tăng ca nhận thêm `payUnit: HOUR | SESSION` (thiếu thì mặc đ�
 | PUT | `/bank-accounts/{id}` | Sửa tài khoản / ảnh QR |
 | POST | `/bank-accounts/{id}/default` | Đặt mặc định |
 | DELETE | `/bank-accounts/{id}` | Xóa tài khoản QR |
-| GET | `/dashboard/summary?from&to` | Doanh thu, tiền thu, lãi gộp, chi phí, tồn, tiền công |
+| GET | `/dashboard/summary?from&to` | Doanh thu, tiền thu, lãi gộp, chi phí, tồn, tiền công, kg nhập (`purchaseKg`) và kg giao |
 | POST | `/dashboard/distribution-close?from&to&annual=true&year=2026` | Chốt năm Phân phối theo khoảng ngày tự chọn; `year` là tên kỳ. Kỳ liền sau phải bắt đầu ngày tiếp theo. |
 | GET | `/dashboard/year-end?year` | Bản số dư chốt năm theo sổ đang chọn; `data: null` nếu chưa chốt. Gồm `periodFrom`, `periodTo`, `inventoryKg`, `inventoryValue`, `customerDebt`, `supplierDebt`, `profit`, `closedAt` |
 | GET | `/reports/annual-book?year&shopCode` | Dữ liệu sổ cuối năm: khách, phiếu bán/nhập, thanh toán, thu chi, công thợ, tồn kho. `transfersOut`/`transferItems` chứa phiếu xuất nội bộ Phân phối trong kỳ; `purchases` của Xưởng gồm phiếu nhập nội bộ trước kỳ để đối chiếu. Xưởng/Phân phối chỉ xem sổ của mình; Admin bị từ chối. |
@@ -58,6 +58,7 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 
 | Method | Đường dẫn | Ghi chú |
 | --- | --- | --- |
+| GET | `/reports/sales-by-product`, `/reports/inventory` | Trả từng cặp sản phẩm và loại nhôm. Bộ lọc loại dùng loại trên dòng phiếu bán hoặc dòng tồn kho. |
 | GET | `/categories` | Loại nhôm + giá nhập/bán (kg, tạ, tấn); trường giá m² cũ chỉ giữ để đọc dữ liệu lịch sử |
 | POST / PUT | `/categories` / `/categories/{id}` | Tạo/sửa loại kèm giá; lịch sử giá nhập theo loại |
 | GET/POST | `/categories/{id}/purchase-prices` | Lịch sử giá nhập loại (`pricePerBase` = đ/kg); đổi giá trong cùng ngày giữ mốc cũ, mốc ID mới nhất áp dụng cho ngày đó |
@@ -65,6 +66,7 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 | GET/POST | `/customers` | Sổ khách theo shop; Admin `?scope=all` xem gộp |
 | GET/PUT | `/customers/{id}` | Chi tiết / sửa khách; GET trả `totalSales`, `receivedAmount`, `outstandingDebt`, `deliveredKg` |
 | GET | `/customers/{id}/documents` | Hóa đơn bán của khách (`paymentStatus`, `OPEN` = còn nợ) |
+| POST | `/stock-documents/payments/batch` | Thu hết nợ các phiếu bán ngoài được chọn của một khách. Body gồm `customerId`, `paymentDate`, `paymentMethod`, `collectedBy`, `receiptId` (UUID) và `invoices[{documentId, amount}]` (tối đa 500). Dùng kỳ và tháng của ngày thu. Trả danh sách phiếu cùng khoản thu để in biên nhận. |
 | GET/POST | `/customers/{id}/reminders` | Lịch nhắc nợ |
 | GET | `/customers/due-reminders` | Nhắc đến hạn chưa xong |
 | PUT | `/stock-documents/{id}/customer` | Gắn / gỡ `customerId` trên phiếu bán |
@@ -115,7 +117,7 @@ Mục lục [feature.md](feature.md) dẫn tới tài liệu từng module và m
 | Method | API | Hành vi |
 |---|---|---|
 | GET/PUT | `/backups/settings` | Lịch backup, thêm `frequencyHours` (1, 2, 4, 8, 24); mặc định 4 giờ |
-| POST | `/backups` | Tạo `.ndbak` nén GZIP, mã hóa AES-256-GCM và bắt đầu đồng bộ nền |
+| POST | `/backups` | Tạo `.ndbak` nén GZIP và mã hóa AES-256-GCM, dọn bản trên máy vượt giới hạn 50 sau khi xác minh, rồi bắt đầu đồng bộ nền. Nhật ký bản đã dọn có trạng thái `PRUNED`. |
 | POST | `/backups/{id}/verify` | Kiểm tra SHA-256 và giải mã bản local |
 | POST | `/backups/{id}/prepare` | Dựng database khôi phục thử, không thay dữ liệu hiện hành |
 | GET/PUT | `/backups/cloud` | Xem/lưu R2 endpoint, bucket, Access Key ID; Secret Access Key chỉ nhận khi ghi |
@@ -151,6 +153,7 @@ POST /api/v1/backups/{id}/prepare và /api/v1/backups/cloud/prepare trả databa
 
 - Stock document request nhận paperSource và items[].enteredCostPerKg. Chi tiết phiếu trả các trường này.
 - PUT /api/v1/stock-documents/{id}/payments/{paymentId}/date nhận date dạng YYYY-MM-DD, trả phiếu đã cập nhật.
+- POST /api/v1/stock-documents/{id}/payments nhận `confirmLockedCarryoverMonth` để ghi khoản thanh toán phiếu nợ chuyển kỳ trong tháng đã khóa. Màn Công nợ gửi `workingYear` theo kỳ báo cáo và `workingMonth` theo ngày thanh toán. Kỳ thanh toán phải còn mở và phiếu gốc phải lập trước ngày đầu kỳ với xác nhận qua khóa tháng.
 - API ghi và sửa ngày thanh toán từ chối ngày trước ngày lập phiếu. API sửa phiếu từ chối dời ngày lập qua ngày đã thanh toán.
 - Finance transaction request và response có monthlySummary. transactionDate dùng mốc phân kỳ khi monthlySummary là true.
 - GET /api/v1/reports/monthly-margins?from=YYYY-MM-DD&to=YYYY-MM-DD trả month, grossProfit, operatingCost, payrollCost, profitAfterExpenses. Lãi null khi thiếu giá vốn. Bản in năm trả monthlySummary trên các dòng thu chi.

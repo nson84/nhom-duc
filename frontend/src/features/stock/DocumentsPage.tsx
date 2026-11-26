@@ -954,17 +954,7 @@ function EditorModal({
   }
 
   function onProductChange(index: number, productId: number) {
-    const product = productMap.get(productId);
-    if (!product) return;
-    const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-    const name = normalize(product.name);
-    const matches = categories.filter((category) => {
-      const categoryName = normalize(category.name);
-      return categoryName.length > 0 && name.includes(categoryName);
-    });
-    const categoryId = product.categoryId && categoryMap.has(product.categoryId)
-      ? product.categoryId
-      : matches.length === 1 ? matches[0].id : undefined;
+    const categoryId = form.getFieldValue(["items", index, "categoryId"]);
     applyLineSelection(index, productId, categoryId);
   }
 
@@ -2183,6 +2173,7 @@ export function PaymentModal({
   remaining,
   documentDate,
   kind,
+  carryoverYear,
   onClose,
   onSubmit,
 }: {
@@ -2190,6 +2181,7 @@ export function PaymentModal({
   remaining: number;
   documentDate: string;
   kind: Kind;
+  carryoverYear?: number;
   onClose: () => void;
   onSubmit: (values: {
     amount: number;
@@ -2199,30 +2191,40 @@ export function PaymentModal({
     idempotencyKey: string;
     collectedBy?: string;
     paidBy?: string;
+    confirmLockedCarryoverMonth?: boolean;
   }) => Promise<void>;
 }) {
   const workingYear = useWorkingYear(useShop());
+  const paymentYear = carryoverYear ?? workingYear.year;
+  const paymentMonth = carryoverYear == null ? workingYear.month : undefined;
   const [form] = Form.useForm<{ amount: number; paymentMethod: string; paymentDate: Dayjs; note?: string; collectedBy?: string; paidBy?: string }>();
   const [paymentPeriod, setPaymentPeriod] = useState<YearPeriod | null>(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const checkingPaymentRef = useRef(false);
   const documentDay = dayjs(documentDate);
   const periodStart = paymentPeriod?.started ? dayjs(paymentPeriod.periodFrom) : null;
   const minPaymentDay = periodStart?.isAfter(documentDay, "day") ? periodStart : documentDay;
   useEffect(() => {
     let active = true;
-    getYearPeriod(workingYear.year).then((value) => {
+    getYearPeriod(paymentYear).then((value) => {
       if (!active) return;
-      const shown = visiblePeriod(value, workingYear.month);
+      const shown = visiblePeriod(value, paymentMonth);
       setPaymentPeriod(shown);
       if (shown?.started && !form.isFieldTouched("paymentDate")) {
         const start = dayjs(shown.periodFrom);
         const docDay = dayjs(documentDate);
-        if (start.isAfter(docDay, "day")) {
+        if (carryoverYear != null) {
+          const today = dayjs();
+          if (!shown.closed && !today.isBefore(start, "day") && !today.isAfter(shown.periodTo, "day")) {
+            form.setFieldValue("paymentDate", today);
+          }
+        } else if (start.isAfter(docDay, "day")) {
           form.setFieldValue("paymentDate", start);
         }
       }
     }).catch((error) => { if (active) message.error(toApiError(error).message); });
     return () => { active = false; };
-  }, [documentDate, form, workingYear.year, workingYear.month]);
+  }, [documentDate, form, carryoverYear, paymentYear, paymentMonth]);
   const key = useMemo(() => crypto.randomUUID(), []);
   const amountWatch = Form.useWatch("amount", form);
   const enteredAmount = Number(amountWatch ?? 0);
@@ -2238,6 +2240,7 @@ export function PaymentModal({
       okText="Ghi nhận"
       cancelText="Hủy"
       okButtonProps={{ style: appButtonStyle("pay") }}
+      confirmLoading={checkingPayment}
       cancelButtonProps={{ style: appButtonStyle("cancel") }}
       onCancel={onClose}
       onOk={() => form.submit()}
@@ -2249,9 +2252,53 @@ export function PaymentModal({
         initialValues={{
           amount: remaining,
           paymentMethod: "CASH",
-          paymentDate: documentDay,
+          paymentDate: carryoverYear != null ? undefined : documentDay,
         }}
-        onFinish={(values) =>
+        onFinish={async (values) => {
+          if (checkingPaymentRef.current) return;
+          let locked = false;
+          const submit = (confirmLockedCarryoverMonth: boolean) => onSubmit({
+            amount: values.amount,
+            paymentMethod: values.paymentMethod,
+            paymentDate: values.paymentDate.format("YYYY-MM-DD[T00:00:00]"),
+            note: values.note,
+            idempotencyKey: key,
+            collectedBy: values.collectedBy?.trim(),
+            paidBy: values.paidBy?.trim(),
+            confirmLockedCarryoverMonth,
+          });
+          if (carryoverYear != null) {
+            const month = values.paymentDate.format("YYYY-MM");
+            checkingPaymentRef.current = true;
+            setCheckingPayment(true);
+            try {
+              const status = await getMonthStatus(month);
+              if (status === "NOT_OPEN") {
+                form.setFields([{ name: "paymentDate", errors: [`Tháng ${values.paymentDate.format("MM/YYYY")} chưa mở. Chỉ mở tháng ở Tổng quan nếu đây là tháng thực tế.`] }]);
+                return;
+              }
+              locked = status === "CLOSED";
+            } catch (error) {
+              message.error(toApiError(error).message);
+              return;
+            } finally {
+              checkingPaymentRef.current = false;
+              setCheckingPayment(false);
+            }
+            if (!locked) {
+              checkingPaymentRef.current = true;
+              setCheckingPayment(true);
+              try {
+                await submit(false);
+              } catch {
+                // The caller reports save errors and keeps the form open.
+              } finally {
+                checkingPaymentRef.current = false;
+                setCheckingPayment(false);
+              }
+              return;
+            }
+          }
           Modal.confirm({
             title: kind === "PURCHASE" ? "Xác nhận ghi chi?" : "Xác nhận ghi thu?",
             content: (
@@ -2263,6 +2310,8 @@ export function PaymentModal({
                 <p style={{ margin: "4px 0" }}>
                   Thời gian: <b>{values.paymentDate.format("DD/MM/YYYY")}</b>
                 </p>
+                {locked && <Alert type="warning" showIcon
+                  message={`Khoản này sẽ được ghi vào tháng ${values.paymentDate.format("MM/YYYY")} đang khóa. Tháng vẫn khóa sau khi lưu.`} />}
                 {kind === "SALE" ? (
                   <p style={{ margin: "4px 0" }}>
                     Người thu tiền: <b>{values.collectedBy?.trim()}</b>
@@ -2277,25 +2326,19 @@ export function PaymentModal({
             cancelText: "Quay lại",
             okButtonProps: { style: appButtonStyle("pay") },
             cancelButtonProps: { style: appButtonStyle("cancel") },
-            onOk: () =>
-              onSubmit({
-                amount: values.amount,
-                paymentMethod: values.paymentMethod,
-                paymentDate: values.paymentDate.format("YYYY-MM-DD[T00:00:00]"),
-                note: values.note,
-                idempotencyKey: key,
-                collectedBy: values.collectedBy?.trim(),
-                paidBy: values.paidBy?.trim(),
-              }),
-          })
-        }
+            onOk: () => submit(locked),
+          });
+        }}
       >
         <Form.Item
           name="paymentDate"
-          label="Thời gian thanh toán"
+          label={carryoverYear != null ? (kind === "SALE" ? "Ngày thực thu" : "Ngày thực trả") : "Thời gian thanh toán"}
           rules={[{ required: true, message: "Chọn thời gian thanh toán" }, {
             validator: async (_, value: Dayjs | null) => {
               if (!value) return;
+              if (carryoverYear != null && (!paymentPeriod?.started || paymentPeriod.closed)) {
+                throw new Error("Chỉ ghi thanh toán trong kỳ năm đang làm việc");
+              }
               if (value.isBefore(documentDay, "day")) throw new Error("Ngày thanh toán không được trước ngày lập phiếu");
               if (paymentPeriod?.started && (value.isBefore(paymentPeriod.periodFrom, "day") || value.isAfter(paymentPeriod.periodTo, "day"))) {
                 throw new Error("Ngày thanh toán phải nằm trong tháng/kỳ đang chọn");
@@ -2337,7 +2380,7 @@ export function PaymentModal({
         <Form.Item label={remainingLabel}>
           <Input value={formatMoney(remainingAfter)} readOnly />
         </Form.Item>
-        {kind === "PURCHASE" && <Form.Item name="paidBy" label="Người trả tiền" rules={requiredNameRules("Nhập người trả tiền", 80)}>
+        {kind === "PURCHASE" && <Form.Item name="paidBy" label="Người trả tiền" rules={carryoverYear == null ? requiredNameRules("Nhập người trả tiền", 80) : undefined}>
           <AutoComplete options={[{ value: "Hải" }, { value: "Thuấn" }]} placeholder="Chọn Hải, Thuấn hoặc nhập tên khác">
             <Input maxLength={80} />
           </AutoComplete>
@@ -2345,7 +2388,7 @@ export function PaymentModal({
         <Form.Item
           name="collectedBy"
           label={kind === "PURCHASE" ? "Người nhận tiền" : "Người thu tiền"}
-          rules={requiredNameRules(kind === "PURCHASE" ? "Nhập người nhận tiền" : "Nhập người thu tiền", 80)}
+          rules={carryoverYear == null ? requiredNameRules(kind === "PURCHASE" ? "Nhập người nhận tiền" : "Nhập người thu tiền", 80) : undefined}
           extra={kind === "SALE" ? "Chọn Hải, Thuấn hoặc nhập tên khác; tên này sẽ in trên hóa đơn nợ" : undefined}
         >
           {kind === "PURCHASE" ? <Input maxLength={80} placeholder="Nhập tên người nhận tiền" /> : (

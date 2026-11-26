@@ -7,7 +7,7 @@ export type BackupLog = {
   backupPath: string | null;
   startedAt: string;
   completedAt: string | null;
-  status: "RUNNING" | "SUCCESS" | "FAILED";
+  status: "RUNNING" | "SUCCESS" | "FAILED" | "PRUNED";
   fileSizeBytes: number | null;
   checksumSha256: string | null;
   errorMessage: string | null;

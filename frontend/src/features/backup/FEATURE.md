@@ -1,6 +1,6 @@
 # Chức năng backup
 
-22/11: sau khi dựng DB thử, ứng dụng desktop hiện nút **Dùng dữ liệu này**. Nút yêu cầu Tauri tự dừng backend đang sở hữu, mở DB đã xác minh, kiểm tra tên DB từ `/system/ready`, lưu lựa chọn và hiện mật khẩu đăng nhập lần đầu. Nếu không mở được, thử quay lại DB trước. Nút **Quay lại database trước** có trên trang Sao lưu sau khi chuyển. Trình duyệt ngoài desktop chỉ xem kết quả dựng thử.
+Sau khi dựng DB thử, ứng dụng desktop hiện nút **Dùng dữ liệu này**. Nút yêu cầu Tauri tự dừng backend đang sở hữu, mở DB đã xác minh, kiểm tra tên DB từ `/system/ready` và lưu lựa chọn. Backup mới giữ mật khẩu cũ của ba tài khoản; backup cũ hiện mật khẩu đăng nhập lần đầu khi bootstrap tạo tài khoản thiếu. Nếu không mở được, thử quay lại DB trước. Nút **Quay lại database trước** có trên trang Sao lưu sau khi chuyển. Trình duyệt ngoài desktop chỉ xem kết quả dựng thử.
 
 21/11: màn Sao lưu có hướng dẫn mất máy ngay trên trang: tạo R2 token mới, tìm object `backups/*.ndbak`, dùng Dựng DB thử, đối chiếu rồi chạy launcher bằng hồ sơ đã xác minh. Tệp tải trực tiếp từ Cloudflare Dashboard chưa được nhập từ đường dẫn local vào ứng dụng. Bản nháp trình duyệt không nằm trong backup. Bộ cài mới mang launcher trong `resources` cùng JAR.
 
@@ -20,7 +20,7 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 - Khi mới mở màn Sao lưu, trạng thái R2 hiển thị đang kiểm tra cho đến khi API trả cấu hình; không báo nhầm là chưa cấu hình trong lúc tải.
 - Trạng thái lịch (tần suất, lần kế tiếp, thư mục), cảnh báo lỗi lần gần nhất
 - Sao lưu ngay; danh sách bản sao lưu. Nút khôi phục tạm khóa vì backend chưa có quy trình xác minh trên database riêng; API trả 503, không ghi đè dữ liệu làm việc.
-- Cấu hình tần suất 1/2/4/8/24 giờ, thư mục và số ngày giữ (chưa tự dọn bản cũ)
+- Cấu hình tần suất 1/2/4/8/24 giờ và thư mục. Sau lần sao lưu thành công, ứng dụng giữ 50 bản mới nhất trên máy trong thư mục đang cấu hình. Bản đã dọn có nhãn riêng trong nhật ký.
 - Cấu hình bucket/endpoint/khóa R2, kiểm tra kết nối, đồng bộ ngay, xem/tải/kiểm tra bản trên R2. Secret Access Key không được hiển thị lại.
 - Xuất khóa phục hồi để cất ngoài máy, nhập khóa trên máy mới; kiểm tra local/cloud và dựng database khôi phục thử. Database làm việc không bị thay thế; nút restore trực tiếp vẫn khóa.
 - Khi dựng DB thử, nhập tài khoản MySQL có quyền CREATE DATABASE. Mật khẩu và khóa giải mã đã dùng được giữ trong bộ nhớ giao diện tới khi chọn chuyển DB; khi chuyển, Tauri lưu trong Windows Credential Manager để lần mở ứng dụng sau dùng lại. Hồ sơ JSON không chứa các mã này.
@@ -35,3 +35,5 @@ Xem `docs/audit-progress-20261119.md` để biết thay đổi và giới hạn 
 
 
 Bản desktop hỗ trợ Dùng dữ liệu này khi backend dev mặc định đã bật bàn giao. App xác minh backend, giữ đường dẫn ảnh gốc, chờ backend dev sao lưu và nhường cổng rồi tự mở database phục hồi. Quay lại kiểm tra tên database trước khi báo thành công.
+
+Khi đang dùng DB phục hồi, lần dựng tiếp theo vẫn ghi hồ sơ vào `restore-staging` chính để desktop xác minh và chuyển DB.

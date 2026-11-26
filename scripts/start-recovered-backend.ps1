@@ -31,7 +31,7 @@ try {
 if (-not $DatabaseUsername) { $DatabaseUsername = Read-Host 'MySQL username with access to the restored database' }
 if (-not $DatabasePassword) { $DatabasePassword = Read-Host 'MySQL password (not saved)' -AsSecureString }
 $variables = @('SPRING_DATASOURCE_URL','SPRING_DATASOURCE_USERNAME','SPRING_DATASOURCE_PASSWORD','APPDATA','ALUMINUM_JWT_SECRET_FILE',
-    'ALUMINUM_IMAGE_DIR','ALUMINUM_API_PORT','ALUMINUM_FIRST_RUN_CREDENTIAL_DIR','ALUMINUM_BACKUP_SCHEDULED_ENABLED')
+    'ALUMINUM_IMAGE_DIR','ALUMINUM_API_PORT','ALUMINUM_FIRST_RUN_CREDENTIAL_DIR','ALUMINUM_BACKUP_SCHEDULED_ENABLED','ALUMINUM_RESTORE_STAGING_DIR')
 $previous = @{}
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $secretPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($DatabasePassword)
@@ -39,6 +39,7 @@ try {
     $env:SPRING_DATASOURCE_URL = $profile.jdbcUrl
     $env:SPRING_DATASOURCE_USERNAME = $DatabaseUsername
     $env:SPRING_DATASOURCE_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretPointer)
+    $env:ALUMINUM_RESTORE_STAGING_DIR = Join-Path $env:APPDATA 'AluminumManager/restore-staging'
     $env:APPDATA = Join-Path $profileDirectory 'runtime'
     $env:ALUMINUM_JWT_SECRET_FILE = Join-Path $profileDirectory 'runtime/jwt.key'
     $env:ALUMINUM_IMAGE_DIR = $imageDirectory

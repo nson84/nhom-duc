@@ -1,6 +1,5 @@
 import {
   Alert,
-  AutoComplete,
   Card,
   Col,
   DatePicker,
@@ -269,9 +268,8 @@ export function ProductsPage() {
         ]}
       />
       {editing ? (
-          <ProductModal
-            categories={categories}
-            products={products}
+        <ProductModal
+          products={products}
           product={editing === "new" ? null : editing}
           onClose={() => {
             clearSessionDraft(PRODUCT_FORM_DRAFT_KEY);
@@ -296,13 +294,11 @@ export function ProductsPage() {
 
 /** Sản phẩm chỉ gồm mã, tên, ảnh, trạng thái — giá nằm ở loại nhôm. */
 function ProductModal({
-  categories,
   products,
   product,
   onClose,
   onSaved,
 }: {
-  categories: Category[];
   products: Product[];
   product: Product | null;
   onClose: () => void;
@@ -316,15 +312,6 @@ function ProductModal({
   const draftAppliedRef = useRef(false);
   const targetId = product?.id ?? "new";
   const normalizedProductName = (value: string) => value.trim().normalize("NFC").toLocaleLowerCase();
-  const normalizedName = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-  const matchingCategories = product
-    ? categories.filter((category) => {
-        const productName = normalizedName(product.name);
-        const categoryName = normalizedName(category.name);
-        return categoryName.length > 0 && productName.includes(categoryName);
-      })
-    : [];
-  const initialCategoryId = product?.categoryId ?? (matchingCategories.length === 1 ? matchingCategories[0].id : undefined);
 
   /** Hộp thoại chọn file: hủy thì giữ ảnh đang hiển thị (focus quay lại mà không chọn file). */
   const armUploadRevertOnCancel = useCallback(() => {
@@ -392,7 +379,6 @@ function ProductModal({
             ? {
                 productCode: product.productCode,
                 name: product.name,
-                categoryId: initialCategoryId,
                 imagePath: product.imagePath ?? undefined,
                 description: product.description ?? undefined,
                 active: product.active,
@@ -406,7 +392,7 @@ function ProductModal({
             await saveProduct(product?.id, {
               productCode: values.productCode,
               name: values.name,
-              categoryId: values.categoryId ?? null,
+              categoryId: product?.categoryId ?? null,
               imagePath: values.imagePath,
               description: values.description,
               active: values.active,
@@ -441,31 +427,16 @@ function ProductModal({
                 },
               ]}
             >
-              <AutoComplete
-                placeholder="Chọn gợi ý hoặc tự nhập tên sản phẩm"
-                options={categories.map((category) => ({ value: category.name }))}
-                filterOption={(input, option) =>
-                  String(option?.value ?? "").toLocaleLowerCase().includes(input.toLocaleLowerCase())
-                }
-              />
+              <Input placeholder="Ví dụ: Cổng nhôm" />
             </Form.Item>
           </Col>
         </Row>
-
-        <Form.Item name="categoryId" label="Loại nhôm" rules={[{ required: true, message: "Chọn loại nhôm" }]}>
-          <Select
-            placeholder="Chọn loại nhôm của sản phẩm"
-            options={categories.map((category) => ({ value: category.id, label: category.name }))}
-            showSearch
-            optionFilterProp="label"
-          />
-        </Form.Item>
 
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 32 }}
-          message="Giá nhập và giá bán được khai báo theo Loại nhôm. Trên phiếu, mỗi dòng chọn sản phẩm rồi chọn loại nhôm để tự điền giá."
+          message="Giá nhập và giá bán được khai báo theo Loại nhôm. Trên mỗi dòng phiếu, chọn sản phẩm và loại nhôm riêng. Đơn giá được gợi ý theo loại nhôm đã chọn."
         />
 
         <Form.Item name="description" hidden>

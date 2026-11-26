@@ -2,7 +2,7 @@ import { printDate, printEscape as e, printMoney as money, printNumber as number
 import type { CustomerDocument, CustomerSummary } from "./customers-api";
 import type { StockDocument } from "../stock/stock-api";
 
-export function buildCustomerHistoryHtml(customer: CustomerSummary, rows: CustomerDocument[], documents: StockDocument[], range: [string, string] | null) {
+export function buildCustomerHistoryHtml(customer: CustomerSummary, rows: CustomerDocument[], documents: StockDocument[], range: [string, string] | null, accountQr = "") {
   const dateOnly = (value: string) => printDate(value.slice(0, 10));
   const tonnes = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 6 });
   const categories = new Map<string, number>();
@@ -48,5 +48,5 @@ export function buildCustomerHistoryHtml(customer: CustomerSummary, rows: Custom
       </section>`;
     }).join("") || "<p>Không có hóa đơn trong bộ lọc.</p>"}
     <h2>Tổng kết các hóa đơn đã lọc</h2><table><thead><tr><th>Tổng khối lượng nhôm</th><th>Tổng tiền các phiếu</th><th>Tổng tiền đã trả</th><th>Tổng còn nợ</th></tr></thead><tbody><tr class="total"><td>${tonnes.format(totals.kg / 1000)} tấn${[...categories].map(([name, kg]) => `<br>${e(name)}: ${tonnes.format(kg / 1000)} tấn`).join("")}</td><td>${money(totals.amount)}</td><td>${money(totals.paid)}</td><td>${money(totals.debt)}</td></tr></tbody></table>`;
-  return printPage(`Lịch sử mua hàng ${customer.name}`, body);
+  return printPage(`Lịch sử mua hàng ${customer.name}`, body + accountQr);
 }

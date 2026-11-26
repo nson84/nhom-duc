@@ -49,6 +49,7 @@ public class BackupService {
 	private static final String BACKUP_HEADER = "-- ALUMINUM_MANAGER_BACKUP_V2";
 	private static final String BACKUP_FOOTER = "-- ALUMINUM_MANAGER_BACKUP_END";
 	private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
+	private static final int LOCAL_BACKUP_LIMIT = 50;
 
 	private final JdbcTemplate jdbc;
 	private final DataSource dataSource;
@@ -310,8 +311,6 @@ public class BackupService {
 				audit.record(adminId, "CREATE_BACKUP", "backup_logs", String.valueOf(logId),
 						"Sao lưu thành công (" + prefix + "): " + file.getFileName());
 			}
-			cloudBackups.syncAfterBackup();
-			// Keep every valid local archive until cloud upload and retention can be verified independently.
 		} catch (Exception ex) {
 			log.error("Backup failed", ex);
 			LocalDateTime completed = LocalDateTime.now(clock);
@@ -321,7 +320,16 @@ public class BackupService {
 					WHERE id = ?
 					""", Timestamp.valueOf(completed), ex.getMessage(), logId);
 		}
-		return jdbc.query("SELECT * FROM backup_logs WHERE id = ?", (rs, i) -> mapLog(rs), logId).get(0);
+		BackupLogDto result = jdbc.query("SELECT * FROM backup_logs WHERE id = ?", (rs, i) -> mapLog(rs), logId).get(0);
+		if ("SUCCESS".equals(result.status())) {
+			try {
+				pruneLocalBackups(dir, result.id());
+			} catch (Exception ex) {
+				log.warn("Không dọn hết được bản sao lưu cũ", ex);
+			}
+			cloudBackups.syncAfterBackup();
+		}
+		return result;
 	}
 
 	private String buildDatabaseDump(LocalDateTime started) throws Exception {
@@ -335,10 +343,28 @@ public class BackupService {
 			conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
 			conn.setAutoCommit(false);
 			stmt.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT");
-			// Preserve author FKs without exporting credentials, sessions or usable account names.
+			// Keep the three login identities with the encrypted business backup so recovery retains passwords.
+			try (ResultSet users = stmt.executeQuery("""
+					SELECT id, username, role, shop_code, password_hash, is_active,
+					       must_change_password, last_login_at, created_at
+					FROM admin_users WHERE username IN ('admin', 'phanphoi', 'xuong') ORDER BY id
+					""")) {
+				while (users.next()) {
+					sb.append("INSERT INTO `admin_users` (`id`, `username`, `role`, `shop_code`, `password_hash`, `is_active`, `must_change_password`, `last_login_at`, `created_at`) VALUES (")
+							.append(users.getLong("id")).append(", ").append(toSqlLiteral(users.getString("username")))
+							.append(", ").append(toSqlLiteral(users.getString("role")))
+							.append(", ").append(toSqlLiteral(users.getString("shop_code")))
+							.append(", ").append(toSqlLiteral(users.getString("password_hash")))
+							.append(", ").append(users.getBoolean("is_active") ? "TRUE" : "FALSE")
+							.append(", ").append(users.getBoolean("must_change_password") ? "TRUE" : "FALSE")
+							.append(", ").append(toSqlLiteral(users.getObject("last_login_at")))
+							.append(", ").append(toSqlLiteral(users.getObject("created_at"))).append(");\n");
+				}
+			}
+			// Other referenced identities remain disabled historical actors.
 			try (ResultSet actors = stmt.executeQuery("""
 					SELECT u.id, COALESCE(u.historical_username, u.username) actor_name, u.created_at
-					FROM admin_users u WHERE u.id IN (
+					FROM admin_users u WHERE u.username NOT IN ('admin', 'phanphoi', 'xuong') AND u.id IN (
 					    SELECT closed_by_admin_id FROM payroll_periods
 					    UNION SELECT reopened_by_admin_id FROM payroll_periods
 					    UNION SELECT locked_by_admin_id FROM attendance_day_locks
@@ -450,23 +476,30 @@ public class BackupService {
 		}
 	}
 
-	private void cleanupOldBackups(int retentionDays) {
-		if (retentionDays < 1) {
-			return;
-		}
-		LocalDateTime cutoff = LocalDateTime.now(clock).minusDays(retentionDays);
-		List<BackupLogDto> oldLogs = jdbc.query("""
-				SELECT * FROM backup_logs WHERE started_at < ? AND status = 'SUCCESS'
-				""", (rs, i) -> mapLog(rs), Timestamp.valueOf(cutoff));
-		String latestPath = jdbc.query("SELECT backup_path FROM backup_logs WHERE status = 'SUCCESS' ORDER BY started_at DESC, id DESC LIMIT 1",
-				rs -> rs.next() ? rs.getString(1) : null);
-		for (BackupLogDto old : oldLogs) {
-			if (old.backupPath() != null && old.backupPath().equals(latestPath)) continue;
-			if (old.backupPath() != null) {
-				try {
-					Files.deleteIfExists(Paths.get(old.backupPath()));
-				} catch (IOException ignored) {
+	void pruneLocalBackups(Path directory, long newestId) throws IOException {
+		Path configured = directory.toAbsolutePath().normalize();
+		Path realDirectory = configured.toRealPath();
+		List<BackupLogDto> backups = jdbc.query("""
+				SELECT * FROM backup_logs WHERE status = 'SUCCESS' AND backup_path LIKE '%.ndbak'
+				ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, started_at DESC, id DESC
+				""", (rs, i) -> mapLog(rs), newestId);
+		Set<Path> seen = new java.util.HashSet<>();
+		for (BackupLogDto backup : backups) {
+			Path recorded = Path.of(backup.backupPath()).toAbsolutePath().normalize();
+			if (!configured.equals(recorded.getParent()) ||
+					!recorded.getFileName().toString().matches("aluminum-[a-z-]+-[0-9]{8}-[0-9]{6}-[0-9]{3}\\.ndbak")) continue;
+			Path file = realDirectory.resolve(recorded.getFileName());
+			if (!Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS) ||
+					!seen.add(file) || seen.size() <= LOCAL_BACKUP_LIMIT) continue;
+			try {
+				if (!sha256(Files.readAllBytes(file)).equalsIgnoreCase(backup.checksumSha256())) {
+					log.warn("Bỏ qua dọn bản sao có mã kiểm tra không khớp: {}", file);
+					continue;
 				}
+				Files.delete(file);
+				jdbc.update("UPDATE backup_logs SET status = 'PRUNED' WHERE id = ? AND status = 'SUCCESS'", backup.id());
+			} catch (IOException ex) {
+				log.warn("Không dọn được bản sao lưu cũ: {}", file, ex);
 			}
 		}
 	}

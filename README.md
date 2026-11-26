@@ -42,7 +42,7 @@ Khi sửa Java, Spring Boot DevTools tự khởi động lại backend sau khi c
 
 Ảnh sản phẩm lưu trong thư mục `image` ở gốc dự án khi chạy bằng `dev-backend.ps1`. Sao lưu thư mục này cùng database để giữ ảnh khi chuyển máy. Có thể đặt `ALUMINUM_IMAGE_DIR` để dùng thư mục khác.
 
-Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. Khi chạy bằng script dev, tài khoản mới `admin`, `phanphoi`, `xuong` dùng mật khẩu thử nghiệm `1234567` và phải đổi ngay. Bản đóng gói tạo mật khẩu ngẫu nhiên riêng cho từng tài khoản mới; đọc tệp `first-run-credentials-*.txt` trong `%APPDATA%\AluminumManager`, đăng nhập, đổi mật khẩu rồi xóa tệp. Nếu đã có tài khoản, backend giữ nguyên mật khẩu và trạng thái. Form production không tự điền mật khẩu. Các biến cấu hình khác được khai báo trong `application.yml`:
+Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. Khi chạy bằng script dev, tài khoản mới `admin`, `phanphoi`, `xuong` dùng mật khẩu thử nghiệm `1234567` và phải đổi ngay. Bản đóng gói tạo mật khẩu ngẫu nhiên riêng cho từng tài khoản mới; đọc tệp `first-run-credentials-*.txt` trong `%APPDATA%\AluminumManager`, đăng nhập, đổi mật khẩu rồi xóa tệp. Nếu đã có tài khoản, backend giữ nguyên mật khẩu và trạng thái. Backup mới giữ hash của ba tài khoản trong archive mã hóa để phục hồi vẫn dùng mật khẩu cũ; backup cũ vẫn cần mật khẩu lần đầu. Form production không tự điền mật khẩu. Các biến cấu hình khác được khai báo trong `application.yml`:
 
 - `ALUMINUM_JWT_SECRET` (ít nhất 32 byte)
 - `ALUMINUM_DB_USERNAME`
@@ -62,6 +62,8 @@ Các phép thử kiểm tra quy đổi khối lượng, phép tính kho, từ ch
 ## Quyết toán nhôm xưởng theo năm
 
 ### Nạp dữ liệu mẫu để thử kỳ 2025
+
+Để thử trên một database riêng, dùng schema trống đã chạy Flyway, chuẩn bị ba loại nhôm và ba sản phẩm đơn vị kg có tên loại khớp ở mỗi sổ, rồi trỏ cấu hình MySQL của seeder vào schema đó. Trong bộ mẫu, Xưởng chi 30.000 đồng tiền nước và bánh mỗi ngày. Năm thợ có lịch đi làm khác nhau và bốn ca tăng mỗi người mỗi tháng, rải theo lịch mẫu với thời lượng 1, 1,5 hoặc 2 giờ. Tiền công mẫu cộng theo số giờ đã ghi.
 
 Để xóa dữ liệu nghiệp vụ và tự nhập lại phiếu từ năm 2025, sao lưu MySQL trước rồi chạy `scripts/reset-business-data.sql`. Lệnh này xóa phiếu kho, thu chi, khách hàng, nhân viên, chấm công, kiểm kê, bản chốt và các kỳ tháng/năm đang làm việc; giữ danh mục nhôm, sản phẩm, tài khoản, thông tin cửa hàng, ngân hàng và cấu hình ứng dụng. Giá nhập tham chiếu được đặt lại thành một mốc đầu kỳ 01/01/2025 từ giá hiện có của từng loại. Trường **Ngày phiếu** trên phiếu nhập/bán cho chọn ngày giờ quá khứ; phiếu Xưởng chỉ bị khóa nếu ngày đó thuộc kỳ đã chốt.
 

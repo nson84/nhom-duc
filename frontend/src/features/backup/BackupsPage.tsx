@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Tag, Typography, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -105,7 +105,7 @@ export function BackupsPage() {
         {firstRunCredentials ? <><p>Thông tin đăng nhập lần đầu trên máy mới:</p>
           <Input.TextArea readOnly value={firstRunCredentials} autoSize={{ minRows: 4 }} />
           <p>Hãy cất thông tin này, đăng nhập và đổi mật khẩu ngay.</p></> :
-          <p>Dùng thông tin đăng nhập đã lưu của database này. Nếu đây là lần đầu mở trên máy mới mà chưa thấy mật khẩu, xem thư mục <code>runtime/credentials</code> cạnh hồ sơ phục hồi.</p>}
+          <p>Dùng mật khẩu đăng nhập cũ nếu bản backup được tạo bằng phiên bản mới. Với bản backup cũ, xem mật khẩu lần đầu trong thư mục <code>runtime/credentials</code> cạnh hồ sơ phục hồi.</p>}
       </>,
       onOk: () => { authStore.clear(); window.location.assign("/dang-nhap"); },
     });
@@ -211,7 +211,7 @@ export function BackupsPage() {
         <Descriptions bordered size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 16 }}>
           <Descriptions.Item label="Tần suất sao lưu">Mỗi {status.frequencyHours} giờ</Descriptions.Item>
           <Descriptions.Item label="Dự kiến lần tiếp theo">{dayjs(status.nextBackupAt).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
-          <Descriptions.Item label="Thời gian lưu giữ">{status.retentionDays} ngày</Descriptions.Item>
+          <Descriptions.Item label="Giới hạn trên máy">50 bản mới nhất</Descriptions.Item>
           <Descriptions.Item label="Thư mục lưu trữ" span={2}>
             <code>{status.effectiveDirectory}</code>
           </Descriptions.Item>
@@ -287,6 +287,8 @@ export function BackupsPage() {
                 <Tag color="green">Thành công</Tag>
               ) : v === "FAILED" ? (
                 <Tag color="red">Thất bại</Tag>
+              ) : v === "PRUNED" ? (
+                <Tag>Đã dọn bản trên máy</Tag>
               ) : (
                 <Tag color="gold">Đang chạy</Tag>
               ),
@@ -564,9 +566,8 @@ function BackupSettingsModal({
         <Form.Item name="frequencyHours" label="Tần suất sao lưu (giờ)" rules={[{ required: true }]}>
           <Select options={[1, 2, 4, 8, 24].map(value => ({ value, label: `Mỗi ${value} giờ` }))} />
         </Form.Item>
-        <Form.Item name="backupRetentionDays" label="Số ngày giữ bản sao lưu" rules={[{ required: true }]}>
-          <InputNumber min={1} max={3650} style={{ width: "100%" }} />
-        </Form.Item>
+        <Form.Item name="backupRetentionDays" hidden><Input /></Form.Item>
+        <Form.Item label="Giữ bản sao lưu trên máy">50 bản thành công mới nhất</Form.Item>
         <Form.Item
           name="backupDirectory"
           label="Thư mục lưu bản sao lưu"

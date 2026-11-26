@@ -423,7 +423,6 @@ export async function buildSaleInvoiceHtml(params: {
   const seller = doc.issuedBy?.trim() || "—";
   const buyer = customerName.trim() || doc.counterpartyName?.trim() || "—";
   const remaining = Math.max(0, Number(doc.totalAmount) - Number(doc.paidAmount));
-  const payAmount = remaining > 0 ? remaining : Number(doc.totalAmount);
   const rows = (doc.items ?? [])
     .map(
       (item) => `<tr>
@@ -438,24 +437,24 @@ export async function buildSaleInvoiceHtml(params: {
     .join("");
 
   let qrBlock = "";
-  if (!doc.internal && bank?.bankBin && bank.accountNo && payAmount > 0) {
-    const note = debtTransferNote(buyer === "—" ? "Khach" : buyer, payAmount, now);
+  if (!doc.internal && bank?.bankBin && bank.accountNo) {
+    const note = remaining > 0 ? debtTransferNote(buyer === "—" ? "Khach" : buyer, remaining, now) : "";
     const image = await vietQrDataUrl(
-      buildVietQrPayload({ bankBin: bank.bankBin, accountNo: bank.accountNo, amount: payAmount, note }),
+      buildVietQrPayload({ bankBin: bank.bankBin, accountNo: bank.accountNo, amount: remaining, note }),
     );
     qrBlock = `<div class="qr">
       <div class="qr-scan">
         <img src="${image}" alt="Mã QR chuyển khoản" />
       </div>
       <div class="qr-info">
-        <div class="qr-title">Chuyển khoản VietQR</div>
+        <div class="qr-title">${remaining > 0 ? "Chuyển khoản VietQR" : "Đã thanh toán · VietQR tài khoản nhận"}</div>
         <table>
           <tr><td>Tài khoản</td><td><b>${escapeHtml(bank.label)}</b></td></tr>
           <tr><td>Ngân hàng</td><td><b>${escapeHtml(bankName(bank.bankBin))}</b></td></tr>
           <tr><td>Số tài khoản</td><td><b>${escapeHtml(bank.accountNo)}</b></td></tr>
           ${bank.accountName ? `<tr><td>Chủ tài khoản</td><td><b>${escapeHtml(bank.accountName)}</b></td></tr>` : ""}
-          <tr><td>Số tiền</td><td><b>${formatMoney(payAmount)}</b></td></tr>
-          <tr><td>Nội dung</td><td><b>${escapeHtml(note)}</b></td></tr>
+          ${remaining > 0 ? `<tr><td>Số còn phải trả</td><td><b>${formatMoney(remaining)}</b></td></tr>
+          <tr><td>Nội dung</td><td><b>${escapeHtml(note)}</b></td></tr>` : ""}
         </table>
       </div>
     </div>`;

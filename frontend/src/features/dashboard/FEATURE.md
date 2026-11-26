@@ -64,3 +64,4 @@ Trang Chốt năm có nút Xóa kỳ với hộp xác nhận hiện ngày bắt 
 
 
 Ngày đã lưu không thể xóa bằng bộ chọn ngày. Đổi ngày đầu hoặc ngày kết thúc đã lưu có xác nhận ngày cũ và mới. Lưu ngày bắt đầu mới thành công tự chọn tháng chứa ngày đó. Tổng quan báo lỗi khi chọn một tháng chưa mở mà tháng trước chưa khóa.
+Chế độ **Theo tháng** xem khoảng tháng làm việc. **Từ đầu kỳ** áp dụng ngày bắt đầu đến hôm nay hoặc ngày chốt cho toàn bộ chỉ tiêu, khối lượng giao theo loại và biểu đồ. Bộ chọn tháng làm việc vẫn dùng cho thao tác mở và khóa tháng. Tổng nhôm nhập quy đổi từ kg sang tấn, gồm phiếu nhập nội bộ đã xác nhận.

@@ -1,5 +1,7 @@
 # Sao lưu và phục hồi
 
+Sau khi xác minh bản mới thành công, `BackupService` giữ 50 bản `.ndbak` mới nhất được ghi nhận bởi database hiện tại trong thư mục sao lưu đang cấu hình. Bản vượt giới hạn chỉ bị xóa nếu checksum còn khớp. Nhật ký giữ trạng thái `PRUNED` (V47). Tệp ngoài thư mục, bản SQL cũ và bản trên R2 không nằm trong chính sách này. Lỗi dọn tệp được ghi log và không đổi bản mới thành thất bại.
+
 21/11: launcher `scripts/start-recovered-backend.ps1` được đóng gói cạnh `aluminum-manager.jar` trong tài nguyên Tauri; tự tìm JAR cùng thư mục khi chạy từ bộ cài. Luồng tải R2, xác minh, dựng DB riêng và giữ DB cũ không đổi. Xem `docs/backup-recovery-guide.md` cho các bước trên máy mới.
 `R2LatestBackupReadIT` là kiểm thử tùy chọn chỉ đọc object `.ndbak` mới nhất trên R2 thật, so kích thước/checksum rồi giải mã bằng khóa máy đang dùng; không xuất nội dung và không ghi R2.
 
@@ -23,7 +25,7 @@ Sau khi backup thành công, tác vụ nền thử tải `.ndbak` cùng manifest
 
 Dựng database thử cần Admin nhập tạm tài khoản MySQL có quyền CREATE DATABASE. Mật khẩu chỉ đi trong yêu cầu cục bộ, không lưu trong cấu hình hoặc log ứng dụng. Tài khoản vận hành `aluminum_app` chỉ có quyền database hiện tại nên không thể dùng cho bước này trên máy phát triển hiện tại.
 
-Sau khi mở desktop khoảng 30 giây, desktop yêu cầu một bản `startup` kể cả khi backend đã chạy sẵn. Khi đóng bình thường, desktop yêu cầu bản `shutdown`: nếu sở hữu backend thì dùng stdin rồi dừng Java; nếu dùng backend có sẵn thì dùng API loopback và giữ backend đó chạy. Sau bản `shutdown` thành công, backend đợi thử đồng bộ R2 trước khi trả lời/thoát; lỗi mạng vẫn giữ bản local và được thử lại khi backend chạy lần sau. API yêu cầu mã ngẫu nhiên trong tệp chỉ chủ Windows đọc được, đổi mỗi lần backend khởi động; không nhận truy cập từ mạng ngoài. Backend cũ không có API này cần được khởi động lại bằng bản mới. Tick đầu riêng của backend (trễ khoảng 30 giây) vẫn tạo backup nếu bản gần nhất đã cách ít nhất 5 phút; các tick sau theo lịch 1/2/4/8/24 giờ. Bản thành công được thử đồng bộ lên R2; lỗi mạng được thử lại mỗi 5 phút khi backend còn chạy. Lịch tắt ở chế độ diễn tập phục hồi tắt backup tự động. Không xóa bản local cũ theo retention lúc này. Bộ tạo SQL V2 hiện vẫn dùng bộ nhớ theo kích thước dữ liệu và ảnh; cần tối ưu streaming trước khi dùng với dữ liệu rất lớn.
+Sau khi mở desktop khoảng 30 giây, desktop yêu cầu một bản `startup` kể cả khi backend đã chạy sẵn. Khi đóng bình thường, desktop yêu cầu bản `shutdown`: nếu sở hữu backend thì dùng stdin rồi dừng Java; nếu dùng backend có sẵn thì dùng API loopback và giữ backend đó chạy. Sau bản `shutdown` thành công, backend đợi thử đồng bộ R2 trước khi trả lời/thoát; lỗi mạng vẫn giữ bản local và được thử lại khi backend chạy lần sau. API yêu cầu mã ngẫu nhiên trong tệp chỉ chủ Windows đọc được, đổi mỗi lần backend khởi động; không nhận truy cập từ mạng ngoài. Backend cũ không có API này cần được khởi động lại bằng bản mới. Tick đầu riêng của backend (trễ khoảng 30 giây) vẫn tạo backup nếu bản gần nhất đã cách ít nhất 5 phút; các tick sau theo lịch 1/2/4/8/24 giờ. Bản thành công được thử đồng bộ lên R2; lỗi mạng được thử lại mỗi 5 phút khi backend còn chạy. Lịch tắt ở chế độ diễn tập phục hồi tắt backup tự động. Bộ tạo SQL V2 hiện vẫn dùng bộ nhớ theo kích thước dữ liệu và ảnh; cần tối ưu streaming trước khi dùng với dữ liệu rất lớn.
 
 [backup](../../../../../../../../frontend/src/features/backup/FEATURE.md)
 
@@ -41,7 +43,7 @@ Tại audit b290, phục hồi có tác giả vẫn NOT_VERIFIED. Giới hạn n
 
 Audit b361221: mở rộng test public createManualBackup/verifiedArchive, SHA256, PNG,26 bảng bao gồm cặp nội bộ, phế liệu, raw layers và snapshot tháng/năm. Liệt kê thêm FK local của attendance_day_locks và customer_leads; không tự sửa liên kết hoặc khôi phục tài khoản. Test máy mới có tài khoản khác cùngID vẫn bị từ chối thay vì gán nhầm tác giả. Workload gần32Mi ký tự khôi phục đủ, vượt giới hạn báo FAILED và giữ bản cũ, không gọi upload file lỗi. Dump vẫn dùng RAM; số đo và giới hạn tại docs/audit-next-main.md.
 
-20/11: V44 giữ các tác giả được tham chiếu bằng bản ghi không đăng nhập được (__historical_ID, tên gốc ở historical_username, mật khẩu sentinel, inactive bắt buộc bởi CHECK). Không xuất hash/phiên/quyền cũ; giữ ID FK và ngày lịch sử, cả audit_logs. Database mới có account trùng ID không bị thay đổi vì luôn dựng DB riêng. Test closed/reopened payroll, khóa ngày công, lead và nhật ký; kiểm tra không kích hoạt lại được actor.
+20/11: V44 giữ các tác giả được tham chiếu bằng bản ghi không đăng nhập được (__historical_ID, tên gốc ở historical_username, mật khẩu sentinel, inactive bắt buộc bởi CHECK). Bản backup mới xuất riêng ba tài khoản vận hành `admin`, `phanphoi`, `xuong` cùng hash mật khẩu, vai trò và trạng thái vào archive đã mã hóa để phục hồi vẫn đăng nhập bằng mật khẩu cũ; không xuất phiên. Các tác giả khác vẫn bị khóa. Database cũ không bị thay đổi vì luôn dựng DB riêng. Bản backup cũ không có hash thì tài khoản được bootstrap mật khẩu lần đầu.
 
 Sau xác minh staging, trả thêm profilePath và ghi hồ sơ JSON chỉ chủ máy đọc, không chứa thông tin xác thực MySQL. Tauri mới có thể chuyển sang DB này bằng nút, giữ DB trước để quay lại; launcher start-recovered-backend.ps1 vẫn là công cụ cũ. Backend phục hồi chạy với APPDATA/credentials riêng, lịch sao lưu local bật khi người dùng chọn vận hành. Khóa giải mã đã dùng để dựng bản sao được chuyển an toàn sang runtime mới; cấu hình R2 đã nhập trên máy được sao chép sang runtime này và cần kiểm tra kết nối. Không bật restore trực tiếp. Hướng dẫn: docs/recovery-runbook.md.
 
@@ -51,3 +53,5 @@ R2LiveRecoveryIT là test opt-in riêng với ALUMINUM_TEST_R2_CONFIG_FILE trỏ
 
 
 Backend local chạy bằng dev-backend.ps1 với cấu hình MySQL mặc định có thể bàn giao cho desktop. dev-handoff-check trả đường dẫn ảnh sau xác thực loopback và token; dev-handoff chỉ dừng JVM sau khi sao lưu thành công.
+
+`StagedRestoreService` dùng `ALUMINUM_RESTORE_STAGING_DIR` do desktop hoặc launcher truyền để ghi hồ sơ và ảnh vào thư mục dựng DB chính, kể cả khi backend có runtime riêng.

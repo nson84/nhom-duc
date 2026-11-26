@@ -53,7 +53,7 @@ export function ChangePasswordPage() {
   return (
     <div className="startup-screen">
       <Card className="startup-card" title="Đổi mật khẩu">
-        <p>Tài khoản quản trị cần mật khẩu mới trước khi vào các nghiệp vụ.</p>
+        <p>Xác nhận mật khẩu hiện tại hoặc nhập mật khẩu mới để vào ứng dụng.</p>
         <Form layout="vertical" onFinish={onSubmit}>
           <Controller
             name="currentPassword"

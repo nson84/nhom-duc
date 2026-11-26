@@ -18,6 +18,7 @@ public record DashboardSummary(
 		BigDecimal cashExpenses,
 		Closing closing,
 		BigDecimal purchaseAmount,
+		BigDecimal purchaseKg,
 		BigDecimal deliveredKg
 ) {
 	public record Closing(BigDecimal quantityKg, BigDecimal inventoryValue, BigDecimal profit) {}

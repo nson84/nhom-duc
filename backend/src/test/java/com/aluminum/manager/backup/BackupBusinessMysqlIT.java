@@ -35,6 +35,13 @@ class BackupBusinessMysqlIT {
         var source = new DriverManagerDataSource(sourceUrl, user, password);
         Flyway.configure().dataSource(source).locations("classpath:db/migration").load().migrate();
         var jdbc = new JdbcTemplate(source);
+        var encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+        for (String account : java.util.List.of("admin", "phanphoi", "xuong")) {
+            String role = account.equals("admin") ? "ADMIN" : account.equals("phanphoi") ? "DISTRIBUTION" : "MANUFACTURING";
+            String shop = account.equals("admin") ? null : role;
+            jdbc.update("INSERT INTO admin_users (username, role, shop_code, password_hash, must_change_password) VALUES (?, ?, ?, ?, FALSE)",
+                    account, role, shop, encoder.encode("existing-password-123"));
+        }
         assertEquals(java.util.List.of("attendance_day_locks.locked_by_admin_id", "customer_leads.contacted_by_admin_id", "payroll_periods.closed_by_admin_id", "payroll_periods.reopened_by_admin_id"),
                 jdbc.queryForList("SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME = 'admin_users' AND TABLE_NAME <> 'audit_logs' ORDER BY TABLE_NAME, COLUMN_NAME", String.class));
         byte[] image = java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO7sAAAAASUVORK5CYII=");
@@ -148,7 +155,7 @@ class BackupBusinessMysqlIT {
         new EncryptedBackupCodec().encrypt(dump.replaceAll("(?m)^-- IMAGE .*\\r?\\n", "").getBytes(java.nio.charset.StandardCharsets.UTF_8), key, missingImage);
         assertThrows(java.io.IOException.class, () -> new StagedRestoreService(new EncryptedBackupCodec(), recovery, url, user, password)
                 .prepare(missingImage, null, user, password), "An imported product must not silently reference a missing image");
-        // Historical actors must survive without restoring login credentials or binding to a new owner.
+        // Non-login historical actors stay disabled; the three operator accounts keep their hashes.
         jdbc.update("INSERT INTO admin_users (id, username, password_hash) VALUES (101, 'test-actor', 'not-a-login-hash')");
         jdbc.update("UPDATE payroll_periods SET status = 'CLOSED', closed_at = '2025-02-28', closed_by_admin_id = 101 WHERE id = 101");
         jdbc.update("UPDATE payroll_periods SET reopened_by_admin_id = 101, reopened_at = '2025-02-27' WHERE id = 101");
@@ -158,10 +165,16 @@ class BackupBusinessMysqlIT {
         String closedDump = ReflectionTestUtils.invokeMethod(service, "buildDatabaseDump", LocalDateTime.now());
         Path closedArchive = directory.resolve("closed-payroll.ndbak");
         new EncryptedBackupCodec().encrypt(closedDump.getBytes(java.nio.charset.StandardCharsets.UTF_8), key, closedArchive);
-        assertFalse(closedDump.contains("not-a-login-hash"), "Never archive a password hash");
+        assertFalse(closedDump.contains("not-a-login-hash"), "Never archive a non-login actor hash");
         var closedResult = new StagedRestoreService(new EncryptedBackupCodec(), recovery, url, user, password)
                 .prepare(closedArchive, null, user, password);
         var closedRestored = new JdbcTemplate(new DriverManagerDataSource(StagedRestoreService.stagingUrl(url, closedResult.databaseName()), user, password));
+        for (String account : java.util.List.of("admin", "phanphoi", "xuong")) {
+            assertEquals(jdbc.queryForObject("SELECT password_hash FROM admin_users WHERE username = ?", String.class, account),
+                    closedRestored.queryForObject("SELECT password_hash FROM admin_users WHERE username = ?", String.class, account));
+            assertTrue(encoder.matches("existing-password-123", closedRestored.queryForObject(
+                    "SELECT password_hash FROM admin_users WHERE username = ?", String.class, account)));
+        }
         assertEquals(101L, closedRestored.queryForObject("SELECT closed_by_admin_id FROM payroll_periods WHERE id = 101", Long.class));
         assertEquals("test-actor", closedRestored.queryForObject("SELECT historical_username FROM admin_users WHERE id = 101", String.class));
         assertEquals(false, closedRestored.queryForObject("SELECT is_active FROM admin_users WHERE id = 101", Boolean.class));

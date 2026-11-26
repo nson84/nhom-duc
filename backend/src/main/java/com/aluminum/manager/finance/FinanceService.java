@@ -647,7 +647,7 @@ public class FinanceService {
 				FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				JOIN products p ON p.id = i.product_id
-				JOIN product_categories c ON c.id = p.category_id
+				JOIN product_categories c ON c.id = i.category_id
 				WHERE d.document_type = 'SALE' AND d.status = 'CONFIRMED' AND d.is_internal = 0
 				  AND d.document_date >= ? AND d.document_date < ?
 				""");
@@ -659,7 +659,7 @@ public class FinanceService {
 			args.add(productId);
 		}
 		if (categoryId != null) {
-			sql.append(" AND p.category_id = ?");
+			sql.append(" AND i.category_id = ?");
 			args.add(categoryId);
 		}
 		sql.append(shops.scope("d"));
@@ -771,16 +771,19 @@ public class FinanceService {
 				       c.name AS category_name, p.base_unit_name,
 				       b.quantity_base AS current_qty, b.average_cost_per_base AS avg_cost,
 				       COALESCE((SELECT SUM(m.quantity_delta_base) FROM stock_movements m
-				                 WHERE m.product_id = p.id AND m.movement_at < ?), 0) AS opening_qty,
+				                 WHERE m.product_id = b.product_id AND m.category_id = b.category_id
+				                 AND m.movement_at < ?), 0) AS opening_qty,
 				       COALESCE((SELECT SUM(m.quantity_delta_base) FROM stock_movements m
-				                 WHERE m.product_id = p.id AND m.movement_at >= ? AND m.movement_at < ?
+				                 WHERE m.product_id = b.product_id AND m.category_id = b.category_id
+				                 AND m.movement_at >= ? AND m.movement_at < ?
 				                   AND m.quantity_delta_base > 0), 0) AS in_qty,
 				       COALESCE((SELECT SUM(-m.quantity_delta_base) FROM stock_movements m
-				                 WHERE m.product_id = p.id AND m.movement_at >= ? AND m.movement_at < ?
+				                 WHERE m.product_id = b.product_id AND m.category_id = b.category_id
+				                 AND m.movement_at >= ? AND m.movement_at < ?
 				                   AND m.quantity_delta_base < 0), 0) AS out_qty
 				FROM products p
-				JOIN product_categories c ON c.id = p.category_id
 				JOIN stock_balances b ON b.product_id = p.id
+				JOIN product_categories c ON c.id = b.category_id
 				WHERE 1 = 1
 				""");
 		List<Object> args = new ArrayList<>();
@@ -790,10 +793,10 @@ public class FinanceService {
 		args.add(start);
 		args.add(end);
 		if (categoryId != null) {
-			sql.append(" AND p.category_id = ?");
+			sql.append(" AND b.category_id = ?");
 			args.add(categoryId);
 		}
-		sql.append(" ORDER BY p.product_code ASC");
+		sql.append(" ORDER BY p.product_code ASC, c.name ASC");
 
 		return jdbc.query(shops.apply(sql.toString()), (rs, i) -> {
 			BigDecimal opening = rs.getBigDecimal("opening_qty").setScale(QTY_SCALE, ROUNDING);

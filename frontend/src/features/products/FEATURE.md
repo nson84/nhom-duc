@@ -18,7 +18,7 @@ Bảng loại nhôm và lịch sử giá cuộn ngang bên trong modal khi cửa
 - Ảnh lưu khi bấm lưu sản phẩm. Đồng bộ danh mục chép ảnh sang Xưởng cho cả sản phẩm mới và sản phẩm đã có cùng mã.
 - Đơn vị quy đổi kg/tạ/tấn tự tạo nội bộ
 - **Loại nhôm** (modal): tên, trạng thái + **giá nhập / tấn**, **giá bán / kg, / tạ, / tấn**; lịch sử giá nhập theo loại (đ/kg)
-- Mọi SP dùng được mọi loại trong shop — chọn cặp SP+loại lúc lập phiếu
+- Mọi SP dùng được mọi loại trong shop. Form sản phẩm không gợi ý tên từ danh sách loại nhôm và không có ô loại nhôm. Chọn sản phẩm và loại nhôm riêng trên từng dòng phiếu.
 - Tồn theo cặp **SP + loại nhôm** (kg) — **tồn riêng từng shop**, không chia sẻ
 - **Đồng bộ danh mục** (nút trên trang): đẩy SP + loại sang shop kia (khớp mã SP / tên loại). Loại mới chỉ copy giá nhập tham khảo, để giá bán Xưởng bằng 0 để người dùng đặt riêng; loại đã có cập nhật giá nhập tham khảo theo mốc có hiệu lực nhưng giữ giá bán Xưởng. Sau đồng bộ, Xưởng được nhắc kiểm tra giá bán bằng cảnh báo và viền vàng các ô giá; có thể sửa giá hoặc xác nhận giữ nguyên. Phục vụ xuất nội bộ dễ chọn cùng mã/loại — **không đồng bộ tồn**
 - **Đồng bộ danh mục** (nút trên trang): đẩy SP + loại sang shop kia (khớp mã SP / tên loại). Loại mới chỉ copy giá nhập tham khảo, để giá bán Xưởng bằng 0 để người dùng đặt riêng; loại đã có cập nhật giá nhập tham khảo theo mốc có hiệu lực nhưng giữ giá bán, mô tả và trạng thái Xưởng. SP đã có chỉ đồng bộ tên và ảnh, giữ mô tả/trạng thái Xưởng. Sau đồng bộ, Xưởng được nhắc kiểm tra giá bán bằng cảnh báo và viền vàng các ô giá; có thể sửa giá hoặc xác nhận giữ nguyên. Phục vụ xuất nội bộ dễ chọn cùng mã/loại — **không đồng bộ tồn**

@@ -55,8 +55,12 @@ public class StagedRestoreService {
 		while (validationLines.hasNext()) BackupSqlPolicy.validate(validationLines.next().trim());
 		int images = verifyImages(sql);
 		String database = "aluminum_restore_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-		Path imageDirectory = Path.of(System.getenv().getOrDefault("APPDATA", System.getProperty("user.home")),
-				"AluminumManager", "restore-staging", database, "image");
+		String stagingDirectory = System.getenv("ALUMINUM_RESTORE_STAGING_DIR");
+		Path stagingRoot = stagingDirectory == null || stagingDirectory.isBlank()
+				? Path.of(System.getenv().getOrDefault("APPDATA", System.getProperty("user.home")),
+						"AluminumManager", "restore-staging")
+				: Path.of(stagingDirectory);
+		Path imageDirectory = stagingRoot.resolve(database).resolve("image");
 		Files.createDirectories(imageDirectory);
 		R2CloudService.setOwnerOnly(imageDirectory.getParent());
 		R2CloudService.setOwnerOnly(imageDirectory);

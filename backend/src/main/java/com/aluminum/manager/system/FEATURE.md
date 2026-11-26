@@ -4,7 +4,11 @@
 
 ## Chức năng hiện có
 
+`/system/ready` trả 503 khi Spring Boot còn chạy các bước khởi tạo, bao gồm tạo tài khoản lần đầu. Sau khi app nhận kết nối, endpoint mới kiểm tra database và báo sẵn sàng.
+
 `SettingsController`, `BankReceivingAccountController`, `SystemController`; cài đặt, QR nhận tiền, audit và trạng thái sẵn sàng.
+
+Trường cài đặt số ngày giữ backup được bảo lưu để tương thích API cũ. `BackupService` áp dụng giới hạn 50 bản trên máy.
 
 ## Màn hình liên quan
 

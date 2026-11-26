@@ -1,5 +1,19 @@
 # Kiểm thử đã khóa và phần còn lại
 
+Hồi quy danh mục: dùng cùng một sản phẩm không gắn loại cho hai loại nhôm, kiểm tra bộ lọc loại trong báo cáo bán và số tồn từng cặp sản phẩm và loại. Kiểm tra form sản phẩm không có ô loại nhôm và trên phiếu phải chọn loại riêng.
+
+Hồi quy thu nợ theo đợt: lập phiếu tháng 2, ghi thu tháng 3, kiểm tra chỉ phiếu đã chọn giảm nợ, số dư lỗi làm cả đợt hoàn tác và gửi lại cùng mã đợt không ghi trùng. Biên nhận in một dòng cho mỗi hóa đơn, QR không có số tiền.
+
+## Kiểm thử Windows 26/11/2026 cho V47
+
+- Kiểm tra bổ sung trên R2 thật: `R2LiveRecoveryIT` đạt 1/1, dùng một tệp mã hóa QA dưới `verification/`, kiểm tra tải lên, tải xuống, đối chiếu byte và phục hồi dữ liệu mẫu trên MySQL riêng đến V47. Dọn tệp QA và đối chiếu cấu hình R2 giữ nguyên.
+- File desktop phát hành và JAR đi kèm khởi động đúng database QA riêng V47, thực hiện đăng nhập lần đầu qua API. Hai lượt điều khiển cửa sổ hết phiên trước nút chuyển database. Chưa xác nhận chuyển/quay lại bằng giao diện hoặc cài/gỡ trên Windows sạch.
+
+- Backend chạy 104 unit test và 49 integration test MySQL, tổng 153 ca, không lỗi hoặc bỏ qua. Frontend có 11 ca Node và build đạt. Rust desktop có 4 ca và hai script kiểm tra đóng gói, chạy backend đã phục hồi đều đạt.
+- System test trên MySQL riêng kiểm tra khởi tạo và phân quyền ba tài khoản, nhập/bán theo tấn, thu và trả nợ cùng kỳ, gửi lại yêu cầu thanh toán, số kg và số tiền trên Tổng quan, chi phí hoạt động, chấm công và tiền tăng ca.
+- Dữ liệu QA có phiếu từ kỳ trước để kiểm tra thu và trả nợ trong tháng khóa. Gửi thiếu xác nhận hoặc sai tháng bị từ chối, xác nhận đúng tháng ghi khoản thanh toán và giữ trạng thái khóa. Trình duyệt xác minh gộp hai khoản cùng ngày thành một dòng và không cần cuộn ngang ở 408 px; lãi gộp theo ngày hiện ở hai sổ.
+- API tạo 51 bản backup, giữ đúng 50 tệp, ghi nhật ký bản đã dọn. Bản mới được xác minh và dựng thành một database phục hồi riêng với Flyway V47. Phần kiểm tra R2 dùng mô phỏng; cần Windows runner sạch để chạy cài/gỡ NSIS và chuyển DB trên app đóng gói.
+
 ## Kết quả kiểm thử 26/11/2026
 
 - Workspace V46: 100 test Java và 49 test tích hợp MySQL trên instance riêng cổng 13307 đạt. 11 test frontend, build frontend và hai test script Windows build/recovered backend đạt.
@@ -80,7 +94,8 @@ Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên 
 
 Xem [biên bản rà soát responsive](responsive-audit.md). Quét các route chính ở 1920×1080, 1600×900, 1366×768, 1280×720, 1024×768 và 900×600; kiểm tra chiều rộng trang và vùng nội dung, thanh cuộn riêng của bảng nhiều cột, menu Drawer dưới 1200 px, modal nhập/bán thấp 600 px và footer luôn dùng được. Kiểm tra sáng/tối cho modal, trạng thái dữ liệu dài, dropdown, thông báo, bản xem trước PDF và các vai trò Admin/Phân phối/Xưởng khi có phiên tương ứng.
 
-Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và buộc đổi; bản production sinh mật khẩu ngẫu nhiên riêng cho tài khoản mới, form không tự điền. Khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có.
+Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và buộc đổi; bản production sinh mật khẩu ngẫu nhiên riêng cho tài khoản mới, form không tự điền. Khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có. Backup mới giữ hash của ba tài khoản vận hành trong archive mã hóa; sau dựng DB thử cần kiểm tra đăng nhập bằng mật khẩu cũ. Backup cũ vẫn dùng bootstrap cho tài khoản thiếu.
+Hồi quy xác nhận mật khẩu bắt buộc: nhập đúng mật khẩu hiện tại và cùng giá trị ở hai ô mới phải hoàn tất, giữ hash và thu hồi token cũ; nhập sai mật khẩu hiện tại vẫn bị từ chối.
 
 # Kiểm thử lọc và chốt tháng
 
@@ -201,3 +216,11 @@ StockLifecycleMysqlIT kiểm tra từ chối mốc kết thúc loại chứng t�
 Kiểm tra endpoint bàn giao từ chối thiếu token. Kiểm thử desktop cần build Tauri, chạy launcher dev mặc định, chọn bản phục hồi, xác nhận backend mới đúng tên DB và thử quay lại DB gốc/ảnh gốc. Kiểm tra backend không bật bàn giao và cổng của dịch vụ khác.
 
 StockLifecycleMysqlIT kiểm tra sửa phiếu chi giữ mã, đổi số tiền và người chi trên cùng chứng từ, từ chối khi tháng đã khóa.
+
+Hồi quy desktop: đang dùng DB phục hồi, dựng thêm DB từ bản local hoặc R2, kiểm tra hồ sơ nằm trong thư mục con trực tiếp của `restore-staging` chính rồi bấm **Dùng dữ liệu này**.
+
+Bộ dữ liệu mẫu kiểm tra trong giao dịch rằng Xưởng có đủ khoản nước bánh 30.000 đồng theo số ngày trong năm, 12 kỳ công, 240 ca tăng và ba mức thời lượng. Cả hai sổ có khách đã trả đủ, trả một phần, chưa trả, trả nhiều lần và trả nợ chuyển kỳ.
+Bộ lọc Tổng quan cần đối chiếu thẻ nhập/giao, bảng giao theo loại và biểu đồ khi đổi giữa tháng và từ đầu kỳ mà vẫn giữ tháng làm việc. Lãi gộp theo ngày cần đối chiếu nhiều hóa đơn cùng ngày, phiếu nội bộ và ngày có hóa đơn thiếu giá vốn ở cả hai vai trò.
+Hồi quy thu và trả nợ chuyển kỳ trong tháng đã khóa: yêu cầu thường bị từ chối, xác nhận riêng cho phép ghi đúng ngày nếu kỳ năm còn mở. Kiểm tra tháng chọn sai, tháng chưa mở, kỳ năm đã chốt và phiếu lập trong kỳ đều bị từ chối.
+Hồi quy Công nợ: đang xem tháng 02/2026, mở thu và trả nợ phiếu 2025, chọn ngày 25/03/2026 và kiểm tra xác nhận dùng tháng 03/2026. Ngày thuộc tháng đã khóa hiện cảnh báo ngay trong lần xác nhận; tháng chưa mở báo lỗi tại ô ngày.
+Hồi quy giữ backup trên máy: tạo 52 bản đã ghi nhận, kiểm tra 50 bản mới nhất còn tồn tại và hai bản cũ đã dọn. Bảo toàn tệp ngoài thư mục cấu hình và tệp có checksum sai.

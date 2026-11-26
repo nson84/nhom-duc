@@ -181,6 +181,12 @@ export async function getDocument(id: number, internalHistory = false) {
   return (await api.get<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`, { params: internalHistory ? { internalHistory } : undefined })).data.data;
 }
 
+export async function getCarryoverDocument(id: number) {
+  return (await api.get<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`, {
+    params: { workingYear: null, workingMonth: null },
+  })).data.data;
+}
+
 export async function saveDocument(id: number | undefined, input: DocumentInput, confirm = false) {
   const response = id
     ? await api.put<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}`, input, { params: { confirm } })
@@ -210,9 +216,26 @@ export async function addPayment(
     idempotencyKey: string;
     collectedBy?: string;
     paidBy?: string;
+    confirmLockedCarryoverMonth?: boolean;
   },
+  period?: { workingYear: number; workingMonth: string },
 ) {
-  return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/payments`, input)).data.data;
+  return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/payments`, input, { params: period })).data.data;
+}
+
+export type BatchCollectionItem = { documentId: number; documentCode: string; documentDate: string; amount: number };
+
+export async function collectCustomerDebt(input: {
+  customerId: number;
+  paymentDate: string;
+  paymentMethod: string;
+  collectedBy: string;
+  receiptId: string;
+  invoices: { documentId: number; amount: number }[];
+}, workingYear: number) {
+  return (await api.post<Envelope<BatchCollectionItem[]>>("/api/v1/stock-documents/payments/batch", input, {
+    params: { workingYear, workingMonth: input.paymentDate.slice(0, 7) },
+  })).data.data;
 }
 
 export async function editPaymentDate(id: number, paymentId: number, date: string) {
