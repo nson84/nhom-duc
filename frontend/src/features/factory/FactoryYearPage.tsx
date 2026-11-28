@@ -1,8 +1,10 @@
-import { CheckOutlined, CloseOutlined, DollarOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
+import { reopenYear } from "../dashboard/dashboard-api";
+import { useWorkingPeriodInfo } from "../dashboard/working-period";
+import { CheckOutlined, CloseOutlined, DollarOutlined, PlusOutlined, SaveOutlined, UnlockOutlined } from "@ant-design/icons";
 import { useSession } from "../auth/auth-store";
-import { Alert, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Tag, Typography, message } from "antd";
+import { Alert, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Tag, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AppActionButton } from "../../components/AppButtons";
 import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
@@ -40,6 +42,17 @@ const qty = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
 const showKg = (value: number | null | undefined) => value == null ? "—" : `${qty.format(value)} kg`;
 const showMoney = (value: number | null | undefined) => value == null ? "—" : formatMoney(value);
 
+function formatCountKg(value: number | string | undefined): string {
+  if (value === undefined || value === null || value === "") return "";
+  const [whole, fraction] = String(value).replace(/,/g, "").split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+}
+
+function roundKg(value: number): number {
+  return Math.max(0, Math.round(value * 1000) / 1000);
+}
+
 type ScrapForm = {
   saleDate: Dayjs;
   quantity: number;
@@ -59,11 +72,7 @@ export function FactoryYearPage() {
   const location = useLocation();
   const session = useSession();
   const canWrite = useCanWrite();
-  const [year, setYear] = useState(() => {
-    const requested = Number(new URLSearchParams(location.search).get("year"));
-    return Number.isInteger(requested) && requested >= 2000 && requested <= 2100
-      ? requested : workingYear.year;
-  });
+  const year = workingYear.year;
   const [periodFrom, setPeriodFrom] = useState<Dayjs>(dayjs().startOf("year"));
   const [periodTo, setPeriodTo] = useState<Dayjs>(dayjs().endOf("year"));
   const [report, setReport] = useState<YearReport | null>(null);
@@ -71,7 +80,7 @@ export function FactoryYearPage() {
   const [settlement, setSettlement] = useState<SettlementReport | null>(null);
   const [count, setCount] = useState<YearCount | null>(null);
   const [rawCounts, setRawCounts] = useState<RawCount[]>([]);
-  const [rawInputs, setRawInputs] = useState<{ categoryId: number; categoryName: string; quantityKg: number }[]>([]);
+  const [rawInputs, setRawInputs] = useState<{ categoryId: number; categoryName: string; quantityKg: number | null; openingKg: number; purchasedKg: number; deliveredKg: number }[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [saleCosts, setSaleCosts] = useState<SaleCostReport | null>(null);
   const [saleCategoryId, setSaleCategoryId] = useState<number | undefined>();
@@ -82,27 +91,34 @@ export function FactoryYearPage() {
   const [paying, setPaying] = useState<ScrapSale | null>(null);
   const [paymentKey, setPaymentKey] = useState(crypto.randomUUID());
   const [saving, setSaving] = useState(false);
+  const [clampTick, setClampTick] = useState(0);
   const [countForm] = Form.useForm<YearCountInput>();
+  const watchedScrapKg = Number(Form.useWatch("scrapKg", countForm) ?? 0);
   const [scrapForm] = Form.useForm<ScrapForm>();
   const scrapUnit = Form.useWatch("unit", scrapForm) ?? "kg";
   const [paymentForm] = Form.useForm<PaymentForm>();
 
-  useEffect(() => { setYear(workingYear.year); setSettlementMonth(workingYear.month); }, [workingYear.year, workingYear.month]);
+  const selectedMonth = workingYear.month;
+  const periodInfo = useWorkingPeriodInfo(year, count?.status);
+  useEffect(() => { setSettlementMonth(selectedMonth); }, [selectedMonth, year]);
 
-  const visibleSaleRows = workingYear.month
-    ? (saleCosts?.rows ?? []).filter((row) => dayjs(row.documentDate).format("YYYY-MM") === workingYear.month)
+  const visibleSaleRows = selectedMonth
+    ? (saleCosts?.rows ?? []).filter((row) => dayjs(row.documentDate).format("YYYY-MM") === selectedMonth)
     : (saleCosts?.rows ?? []);
-  const visibleScrapSales = workingYear.month
-    ? sales.filter((sale) => dayjs(sale.saleDate).format("YYYY-MM") === workingYear.month)
+  const visibleScrapSales = selectedMonth
+    ? sales.filter((sale) => dayjs(sale.saleDate).format("YYYY-MM") === selectedMonth)
     : sales;
 
+  const latestLoad = useRef(0);
   const load = useCallback(async () => {
+    const request = ++latestLoad.current;
     setLoading(true);
     try {
       const [nextReport, nextCount, nextSales, nextSettlement, nextRaw, nextCategories, nextSaleCosts] = await Promise.all([
         getYearReport(year), getYearCount(year), listScrapSales(year), getSettlement(year, settlementMonth),
         getRawCounts(year), listCategories(), getSaleCostReport(year, saleCategoryId),
       ]);
+      if (request !== latestLoad.current) return;
       setReport(nextReport);
       setCount(nextCount);
       setPeriodFrom(dayjs(nextCount.periodFrom));
@@ -110,21 +126,21 @@ export function FactoryYearPage() {
       setSales(nextSales);
       setSettlement(nextSettlement);
       setRawCounts(nextRaw);
-      const savedRaw = new Map(nextRaw.map((row) => [row.categoryId, row]));
-      setRawInputs([
-        ...nextCategories.map((category) => ({
-          categoryId: category.id, categoryName: category.name,
-          quantityKg: savedRaw.get(category.id)?.quantityKg ?? 0,
-        })),
-        ...nextRaw.filter((row) => !nextCategories.some((category) => category.id === row.categoryId)),
-      ]);
+      setRawInputs(nextRaw.map((row) => ({
+        categoryId: row.categoryId,
+        categoryName: row.categoryName,
+        quantityKg: row.quantityKg == null ? null : Number(row.quantityKg),
+        openingKg: Number(row.openingKg ?? 0),
+        purchasedKg: Number(row.purchasedKg),
+        deliveredKg: Number(row.deliveredKg),
+      })));
       setCategories(nextCategories);
       setSaleCosts(nextSaleCosts);
       countForm.setFieldsValue(nextCount);
     } catch (error) {
-      message.error(toApiError(error).message);
+      if (request === latestLoad.current) message.error(toApiError(error).message);
     } finally {
-      setLoading(false);
+      if (request === latestLoad.current) setLoading(false);
     }
   }, [year, settlementMonth, saleCategoryId, countForm]);
 
@@ -137,17 +153,41 @@ export function FactoryYearPage() {
   }, [loading, location.hash]);
 
   const closed = count?.status === "CLOSED";
-  const canEdit = canWrite && !closed && year <= dayjs().year();
+  const canEdit = canWrite && !loading && !closed && count?.year === year && !dayjs(count.periodFrom).isAfter(dayjs(), "day");
+
+  const totalEnteredRawKg = rawInputs.reduce((sum, item) => sum + Number(item.quantityKg ?? 0), 0);
+  const totalAvailableBeforeUnsoldScrap = roundKg(Number(report?.initialDiscrepancyKg ?? 0) - Number(report?.scrapSoldKg ?? 0));
+  const allRawCounted = rawInputs.length > 0 && rawInputs.every(item => item.quantityKg != null);
+  const categoryAvailable = (row: typeof rawInputs[number]) => Math.max(0, roundKg(row.openingKg + row.purchasedKg - row.deliveredKg));
+  const maxUnsoldScrapKg = roundKg(totalAvailableBeforeUnsoldScrap - totalEnteredRawKg);
+
+  function maxRawForCategory(categoryId: number): number {
+    const row = rawInputs.find(item => item.categoryId === categoryId);
+    const categoryNet = row ? categoryAvailable(row) : 0;
+    const otherRaw = rawInputs.reduce((sum, item) => item.categoryId === categoryId ? sum : sum + Number(item.quantityKg ?? 0), 0);
+    const remainingTotal = roundKg(totalAvailableBeforeUnsoldScrap - watchedScrapKg - otherRaw);
+    return Math.max(0, roundKg(Math.min(categoryNet, remainingTotal)));
+  }
 
   async function persistInventory(close = false) {
     const values = await countForm.validateFields();
+    const enteredScrap = Number(values.scrapKg ?? 0);
+    for (const row of rawInputs) {
+      const categoryNet = categoryAvailable(row);
+      if (Number(row.quantityKg ?? 0) > categoryNet) {
+        throw new Error(`${row.categoryName}: số kg còn trong kho không được lớn hơn (tồn đầu kỳ + nhập − giao = ${formatCountKg(categoryNet)} kg).`);
+      }
+    }
+    if (roundKg(totalEnteredRawKg + enteredScrap) > totalAvailableBeforeUnsoldScrap) {
+      throw new Error(`Tổng nguyên liệu còn trong kho và phế liệu (${formatCountKg(roundKg(totalEnteredRawKg + enteredScrap))} kg) không được lớn hơn lượng nhôm có thể còn (${formatCountKg(totalAvailableBeforeUnsoldScrap)} kg).`);
+    }
     return saveInventory(year, {
       ...values, periodFrom: periodFrom.format("YYYY-MM-DD"), periodTo: periodTo.format("YYYY-MM-DD"),
       openingKg: count?.openingKg ?? 0, openingValue: count?.openingValue ?? 0,
       rawKg: count?.rawKg ?? 0, rawValue: count?.rawValue ?? 0,
       scrapKg: values.scrapKg ?? 0, scrapValue: values.scrapValue ?? 0,
       workInProgressKg: 0, workInProgressValue: 0, finishedKg: 0, finishedValue: 0,
-    }, rawInputs, close);
+    }, rawInputs.map((r) => ({ categoryId: r.categoryId, quantityKg: Number(r.quantityKg ?? 0) })), close);
   }
 
   async function saveCount() {
@@ -178,8 +218,8 @@ export function FactoryYearPage() {
 
   function confirmClose() {
     Modal.confirm({
-      title: "Bạn đã kiểm kê tồn kho chưa?",
-      content: `Kỳ ${year}: ${periodFrom.format("DD/MM/YYYY")} – ${periodTo.format("DD/MM/YYYY")}. Hãy kiểm tra số lượng tồn thực tế đã nhập trước khi xác nhận chốt năm.`,
+      title: "Xác nhận chốt kỳ quyết toán?",
+      content: `Kỳ ${periodFrom.format("DD/MM/YYYY")} – ${periodTo.format("DD/MM/YYYY")} sẽ được khóa. Kỳ tiếp theo bắt đầu ngày ${periodTo.add(1, "day").format("DD/MM/YYYY")}. Hãy kiểm tra số cân đã nhập trước khi xác nhận.`,
       okText: "Đã kiểm kê, chốt năm",
       autoFocusButton: "cancel",
       cancelText: "Quay lại",
@@ -261,41 +301,63 @@ export function FactoryYearPage() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Card title="Quyết toán nhôm xưởng" extra={<DatePicker picker="year" value={dayjs(`${year}-01-01`)} onChange={(value) => { if (value) { setYear(value.year()); setSettlementMonth(undefined); } }} />}>
+      <Card title="Quyết toán nhôm xưởng" extra={<Typography.Text>{periodInfo.label}</Typography.Text>}>
         <Alert type="info" showIcon message="Phiếu nhập và phiếu bán thành phẩm không tự trừ tồn xưởng. Khối lượng còn lại được kiểm kê một lần khi chốt năm." />
         {report && (
           <>
             <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
-              <Col xs={12} md={6}><Statistic title="Nhôm đầu năm" value={showKg(report.openingKg)} /></Col>
-              <Col xs={12} md={6}><Statistic title="Nhôm nhập" value={showKg(report.purchasedKg)} /></Col>
-              <Col xs={12} md={6}><Statistic title="Thành phẩm đã bán" value={showKg(report.finishedSoldKg)} /></Col>
-              <Col xs={12} md={6}><Statistic title="Phế liệu đã bán" value={showKg(report.scrapSoldKg)} /></Col>
-              <Col xs={12} md={6}><Statistic title="Chênh lệch ban đầu" value={showKg(report.initialDiscrepancyKg)} /></Col>
-              <Col xs={12} md={6}><Statistic title="Còn cuối năm" value={showKg(report.closingKg)} /></Col>
-              <Col xs={12} md={6}><Statistic title="Hao hụt ước tính" value={showKg(report.estimatedLossKg)} valueStyle={report.estimatedLossKg != null && report.estimatedLossKg < 0 ? { color: "var(--color-danger)" } : undefined} /></Col>
-              <Col xs={12} md={6}><Statistic title="Lãi quản trị ước tính" value={showMoney(report.estimatedProfit)} /></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Nhôm đầu kỳ" value={showKg(report.openingKg)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Nhôm nhập" value={showKg(report.purchasedKg)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Thành phẩm đã bán" value={showKg(report.finishedSoldKg)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Phế liệu đã bán" value={showKg(report.scrapSoldKg)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Chênh lệch ban đầu" value={showKg(report.initialDiscrepancyKg)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Còn cuối kỳ" value={showKg(report.closingKg)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title={report.estimatedLossKg != null && report.estimatedLossKg < 0 ? "Tồn kiểm kê vượt số tính theo sổ" : "Hao hụt ước tính"} value={showKg(report.estimatedLossKg == null ? null : Math.abs(report.estimatedLossKg))} />
+                {report.estimatedLossKg != null && report.estimatedLossKg < 0 && <Typography.Text type="secondary">Cần đối chiếu tồn đầu kỳ và số cân cuối kỳ.</Typography.Text>}
+              </Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title={report.countStatus === "CLOSED" ? "Lãi quản trị đã chốt" : "Lãi quản trị ước tính"} value={showMoney(report.estimatedProfit)} /></Card></Col>
             </Row>
-            <Descriptions size="small" column={{ xs: 1, md: 3 }} style={{ marginTop: 20 }}>
-              <Descriptions.Item label="Tiền nhôm nhập">{showMoney(report.purchaseValue)}</Descriptions.Item>
-              <Descriptions.Item label="Giá trị tồn đầu năm">{showMoney(report.openingValue)}</Descriptions.Item>
-              <Descriptions.Item label="Giá trị tồn cuối năm">{showMoney(report.closingValue)}</Descriptions.Item>
-              <Descriptions.Item label="Chi phí nhôm trong năm">{showMoney(report.materialCost)}</Descriptions.Item>
-              <Descriptions.Item label="Doanh thu thành phẩm">{showMoney(report.finishedRevenue)}</Descriptions.Item>
-              <Descriptions.Item label="Doanh thu phế liệu">{showMoney(report.scrapRevenue)}</Descriptions.Item>
-              <Descriptions.Item label="Tiền công theo kỳ">{showMoney(report.payrollCost)}</Descriptions.Item>
-              <Descriptions.Item label="Chi phí khác đã ghi">{showMoney(report.otherExpenses)}</Descriptions.Item>
-              <Descriptions.Item label="Đã thu từ bán thành phẩm">{showMoney(report.finishedCashCollected)}</Descriptions.Item>
-              <Descriptions.Item label="Đã thu từ bán phế liệu">{showMoney(report.scrapCashCollected)}</Descriptions.Item>
-            </Descriptions>
-            {report.countStatus === "MISSING" && <Alert style={{ marginTop: 12 }} type="warning" showIcon message="Chưa kiểm kê cuối năm: chưa thể tính hao hụt và lãi năm." />}
+            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Tiền nhôm nhập" value={showMoney(report.purchaseValue)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Giá trị tồn đầu kỳ" value={showMoney(report.openingValue)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Giá trị tồn cuối kỳ" value={showMoney(report.closingValue)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Chi phí nhôm trong kỳ" value={showMoney(report.materialCost)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Doanh thu thành phẩm" value={showMoney(report.finishedRevenue)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Doanh thu phế liệu" value={showMoney(report.scrapRevenue)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Tiền công theo kỳ" value={showMoney(report.payrollCost)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Chi phí khác đã ghi" value={showMoney(report.otherExpenses)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Đã thu từ bán thành phẩm" value={showMoney(report.finishedCashCollected)} /></Card></Col>
+              <Col xs={12} md={6}><Card size="small"><Statistic title="Đã thu từ bán phế liệu" value={showMoney(report.scrapCashCollected)} /></Card></Col>
+            </Row>
+            {report.countStatus === "MISSING" && <Alert style={{ marginTop: 12 }} type="warning" showIcon message="Chưa kiểm kê cuối kỳ: chưa thể tính hao hụt và lãi." />}
           </>
         )}
       </Card>
 
-      <YearEndBalanceCard year={year} refreshKey={closed ? 1 : 0} />
+      <YearEndBalanceCard key={year} year={year} refreshKey={closed ? 1 : 0} />
 
       <OpeningInventory year={year} />
-      <div id="kiem-ke-cuoi-nam" style={{ scrollMarginTop: 16 }}><Card title={`Nhập số kg còn trong kho cuối năm ${year}`} loading={loading} extra={<Tag color={closed ? "green" : "orange"}>{closed ? "Đã chốt" : "Chưa chốt"}</Tag>}>
+      <div id="kiem-ke-cuoi-nam" style={{ scrollMarginTop: 16 }}><Card title="Nhập số kg còn trong kho cuối kỳ" loading={loading} extra={<Space>
+        <Tag color={closed ? "green" : "orange"}>{closed ? "Đã chốt" : "Chưa chốt"}</Tag>
+        {closed && canWrite && <AppActionButton tone="edit" icon={<UnlockOutlined />} onClick={() => {
+          Modal.confirm({
+            title: "Mở lại kiểm kê Xưởng?",
+            content: "Kỳ sẽ trở về trạng thái chưa chốt. Sửa số kiểm kê rồi chốt lại để cập nhật số mang sang kỳ sau.",
+            okText: "Mở lại kiểm kê",
+            cancelText: "Hủy",
+            autoFocusButton: "cancel",
+            onOk: async () => {
+              try {
+                await reopenYear(year);
+                await load();
+                message.success("Đã mở lại kiểm kê");
+              } catch (error) {
+                message.error(toApiError(error).message);
+              }
+            },
+          });
+        }}>Mở lại kiểm kê</AppActionButton>}
+      </Space>}>
         <Space wrap style={{ marginBottom: 12 }}>
           <label>Đầu kỳ <DatePicker value={periodFrom} format="DD/MM/YYYY" disabled /></label>
           <label>Ngày chốt <DatePicker value={periodTo} format="DD/MM/YYYY" disabled /></label>
@@ -309,20 +371,59 @@ export function FactoryYearPage() {
         <Form form={countForm} layout="vertical" disabled={!canEdit} initialValues={{ openingKg: 0, openingValue: 0, rawKg: 0, rawValue: 0, scrapKg: 0, scrapValue: 0, workInProgressKg: 0, workInProgressValue: 0, finishedKg: 0, finishedValue: 0 }}>
           <Card size="small" title="Nguyên liệu còn theo từng loại nhôm" style={{ marginBottom: 16 }}>
             <Typography.Paragraph type="secondary">
-              Nhập số kg cân được của từng loại. Nếu không còn hàng, để 0. Giá trị được tính từ các phiếu nhập gần nhất.
+              Nhập số kg cân được của từng loại (tối đa theo tồn đầu kỳ + nhập trong kỳ − giao trong kỳ). Nếu không còn hàng, để 0. Giá trị được tính từ các phiếu nhập gần nhất.
             </Typography.Paragraph>
-            <Table size="small" rowKey="categoryId" pagination={false} dataSource={rawInputs}
+            <Table size="small" rowKey="categoryId" pagination={false} dataSource={count?.year === year ? rawInputs : []}
               columns={[
                 { title: "Loại nhôm", dataIndex: "categoryName" },
-                { title: "Số kg còn trong kho", render: (_, row) => (
-                  <InputNumber {...qtyInputNumberProps} min={0} style={{ width: 160 }}
-                    aria-label={`Số kg còn lại của ${row.categoryName}`}
-                    value={row.quantityKg} addonAfter="kg"
-                    onChange={(quantityKg) => setRawInputs((rows) => rows.map((item) =>
-                      item.categoryId === row.categoryId ? { ...item, quantityKg: quantityKg ?? 0 } : item,
-                    ))} />
-                ) },
-                { title: "Giá trị đã lưu", render: (_, row) =>
+                { title: "Tồn đầu kỳ (kg)", align: "center", render: (_, row) => formatCountKg(roundKg(row.openingKg)) },
+                { title: "Nhập trong kỳ (kg)", align: "center", render: (_, row) => formatCountKg(roundKg(row.purchasedKg)) },
+                { title: "Giao trong kỳ (kg)", align: "center", render: (_, row) => formatCountKg(roundKg(row.deliveredKg)) },
+                { title: "Còn trong kho (kg)", align: "center", render: (_, row) => {
+                  const maxKg = maxRawForCategory(row.categoryId);
+                  return (
+                    <InputNumber
+                      key={`${row.categoryId}-${clampTick}`}
+                      min={0}
+                      max={maxKg}
+                      step={1}
+                      formatter={formatCountKg}
+                      parser={(v) => {
+                        const raw = (v ?? "").replace(/,/g, "");
+                        if (!raw) return "" as unknown as number;
+                        const parsed = Number(raw);
+                        if (!Number.isFinite(parsed)) return 0;
+                        return parsed > maxKg ? maxKg : parsed;
+                      }}
+                      onInput={(text) => {
+                        const raw = (text ?? "").replace(/,/g, "");
+                        const parsed = Number(raw);
+                        if (raw !== "" && Number.isFinite(parsed) && parsed > maxKg) {
+                          setRawInputs((rows) => rows.map((item) =>
+                            item.categoryId === row.categoryId ? { ...item, quantityKg: maxKg } : item,
+                          ));
+                          setClampTick((t) => t + 1);
+                        }
+                      }}
+                      style={{ width: 160 }}
+                      aria-label={`Số kg còn lại của ${row.categoryName}`}
+                      placeholder={`≤ ${formatCountKg(maxKg)}`}
+                      value={row.quantityKg}
+                      onChange={(quantityKg) => {
+                        const next = quantityKg == null ? null : Math.min(Math.max(0, Number(quantityKg)), maxKg);
+                        setRawInputs((rows) => rows.map((item) =>
+                          item.categoryId === row.categoryId ? { ...item, quantityKg: next } : item,
+                        ));
+                      }} />
+                  );
+                } },
+                { title: "Hao hụt / Thiếu (kg)", align: "center", render: (_, row) => {
+                  if (row.quantityKg == null) return "—";
+                  const net = roundKg(row.openingKg + row.purchasedKg - row.deliveredKg);
+                  const diff = Math.round((net - row.quantityKg) * 1000) / 1000;
+                  return <span style={{ color: diff > 0 ? "var(--color-danger)" : undefined }}>{formatCountKg(diff)}</span>;
+                } },
+                { title: "Giá trị đã lưu", align: "center", render: (_, row) =>
                   showMoney(rawCounts.find((saved) => saved.categoryId === row.categoryId)?.valueAmount) },
               ]}
               expandable={{ rowExpandable: (row) => rawCounts.some((saved) => saved.categoryId === row.categoryId && saved.layers.length > 0),
@@ -338,14 +439,56 @@ export function FactoryYearPage() {
               <AppActionButton tone="edit" icon={<SaveOutlined />} loading={saving}
                 onClick={() => void saveRawInventory()}>Lưu tồn nguyên liệu</AppActionButton>
             </div>}
-            <Typography.Text>Tổng nguyên liệu: {showKg(count?.rawKg)} · {showMoney(count?.rawValue)}</Typography.Text>
+            <Row gutter={[12, 12]} style={{ marginTop: 8 }}>
+              <Col xs={24} sm={8}>
+                <Card size="small"><Statistic title="Tổng nguyên liệu còn trong kho" value={`${formatCountKg(roundKg(totalEnteredRawKg))} kg`} /></Card>
+              </Col>
+              <Col xs={24} sm={8}>
+                <Card size="small"><Statistic title="Phế liệu chưa bán đang nhập" value={`${formatCountKg(roundKg(watchedScrapKg))} kg`} /></Card>
+              </Col>
+              <Col xs={24} sm={8}>
+                <Card size="small">
+                  <Statistic
+                    title="Hao hụt thuần ước tính"
+                    value={allRawCounted ? `${formatCountKg(roundKg(totalAvailableBeforeUnsoldScrap - totalEnteredRawKg - watchedScrapKg))} kg` : "Chưa cân đủ"}
+                    valueStyle={{ color: roundKg(totalAvailableBeforeUnsoldScrap - totalEnteredRawKg - watchedScrapKg) > 0 ? "var(--color-danger)" : undefined }}
+                  />
+                </Card>
+              </Col>
+            </Row>
+            <Typography.Text style={{ display: "block", marginTop: 8 }}>Giá trị nguyên liệu đã lưu: {showKg(count?.rawKg)} · {showMoney(count?.rawValue)}</Typography.Text>
           </Card>
           <Row gutter={12}>
             {([
               ["Phế liệu chưa bán", "scrapKg", "scrapValue"],
             ] as const).map(([label, kgField, valueField]) => <Col xs={24} md={12} lg={8} key={kgField}>
               <Card size="small" title={label} style={{ marginBottom: 12 }}>
-                <Form.Item name={kgField} label="Khối lượng (kg)" rules={[{ type: "number", min: 0 }]}><InputNumber {...qtyInputNumberProps} min={0} style={{ width: "100%" }} /></Form.Item>
+                <Form.Item name={kgField} label="Khối lượng (kg)" rules={[{ type: "number", min: 0, max: maxUnsoldScrapKg }]}>
+                  <InputNumber
+                    key={`scrap-${clampTick}`}
+                    min={0}
+                    max={maxUnsoldScrapKg}
+                    step={1}
+                    formatter={formatCountKg}
+                    parser={(v) => {
+                      const raw = (v ?? "").replace(/,/g, "");
+                      if (!raw) return "" as unknown as number;
+                      const parsed = Number(raw);
+                      if (!Number.isFinite(parsed)) return 0;
+                      return parsed > maxUnsoldScrapKg ? maxUnsoldScrapKg : parsed;
+                    }}
+                    onInput={(text) => {
+                      const raw = (text ?? "").replace(/,/g, "");
+                      const parsed = Number(raw);
+                      if (raw !== "" && Number.isFinite(parsed) && parsed > maxUnsoldScrapKg) {
+                        countForm.setFieldValue(kgField, maxUnsoldScrapKg);
+                        setClampTick((t) => t + 1);
+                      }
+                    }}
+                    placeholder={`≤ ${formatCountKg(maxUnsoldScrapKg)}`}
+                    style={{ width: "100%" }}
+                  />
+                </Form.Item>
                 <Form.Item name={valueField} label="Giá trị (đ)" rules={[{ type: "number", min: 0 }]}><InputNumber {...vndInputNumberProps} min={0} style={{ width: "100%" }} /></Form.Item>
               </Card>
             </Col>)}
@@ -359,11 +502,11 @@ export function FactoryYearPage() {
       </Card></div>
 
       <Card
-        title="Quyết toán công nợ theo khách"
+        title="Quyết toán công nợ Xưởng"
         loading={loading}
         extra={<Select
           value={settlementMonth ?? "ALL"}
-          disabled={!!workingYear.month}
+          disabled={!!selectedMonth}
           onChange={(value) => setSettlementMonth(value === "ALL" ? undefined : value)}
           style={{ width: 170 }}
           options={[{ value: "ALL", label: "Cả kỳ" }, ...Array.from({ length: periodTo.startOf("month").diff(periodFrom.startOf("month"), "month") + 1 }, (_, i) => {
@@ -375,25 +518,31 @@ export function FactoryYearPage() {
         {settlement && <>
           {settlement.unlinkedSalesCount > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={`${settlement.unlinkedSalesCount} phiếu bán cũ chưa gắn khách (${showMoney(settlement.unlinkedSalesValue)})`} description="Gắn khách mua vào các phiếu này để báo cáo công nợ theo người đầy đủ." />}
           <Typography.Paragraph type="secondary">
-            Công nợ tại hết ngày {dayjs(settlement.toExclusive).subtract(1, "day").format("DD/MM/YYYY")}
+            Kỳ công nợ từ {dayjs(settlement.from).format("DD/MM/YYYY")} đến hết ngày {dayjs(settlement.toExclusive).subtract(1, "day").format("DD/MM/YYYY")}
             {dayjs(settlement.toExclusive).isAfter(dayjs()) ? " (tạm tính đến hiện tại)" : ""}.
             Tiền thu trong kỳ có thể thuộc phiếu bán của kỳ trước.
           </Typography.Paragraph>
+          <Typography.Title level={5}>Phải thu khách hàng</Typography.Title>
           <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-            <Col xs={12} md={6}><Statistic title="Nợ đầu kỳ" value={showMoney(settlement.totalOpeningDebt)} /></Col>
-            <Col xs={12} md={6}><Statistic title="Bán trong kỳ" value={showMoney(settlement.totalPeriodSales)} /></Col>
-            <Col xs={12} md={6}><Statistic title="Thu trong kỳ" value={showMoney(settlement.totalPeriodReceipts)} /></Col>
-            <Col xs={12} md={6}><Statistic title="Nợ cuối kỳ" value={showMoney(settlement.totalClosingDebt)} /></Col>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Còn phải thu cuối kỳ" value={showMoney(settlement.totalClosingDebt)} /></Card></Col>
+            <Col xs={12} md={6}><Card size="small">
+              <Statistic title="Nợ cũ còn phải thu cuối kỳ" value={showMoney(settlement.customers.reduce((total, customer) =>
+                total + customer.invoices.reduce((subtotal, invoice) => invoice.documentDate < settlement.from
+                  ? subtotal + Math.max(0, Number(invoice.remainingAsOf)) : subtotal, 0), 0))} />
+              <Typography.Text type="secondary">Nợ cũ lúc mở kỳ: {showMoney(settlement.totalOpeningDebt)}</Typography.Text>
+            </Card></Col>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Bán trong kỳ" value={showMoney(settlement.totalPeriodSales)} /></Card></Col>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Thu trong kỳ" value={showMoney(settlement.totalPeriodReceipts)} /></Card></Col>
           </Row>
           <PagedTable
             rowKey="customerId"
             dataSource={settlement.customers}
             columns={[
               { title: "Khách hàng", render: (_, row) => <Link to={`/khach-mua/${row.customerId}`}>{row.customerName}</Link> },
-              { title: "Nợ đầu kỳ", dataIndex: "openingDebt", render: showMoney },
+              { title: "Còn phải thu cuối kỳ", dataIndex: "closingDebt", render: (value) => <strong>{showMoney(value)}</strong> },
+              { title: "Phải thu lúc mở kỳ", dataIndex: "openingDebt", render: showMoney },
               { title: "Bán trong kỳ", dataIndex: "periodSales", render: showMoney },
               { title: "Đã thu", dataIndex: "periodReceipts", render: showMoney },
-              { title: "Nợ cuối kỳ", dataIndex: "closingDebt", render: showMoney },
             ]}
             expandable={{ expandedRowRender: (row) => <Table
               rowKey="documentId" size="small" pagination={false} dataSource={row.invoices}
@@ -409,10 +558,23 @@ export function FactoryYearPage() {
               ]}
             /> }}
           />
+          <Typography.Title level={5}>Phải trả nhà cung cấp</Typography.Title>
+          {settlement.supplier ? <Row gutter={[12, 12]}>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Còn phải trả cuối kỳ" value={showMoney(settlement.supplier.closingDebt)} /></Card></Col>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Phải trả lúc mở kỳ" value={showMoney(settlement.supplier.openingDebt)} /></Card></Col>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Nhập mua trong kỳ" value={showMoney(settlement.supplier.purchases)} /></Card></Col>
+            <Col xs={12} md={6}><Card size="small"><Statistic title="Đã trả trong kỳ" value={showMoney(settlement.supplier.payments)} /></Card></Col>
+          </Row> : <Alert type="info" message="Khởi động lại backend để xem số phải trả nhà cung cấp." />}
         </>}
       </Card>
 
-      <Card title={`Phiếu bán phế liệu ${workingYear.month ? `tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}` : `năm ${year}`}`} loading={loading} extra={canEdit && <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => { setScrapKey(crypto.randomUUID()); scrapForm.setFieldsValue({ saleDate: workingYear.month ? (dayjs(periodFrom).isAfter(dayjs(`${workingYear.month}-01`)) ? periodFrom : dayjs(`${workingYear.month}-01`)) : dayjs().year(year), unit: "kg" }); setScrapOpen(true); }}>Thêm phiếu bán phế liệu</AppActionButton>}>
+      <Card title={`Phiếu bán phế liệu ${selectedMonth ? `tháng ${dayjs(`${selectedMonth}-01`).format("MM/YYYY")}` : "trong kỳ"}`} loading={loading} extra={canEdit && <AppActionButton tone="create" icon={<PlusOutlined />} onClick={() => {
+        const suggested = selectedMonth ? dayjs(`${selectedMonth}-01`) : dayjs();
+        const saleDate = suggested.isBefore(periodFrom, "day") ? periodFrom : suggested.isAfter(periodTo, "day") ? periodTo : suggested;
+        setScrapKey(crypto.randomUUID());
+        scrapForm.setFieldsValue({ saleDate, unit: "kg" });
+        setScrapOpen(true);
+      }}>Thêm phiếu bán phế liệu</AppActionButton>}>
         <Typography.Paragraph type="secondary">Bấm vào một dòng để xem chi tiết phiếu và các lần thu tiền.</Typography.Paragraph>
         <PagedTable<ScrapSale>
           rowKey="id" dataSource={visibleScrapSales} size="middle"
@@ -431,7 +593,7 @@ export function FactoryYearPage() {
               <Tag color={row.status === "CONFIRMED" ? "green" : "default"}>{row.status === "CONFIRMED" ? "Đã bán" : "Đã hủy"}</Tag>
             </Space>
             {canWrite && row.status === "CONFIRMED" ? <Space style={{ marginBottom: 12, marginInlineStart: 12 }}>
-              {row.totalAmount > row.paidAmount && <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => { setPaymentKey(crypto.randomUUID()); paymentForm.setFieldsValue({ paymentDate: workingYear.month ? (dayjs().format("YYYY-MM") === workingYear.month ? dayjs() : dayjs(`${workingYear.month}-01`)) : dayjs(), amount: row.totalAmount - row.paidAmount, paymentMethod: "CASH" }); setPaying(row); }}>Ghi thu</AppActionButton>}
+              {row.totalAmount > row.paidAmount && <AppActionButton tone="pay" icon={<DollarOutlined />} onClick={() => { setPaymentKey(crypto.randomUUID()); paymentForm.setFieldsValue({ paymentDate: selectedMonth ? (dayjs().format("YYYY-MM") === selectedMonth ? dayjs() : dayjs(`${selectedMonth}-01`)) : dayjs(), amount: row.totalAmount - row.paidAmount, paymentMethod: "CASH" }); setPaying(row); }}>Ghi thu</AppActionButton>}
               {canEdit && row.paidAmount === 0 && <AppActionButton tone="delete" icon={<CloseOutlined />} onClick={() => confirmVoid(row)}>Hủy</AppActionButton>}
             </Space> : null}
             <Table rowKey="id" size="small" pagination={false} dataSource={row.payments} columns={[
@@ -450,12 +612,12 @@ export function FactoryYearPage() {
             onChange={setSaleCategoryId} />
         </Space>
         <Row gutter={12} style={{ marginBottom: 12 }}>
-          <Col xs={24} md={8}><Statistic title="Kg thành phẩm đã giao" value={showKg(workingYear.month ? visibleSaleRows.reduce((sum, row) => sum + row.quantityKg, 0) : saleCosts?.quantityKg)} />
-            {count && <DeliveredByCategory from={workingYear.month ? (dayjs(count.periodFrom).isAfter(dayjs(`${workingYear.month}-01`)) ? count.periodFrom : `${workingYear.month}-01`) : count.periodFrom}
-              to={workingYear.month ? (dayjs(count.periodTo).isBefore(dayjs(`${workingYear.month}-01`).endOf("month")) ? count.periodTo : dayjs(`${workingYear.month}-01`).endOf("month").format("YYYY-MM-DD")) : count.periodTo}
+          <Col xs={24} md={8}><Statistic title="Kg thành phẩm đã giao" value={showKg(selectedMonth ? visibleSaleRows.reduce((sum, row) => sum + row.quantityKg, 0) : saleCosts?.quantityKg)} />
+            {count && <DeliveredByCategory from={selectedMonth ? (dayjs(count.periodFrom).isAfter(dayjs(`${selectedMonth}-01`)) ? count.periodFrom : `${selectedMonth}-01`) : count.periodFrom}
+              to={selectedMonth ? (dayjs(count.periodTo).isBefore(dayjs(`${selectedMonth}-01`).endOf("month")) ? count.periodTo : dayjs(`${selectedMonth}-01`).endOf("month").format("YYYY-MM-DD")) : count.periodTo}
               categoryId={saleCategoryId} shopKey={`factory-${year}`} />}
           </Col>
-          <Col xs={24} md={8}><Statistic title="Tiền bán trên phiếu" value={showMoney(workingYear.month ? visibleSaleRows.reduce((sum, row) => sum + row.salesAmount, 0) : saleCosts?.salesAmount)} /></Col>
+          <Col xs={24} md={8}><Statistic title="Tiền bán trên phiếu" value={showMoney(selectedMonth ? visibleSaleRows.reduce((sum, row) => sum + row.salesAmount, 0) : saleCosts?.salesAmount)} /></Col>
         </Row>
         <Table size="small" rowKey="itemId" dataSource={visibleSaleRows}
           columns={[

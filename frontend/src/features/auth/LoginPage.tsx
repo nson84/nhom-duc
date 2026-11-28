@@ -10,16 +10,13 @@ import { shopStore } from "../shop/shop-store";
 import { getFirstRunStatus, login } from "./auth-api";
 import { authStore } from "./auth-store";
 import { getLastLogin, passwordForAccount, rememberLogin } from "./login-memory";
-import { savedPassword, savePassword } from "./saved-password";
+import { offerBrowserPassword, savedPassword, savePassword } from "./saved-password";
 
 const ACCOUNT_OPTIONS = [
   { value: "admin", label: "admin — sao lưu và cài đặt" },
   { value: "phanphoi", label: "phanphoi — phân phối" },
   { value: "xuong", label: "xuong — xưởng" },
 ] as const;
-
-/** Chỉ tiện cho môi trường phát triển; bản đóng gói không chứa mật khẩu cố định. */
-const DEV_PASSWORD = import.meta.env.DEV ? "1234567" : "";
 
 const schema = z.object({
   username: z.enum(["admin", "phanphoi", "xuong"], { message: "Chọn tài khoản" }),
@@ -34,10 +31,7 @@ export function LoginPage() {
   const [pendingAccounts, setPendingAccounts] = useState<Array<FormValues["username"]>>([]);
   const { control, handleSubmit, formState, getValues, setValue, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: (() => {
-      const last = getLastLogin();
-      return { username: last.username, password: last.password || DEV_PASSWORD };
-    })(),
+    defaultValues: getLastLogin(),
   });
 
   useEffect(() => {
@@ -72,6 +66,7 @@ export function LoginPage() {
     try {
       const result = await login(values.username, values.password);
       rememberLogin(values.username, values.password);
+      void offerBrowserPassword(values.username, values.password).catch(() => undefined);
       await savePassword(values.username, values.password).catch(() => undefined);
       authStore.set({
         token: result.token,
@@ -105,7 +100,7 @@ export function LoginPage() {
                 <p>Chọn tài khoản để bắt đầu ngày làm việc.</p>
               </header>
               <Form layout="vertical" onFinish={onSubmit} className="login-form" aria-busy={formState.isSubmitting}>
-                <input type="text" name="username" autoComplete="username" value={watch("username")} readOnly hidden />
+                <input type="text" name="username" autoComplete="username" value={watch("username")} readOnly tabIndex={-1} aria-hidden style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }} />
                 <Controller
                   name="username"
                   control={control}
@@ -131,13 +126,13 @@ export function LoginPage() {
                             navigate("/doi-mat-khau", { replace: true });
                             return;
                           }
-                          setValue("password", passwordForAccount(value) || DEV_PASSWORD, {
+                          setValue("password", passwordForAccount(value), {
                             shouldDirty: true,
                             shouldValidate: true,
                           });
                           setError(null);
                           const password = await savedPassword(value).catch(() => null);
-                          if (password && getValues("username") === value) {
+                          if (password && getValues("username") === value && !getValues("password")) {
                             setValue("password", password, { shouldDirty: true, shouldValidate: true });
                           }
                         }}

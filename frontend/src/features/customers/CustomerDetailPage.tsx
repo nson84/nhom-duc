@@ -14,6 +14,7 @@ import {
   Select,
   Space,
   Tag,
+  Typography,
   message,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
@@ -92,14 +93,13 @@ export function CustomerDetailPage() {
 
   const [summary, setSummary] = useState<CustomerSummary | null>(null);
   const [editingCustomer, setEditingCustomer] = useState(false);
-  const [salesYear, setSalesYear] = useState(workingYear.year);
+  const salesYear = workingYear.year;
   const [selectedRange, setSelectedRange] = useState<[string, string] | null>(null);
   const [periodReady, setPeriodReady] = useState(false);
   const [yearSummary, setYearSummary] = useState<CustomerYear | null>(null);
   const [docs, setDocs] = useState<CustomerDocument[]>([]);
   const [reminders, setReminders] = useState<CustomerReminder[]>([]);
   const [paymentFilter, setPaymentFilter] = useState<string | undefined>();
-  const initializedYearFor = useRef<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [payingDoc, setPayingDoc] = useState<CustomerDocument | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
@@ -135,18 +135,18 @@ export function CustomerDetailPage() {
   useEffect(() => {
     let active = true;
     setPeriodReady(false);
+    setSelectedRange(null);
     getYearPeriod(workingYear.year).then((value) => {
       if (!active) return;
       const shown = visiblePeriod(value, workingYear.month);
       setSelectedRange(shown?.started ? [shown.periodFrom, shown.periodTo] : null);
-      setSalesYear(workingYear.year);
       setPeriodReady(true);
     }).catch(() => { if (active) setPeriodReady(true); });
     return () => { active = false; };
   }, [shop, workingYear.year, workingYear.month]);
 
   const load = useCallback(async () => {
-    if (!customerId || !periodReady) return;
+    if (!customerId || !periodReady || !selectedRange) return;
     setLoading(true);
     try {
       const [s, d, r] = await Promise.all([
@@ -157,10 +157,6 @@ export function CustomerDetailPage() {
       setSummary(s);
       setDocs(d);
       setReminders(r);
-      if (!workingYear.month && initializedYearFor.current !== customerId && d.length > 0) {
-        setSalesYear(Math.max(...d.map((doc) => dayjs(doc.documentDate).year())));
-        initializedYearFor.current = customerId;
-      }
     } catch (error) {
       message.error(toApiError(error).message);
       navigate("/khach-mua");
@@ -185,7 +181,8 @@ export function CustomerDetailPage() {
     return () => { active = false; };
   }, [customerId, salesYear, summary?.shopCode]);
 
-  if (!summary) {
+  if (periodReady && !selectedRange) return <Alert type="info" showIcon message="Chọn kỳ có ngày bắt đầu ở Tổng quan để xem hóa đơn." />;
+  if (!summary || !periodReady) {
     return <Card loading={loading} title="Khách mua" />;
   }
 
@@ -244,12 +241,11 @@ export function CustomerDetailPage() {
       {summary.shopCode === "MANUFACTURING" && !workingYear.month ? (
         <Card
           title="Sản lượng thành phẩm đã giao"
-          extra={<DatePicker picker="year" value={dayjs(`${salesYear}-01-01`)} onChange={(value) => value && setSalesYear(value.year())} />}
         >
           <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} size="small">
             <Descriptions.Item label="Đã giao"><div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 14px" }}>
               <span>{yearSummary ? `${formatQtyInput(yearSummary.quantityKg)} kg` : "—"}</span>
-              <DeliveredByCategory inline customerIds={[customerId]} from={`${salesYear}-01-01`} to={`${salesYear}-12-31`} scope={scope} shopKey={summary.shopCode} />
+              <>{selectedRange && <DeliveredByCategory inline customerIds={[customerId]} from={selectedRange[0]} to={selectedRange[1]} scope={scope} shopKey={summary.shopCode} />}</>
             </div></Descriptions.Item>
             <Descriptions.Item label="Doanh thu">{formatMoney(yearSummary?.revenue ?? 0)}</Descriptions.Item>
             <Descriptions.Item label="Đã thu của các phiếu">{formatMoney(yearSummary?.paidAmount ?? 0)}</Descriptions.Item>
@@ -277,15 +273,7 @@ export function CustomerDetailPage() {
         title="Hóa đơn"
         extra={
           <Space wrap>
-          <DatePicker picker="month" format="MM/YYYY" placeholder="Lọc tháng lập phiếu" allowClear={false}
-            onChange={month => {
-              if (month) setSelectedRange([month.startOf("month").format("YYYY-MM-DD"), month.endOf("month").format("YYYY-MM-DD")]);
-            }} />
-          <DatePicker.RangePicker
-            format="DD/MM/YYYY"
-            value={selectedRange ? [dayjs(selectedRange[0]), dayjs(selectedRange[1])] : null}
-            onChange={(dates) => setSelectedRange(dates?.[0] && dates?.[1] ? [dates[0].format("YYYY-MM-DD"), dates[1].format("YYYY-MM-DD")] : null)}
-          />
+          {selectedRange && <Typography.Text>{dayjs(selectedRange[0]).format("DD/MM/YYYY")} – {dayjs(selectedRange[1]).format("DD/MM/YYYY")}</Typography.Text>}
           <Select
             allowClear
             placeholder="Tất cả hóa đơn"

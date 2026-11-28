@@ -43,9 +43,10 @@ export function PayrollPage() {
   useEffect(() => {
     let active = true;
     setResolvedWorkingYear(null);
+    setPeriod(null);
     getYearPeriod(workingYear.year)
-      .then((value) => { if (active) { setWorkingPeriod(value); setMonthPicker(dayjs(workingYear.month ? `${workingYear.month}-01` : value.periodFrom)); setResolvedWorkingYear(workingYear.year); } })
-      .catch(() => { if (active) { setMonthPicker(dayjs(`${workingYear.year}-01-01`)); setResolvedWorkingYear(workingYear.year); } });
+      .then((value) => { if (active) { setWorkingPeriod(value); setMonthPicker(dayjs(workingYear.month ? `${workingYear.month}-01` : value.periodFrom)); setResolvedWorkingYear(value.started ? workingYear.year : null); } })
+      .catch((error) => { if (active) { setWorkingPeriod(null); message.error(toApiError(error).message); } });
     return () => { active = false; };
   }, [workingYear.year, workingYear.month]);
 

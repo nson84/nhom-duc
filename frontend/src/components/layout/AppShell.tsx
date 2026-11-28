@@ -50,9 +50,9 @@ const ALL_ITEMS = [
   { key: "/thu-chi", icon: <AccountBookOutlined />, label: "Thu chi" },
   { key: "/cong-no", icon: <DollarOutlined />, label: "Công nợ" },
   { key: "/chot-so-thang", icon: <CalendarOutlined />, label: "Chốt sổ tháng" },
-  { key: "/chot-nam", icon: <CalendarOutlined />, label: "Chốt năm" },
+  { key: "/chot-nam", icon: <CalendarOutlined />, label: "Chốt kỳ" },
   { key: "/bao-cao", icon: <BarChartOutlined />, label: "Báo cáo" },
-  { key: "/so-cuoi-nam", icon: <DatabaseOutlined />, label: "Sổ cuối năm" },
+  { key: "/so-cuoi-nam", icon: <DatabaseOutlined />, label: "Sổ cuối kỳ" },
   { key: "/sao-luu", icon: <CloudUploadOutlined />, label: "Sao lưu" },
   { key: "/cai-dat", icon: <SettingOutlined />, label: "Cài đặt" },
 ];

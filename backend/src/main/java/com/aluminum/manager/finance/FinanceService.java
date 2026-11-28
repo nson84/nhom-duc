@@ -765,6 +765,7 @@ public class FinanceService {
 		DateRange range = range(from, to);
 		Timestamp start = Timestamp.valueOf(range.from().atStartOfDay());
 		Timestamp end = Timestamp.valueOf(range.to().plusDays(1).atStartOfDay());
+		if (shops.isDistribution()) return distributionInventoryReport(start, end, categoryId);
 
 		StringBuilder sql = new StringBuilder("""
 				SELECT p.id AS product_id, p.product_code, p.name AS product_name,
@@ -818,6 +819,55 @@ public class FinanceService {
 					avgCost,
 					currentQty.multiply(avgCost).setScale(MONEY_SCALE, ROUNDING));
 		}, args.toArray());
+	}
+
+	private List<InventoryReportRowDto> distributionInventoryReport(Timestamp start, Timestamp end, Long categoryId) {
+		return jdbc.query("""
+				WITH balances AS (
+				    SELECT m.product_id, m.category_id,
+				           SUM(CASE WHEN m.movement_at < ? THEN m.quantity_delta_base ELSE 0 END) AS opening_qty,
+				           SUM(CASE WHEN m.movement_at >= ? AND m.quantity_delta_base > 0 THEN m.quantity_delta_base ELSE 0 END) AS in_qty,
+				           SUM(CASE WHEN m.movement_at >= ? AND m.quantity_delta_base < 0 THEN -m.quantity_delta_base ELSE 0 END) AS out_qty,
+				           SUM(m.quantity_delta_base) AS closing_qty
+				    FROM stock_movements m JOIN products p ON p.id = m.product_id
+				    WHERE p.shop_id = ? AND m.movement_at < ?
+				      AND (? IS NULL OR m.category_id = ?)
+				    GROUP BY m.product_id, m.category_id
+				), receipts AS (
+				    SELECT i.product_id, i.category_id, i.quantity_base AS qty, i.line_total AS value,
+				           SUM(i.quantity_base) OVER (PARTITION BY i.product_id, i.category_id
+				               ORDER BY d.document_date DESC, d.id DESC, i.id DESC ROWS UNBOUNDED PRECEDING)
+				               - i.quantity_base AS prior_qty
+				    FROM stock_document_items i JOIN stock_documents d ON d.id = i.document_id
+				    JOIN balances b ON b.product_id = i.product_id AND b.category_id = i.category_id AND b.closing_qty > 0
+				    WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND i.quantity_base > 0
+				      AND d.confirmed_at IS NOT NULL AND d.document_date < ?
+				      AND NOT EXISTS (SELECT 1 FROM stock_documents r
+				          WHERE r.reversal_of_document_id = d.id AND r.document_date < ?)
+				), values_at_end AS (
+				    SELECT b.product_id, b.category_id, SUM(r.qty) AS sourced,
+				           SUM(LEAST(r.qty, b.closing_qty - r.prior_qty) * r.value / r.qty) AS inventory_value
+				    FROM balances b JOIN receipts r ON r.product_id = b.product_id AND r.category_id = b.category_id
+				      AND r.prior_qty < b.closing_qty
+				    GROUP BY b.product_id, b.category_id
+				)
+				SELECT p.id, p.product_code, p.name, c.name AS category_name, p.base_unit_name,
+				       b.opening_qty, b.in_qty, b.out_qty, b.closing_qty,
+				       CASE WHEN b.closing_qty = 0 THEN 0
+				            WHEN b.closing_qty > 0 AND v.sourced >= b.closing_qty THEN v.inventory_value END AS inventory_value
+				FROM balances b JOIN products p ON p.id = b.product_id
+				JOIN product_categories c ON c.id = b.category_id
+				LEFT JOIN values_at_end v ON v.product_id = b.product_id AND v.category_id = b.category_id
+				ORDER BY p.product_code, c.name
+				""", (rs, i) -> {
+			BigDecimal quantity = rs.getBigDecimal("closing_qty");
+			BigDecimal value = rs.getBigDecimal("inventory_value");
+			BigDecimal cost = value == null ? null : quantity.signum() == 0 ? BigDecimal.ZERO : value.divide(quantity, 6, ROUNDING);
+			return new InventoryReportRowDto(rs.getLong("id"), rs.getString("product_code"), rs.getString("name"),
+					rs.getString("category_name"), rs.getString("base_unit_name"), rs.getBigDecimal("opening_qty"),
+					rs.getBigDecimal("in_qty"), rs.getBigDecimal("out_qty"), quantity, cost,
+					value == null ? null : value.setScale(MONEY_SCALE, ROUNDING));
+		}, start, start, start, shops.currentId(), end, categoryId, categoryId, shops.currentId(), end, end);
 	}
 
 	@Transactional(readOnly = true)
@@ -896,12 +946,13 @@ public class FinanceService {
 			return sb.toString();
 		}
 		if (shops.isDistribution() && "inventory".equals(kind)) {
-			sb.append("Mã nhôm,Tên sản phẩm,Loại nhôm,Đơn vị,Tồn đầu kỳ,Nhập trong kỳ,Xuất trong kỳ,Tồn cuối kỳ\r\n");
+			sb.append("Mã nhôm,Tên sản phẩm,Loại nhôm,Đơn vị,Tồn đầu kỳ,Nhập trong kỳ,Xuất trong kỳ,Tồn cuối kỳ,Giá trị tồn cuối khoảng xem\r\n");
 			for (var row : inventoryReport(from, to, categoryId)) {
 				sb.append(csv(row.productCode())).append(",").append(csv(row.productName())).append(",")
 						.append(csv(row.categoryName())).append(",").append(csv(row.baseUnitName())).append(",")
 						.append(row.openingQuantityBase()).append(",").append(row.inQuantityBase()).append(",")
-						.append(row.outQuantityBase()).append(",").append(row.closingQuantityBase()).append("\r\n");
+						.append(row.outQuantityBase()).append(",").append(row.closingQuantityBase()).append(",")
+						.append(csvMoney(row.inventoryValue())).append("\r\n");
 			}
 			return sb.toString();
 		}
@@ -1094,9 +1145,6 @@ public class FinanceService {
 		LocalDate end = to == null ? today : to;
 		if (end.isBefore(start)) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu", null);
-		}
-		if (start.plusDays(400).isBefore(end)) {
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Khoảng thời gian báo cáo không quá 400 ngày", null);
 		}
 		return new DateRange(start, end);
 	}

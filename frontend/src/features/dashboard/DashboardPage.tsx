@@ -1,4 +1,4 @@
-import { Alert, Card, Col, DatePicker, Input, Row, Segmented, Statistic, Modal, Space, Tag, Typography, message } from "antd";
+import { Alert, Card, Col, DatePicker, Row, Segmented, Select, Statistic, Modal, Space, Tag, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -20,10 +20,10 @@ import type { ThemePalette } from "../theme/palette";
 import { useThemeColors } from "../theme/theme-store";
 import { useCanWrite } from "../auth/auth-store";
 import { AppActionButton } from "../../components/AppButtons";
-import { CheckOutlined, DeleteOutlined, LockOutlined, UnlockOutlined, PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
+import { CheckOutlined, DeleteOutlined, UnlockOutlined, PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import { useWorkingYear, workingYearStore } from "./working-year";
-import { closeDistribution, closeMonth, deleteYearPeriod, getMonthStatus, openMonth, reopenMonth, getCharts, getSummary, getYearPeriod, saveYearPeriod, saveYearStart, type DashboardSummary, type MonthStatus, type YearPeriod } from "./dashboard-api";
-import { visiblePeriod } from "./working-period";
+import { closeDistribution, closeMonth, deleteYearPeriod, getMonthStatus, openMonth, reopenMonth, reopenYear, getCharts, getSummary, getYearPeriod, listYearPeriods, saveYearPeriod, saveYearStart, type DashboardSummary, type MonthStatus, type YearPeriod } from "./dashboard-api";
+import { formatPeriodLabel, visiblePeriod } from "./working-period";
 import { DeliveredByCategory } from "../stock/DeliveredByCategory";
 
 const compactAxis = (value: number) => {
@@ -52,8 +52,8 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
   const [summaryMode, setSummaryMode] = useState<"month" | "period">("month");
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
-  const [periodName, setPeriodName] = useState("");
   const [period, setPeriod] = useState<YearPeriod | null>(null);
+  const [periods, setPeriods] = useState<YearPeriod[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [points, setPoints] = useState<{ day: string; revenue: number; cash: number; profit: number }[]>([]);
   const [dayMode, setDayMode] = useState<"active" | "all">("active");
@@ -64,15 +64,25 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
   const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
 
 
-  function unlockYear() {
-    Modal.confirm({
-      title: `Đổi năm đang xem ${workingYear.year}?`,
-      content: "Phiếu và số liệu sẽ đổi theo năm mới được chọn.",
-      okText: "Cho phép đổi năm",
-      cancelText: "Giữ năm hiện tại",
-      onOk: () => workingYearStore.set(shop, { year: workingYear.year, locked: false }),
-    });
-  }
+  useEffect(() => {
+    let active = true;
+    listYearPeriods().then((items) => {
+      if (!active) return;
+      setPeriods(items);
+      const latest = items[items.length - 1];
+      const selected = workingYearStore.get(shop);
+      if (latest && !items.some(item => item.year === selected.year) &&
+          !(latest.closed && selected.year === latest.year + 1)) {
+        workingYearStore.set(shop, { year: latest.year, locked: selected.locked });
+      }
+    }).catch(reason => { if (active) message.error(toApiError(reason).message); });
+    return () => { active = false; };
+  }, [shop, yearEndRefresh]);
+
+  const latestPeriod = periods[periods.length - 1];
+  const nextKey = latestPeriod && latestPeriod.year < 2100 ? latestPeriod.year + 1 : undefined;
+  const periodIndex = periods.findIndex(item => item.year === viewYear);
+  const defaultPeriodName = `Kỳ ${periodIndex === -1 ? periods.length + 1 : periodIndex + 1}`;
 
   useEffect(() => {
     let active = true;
@@ -80,7 +90,6 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
     setPeriod(null);
     setStartDate(null);
     setEndDate(null);
-    setPeriodName("");
     setError(null);
     setSummary(null);
     setPoints([]);
@@ -91,8 +100,7 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
         workingYearStore.setMonth(shop, dayjs(value.periodFrom).format("YYYY-MM"));
       }
       setError(null);
-      setPeriodName(value.periodName);
-      setStartDate(value.started ? dayjs(value.periodFrom) : null);
+      setStartDate(value.started || (latestPeriod?.closed && viewYear === nextKey) ? dayjs(value.periodFrom) : null);
       setEndDate(value.plannedEnd ? dayjs(value.plannedEnd) : null);
       const shown = visiblePeriod(value, workingYear.month);
       setRange(shown?.started ? [dayjs(shown.periodFrom), dayjs(shown.periodTo)] : null);
@@ -106,7 +114,7 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
       }
     }).catch((reason) => { if (active) setError(toApiError(reason).message); });
     return () => { active = false; };
-  }, [viewYear, yearEndRefresh, shop, workingYear.month, annualOnly]);
+  }, [viewYear, yearEndRefresh, shop, workingYear.month, annualOnly, latestPeriod?.closed, nextKey, defaultPeriodName]);
 
   useEffect(() => {
     if (annualOnly || !workingYear.month) { setMonthStatus("NOT_OPEN"); return; }
@@ -116,8 +124,13 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
     return () => { active = false; };
   }, [workingYear.month, shop, yearEndRefresh, annualOnly]);
 
-  const summaryFrom = summaryMode === "period" && period?.started ? period.periodFrom : range?.[0].format("YYYY-MM-DD");
-  const summaryTo = summaryMode === "period" && period?.started ? period.periodTo : range?.[1].format("YYYY-MM-DD");
+  const monthFrom = range?.[0].format("YYYY-MM-DD");
+  const monthTo = range?.[1].format("YYYY-MM-DD");
+  const sameSummaryRange = period?.started && monthFrom === period.periodFrom && monthTo === period.periodTo;
+  const summaryFrom = summaryMode === "period" && period?.started ? period.periodFrom : monthFrom;
+  const summaryTo = summaryMode === "period" && period?.started ? period.periodTo : monthTo;
+  const summaryLabel = summaryMode === "period" ? "từ đầu kỳ"
+    : workingYear.month ? `tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}` : "theo tháng";
 
   useEffect(() => {
     if (annualOnly || !summaryFrom || !summaryTo) return;
@@ -158,20 +171,20 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
   );
 
   const displayedBarData = dayMode === "active" && activePoints.length > 0 ? activePoints : points;
-  const startChanged = !!startDate && (!period?.started || period.periodFrom !== startDate.format("YYYY-MM-DD") || period.periodName !== periodName.trim());
+  const savedPeriodName = period && /^Năm \d{4}$/i.test(period.periodName.trim()) ? defaultPeriodName : period?.periodName;
+  const startChanged = !!startDate && (!period?.started || period.periodFrom !== startDate.format("YYYY-MM-DD"));
   const endChanged = !!endDate && (!period?.endSaved || period.plannedEnd !== endDate.format("YYYY-MM-DD"));
 
   async function persistStart() {
-    if (!startDate || !periodName.trim()) return;
+    if (!startDate) return;
     if (startDate.isAfter(dayjs(), "day")) {
       setError("Ngày bắt đầu không được sau hôm nay. Hãy chọn ngày bắt đầu thực tế của kỳ này.");
       return;
     }
     setSavingPeriod(true);
     try {
-      const saved = await saveYearStart(viewYear, startDate.format("YYYY-MM-DD"), periodName.trim());
+      const saved = await saveYearStart(viewYear, startDate.format("YYYY-MM-DD"), period?.started ? period.periodName : defaultPeriodName);
       setPeriod(saved);
-      setPeriodName(saved.periodName);
       const month = !period?.started || period.periodFrom !== saved.periodFrom
         ? saved.periodFrom.slice(0, 7) : workingYear.month;
       if (month !== workingYear.month) workingYearStore.setMonth(shop, month);
@@ -179,6 +192,7 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
       setRange(shown ? [dayjs(shown.periodFrom), dayjs(shown.periodTo)] : null);
       setError(null);
       message.success("Đã lưu ngày bắt đầu");
+      setYearEndRefresh(value => value + 1);
     } catch (reason) {
       setError(toApiError(reason).message);
     } finally {
@@ -196,6 +210,7 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
       setRange(shown ? [dayjs(shown.periodFrom), dayjs(shown.periodTo)] : null);
       setError(null);
       message.success("Đã lưu ngày kết thúc dự kiến");
+      setYearEndRefresh(value => value + 1);
     } catch (reason) {
       setError(toApiError(reason).message);
     } finally {
@@ -246,32 +261,33 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
   return (
     <div className="dashboard-page">
       <div className="page-toolbar">
-        <h2>{annualOnly ? "Chốt năm" : "Tổng quan"}</h2>
-        <Typography.Text>Chọn năm làm việc</Typography.Text>
-        <DatePicker picker="year" aria-label="Chọn năm làm việc" allowClear={false} disabled={workingYear.locked}
-          value={dayjs(`${viewYear}-01-01`)} onChange={(value) => {
-            if (value) workingYearStore.set(shop, { year: value.year(), locked: false });
-          }} />
+        <h2>{annualOnly ? "Chốt kỳ" : "Tổng quan"}</h2>
+        {annualOnly ? <Link to="/">Đổi kỳ ở Tổng quan</Link> : <><Typography.Text>Chọn kỳ làm việc</Typography.Text>
+        <Select aria-label="Chọn kỳ làm việc" style={{ width: 380, maxWidth: "100%" }}
+          value={viewYear} options={[
+            ...periods.map((item, index) => ({ value: item.year, label: formatPeriodLabel(item, index) })),
+            ...(periodIndex === -1 ? [{ value: viewYear, label: `${defaultPeriodName} · Chưa lưu ngày bắt đầu` }] : []),
+          ]} onChange={(year) => workingYearStore.set(shop, { year, locked: false })} /></>}
         {!annualOnly && <><DatePicker picker="month" aria-label="Chọn tháng làm việc" placeholder="Chọn tháng" format="MM/YYYY" allowClear={false}
           value={workingYear.month ? dayjs(`${workingYear.month}-01`) : null}
           disabled={!period?.started}
           disabledDate={(date) => !!period?.started && (date.endOf("month").isBefore(dayjs(period.periodFrom), "day") || date.startOf("month").isAfter(dayjs(period.periodTo), "day"))}
           onChange={(value) => void selectWorkingMonth(value)} />
-        {workingYear.month && <Tag color={monthStatus === "CLOSED" ? "green" : monthStatus === "OPEN" ? "blue" : "default"}>
-          {monthStatus === "CLOSED" ? "Tháng đã khóa" : monthStatus === "OPEN" ? "Tháng đang mở" : "Tháng chưa mở"}</Tag>}
-        {workingYear.month && canWrite && !period?.closed && monthStatus === "NOT_OPEN" && <AppActionButton tone="create" icon={<PlayCircleOutlined />}
+        {workingYear.month && period?.started && <Tag color={period.closed || monthStatus === "CLOSED" ? "green" : monthStatus === "OPEN" ? "blue" : "default"}>
+          {period.closed ? "Kỳ đã chốt · Chỉ xem" : monthStatus === "CLOSED" ? "Tháng đã khóa" : monthStatus === "OPEN" ? "Tháng đang mở" : "Tháng chưa mở"}</Tag>}
+        {workingYear.month && canWrite && period?.started && !period.closed && monthStatus === "NOT_OPEN" && <AppActionButton tone="create" icon={<PlayCircleOutlined />}
           onClick={async () => { try { await openMonth(viewYear, workingYear.month!); setMonthStatus("OPEN"); message.success("Đã mở tháng"); }
             catch (caught) { setError(toApiError(caught).message); } }}>Mở tháng</AppActionButton>}
-        {workingYear.month && canWrite && !period?.closed && monthStatus === "OPEN" && <AppActionButton tone="confirm" icon={<CheckOutlined />}
+        {workingYear.month && canWrite && period?.started && !period.closed && monthStatus === "OPEN" && <AppActionButton tone="confirm" icon={<CheckOutlined />}
           onClick={() => Modal.confirm({
             title: `Khóa tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}?`,
-            content: <><p>Kỳ {period?.periodName}: {range ? `${range[0].format("DD/MM/YYYY")} – ${range[1].format("DD/MM/YYYY")}` : "chưa có khoảng ngày"}.</p><p>Đối chiếu chứng từ trước khi khóa để mở tháng tiếp theo. Kiểm kê chốt sổ tháng là tùy chọn. Xưởng cần chốt kỳ công trước.</p></>,
+            content: <><p>{savedPeriodName}: {range ? `${range[0].format("DD/MM/YYYY")} – ${range[1].format("DD/MM/YYYY")}` : "chưa có khoảng ngày"}.</p><p>Đối chiếu chứng từ trước khi khóa để mở tháng tiếp theo. Kiểm kê chốt sổ tháng là tùy chọn. Xưởng cần chốt kỳ công trước.</p></>,
             okText: "Khóa tháng", cancelText: "Quay lại",
             autoFocusButton: "cancel",
             onOk: async () => { try { await closeMonth(viewYear, workingYear.month!); setMonthStatus("CLOSED"); message.success("Đã khóa tháng"); }
               catch (caught) { setError(toApiError(caught).message); throw caught; } },
           })}>Khóa tháng để sang tháng mới</AppActionButton>}
-        {workingYear.month && canWrite && !period?.closed && monthStatus === "CLOSED" &&
+        {workingYear.month && canWrite && period?.started && !period.closed && monthStatus === "CLOSED" &&
           <AppActionButton tone="edit" icon={<UnlockOutlined />} onClick={() => {
             const month = workingYear.month!;
             Modal.confirm({
@@ -290,18 +306,13 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
               },
             });
           }}>Mở lại tháng</AppActionButton>}</>}
-        <AppActionButton tone="edit" icon={workingYear.locked ? <UnlockOutlined /> : <LockOutlined />}
-          onClick={() => workingYear.locked ? unlockYear() : workingYearStore.set(shop, { year: viewYear, locked: true })}>
-          {workingYear.locked ? "Cho phép đổi năm" : "Cố định năm đang xem"}
-        </AppActionButton>
       </div>
       {period && <Card size="small" style={{ marginBottom: 16 }}>
         <div className="year-period-actions">
           <div>
-            <Typography.Text strong>{period.periodName}</Typography.Text>{" "}
+            <Typography.Text strong>{period.started ? savedPeriodName : defaultPeriodName}</Typography.Text>{" "}
             <Tag color={period.closed ? "green" : period.started ? "blue" : "default"}>{period.closed ? "Đã chốt" : period.started ? "Đang làm việc" : "Chưa bắt đầu"}</Tag>
             <div><Typography.Text type="secondary">{period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${period.plannedEnd ? dayjs(period.plannedEnd).format("DD/MM/YYYY") + (period.closed ? "" : " (dự kiến)") : "chưa đặt ngày dự kiến"}` : "Chọn và lưu ngày bắt đầu để tính số liệu"}</Typography.Text></div>
-            <div><Typography.Text type="secondary">Chỉ cần lưu ngày bắt đầu để làm việc. Khi biết ngày kết thúc, hãy lưu mốc đó rồi chốt năm.</Typography.Text></div>
           </div>
           {canWrite && <Space wrap>
             {annualOnly && period.started && !period.closed && <AppActionButton tone="delete" icon={<DeleteOutlined />} onClick={() => {
@@ -322,21 +333,40 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
                 },
               });
             }}>Xóa kỳ</AppActionButton>}
-            {period.closed && <AppActionButton tone="create" icon={<PlayCircleOutlined />}
-              title={`Xem kỳ ${viewYear + 1}; lưu ngày bắt đầu để tính số liệu`}
-              onClick={() => workingYear.locked ? unlockYear() : workingYearStore.set(shop, { year: viewYear + 1, locked: true })}>Sang năm {viewYear + 1}</AppActionButton>}
-            {!period.closed && <><Input aria-label="Tên kỳ làm việc" placeholder="Tên kỳ, ví dụ: Kỳ 2026–2027" value={periodName} maxLength={100} style={{ width: 220 }} onChange={(event) => setPeriodName(event.target.value)} />
+            {annualOnly && !periodicFactory && period.closed && <AppActionButton tone="edit" icon={<UnlockOutlined />} onClick={() => {
+              Modal.confirm({
+                title: "Mở lại kiểm kê Phân phối?",
+                content: "Kỳ sẽ trở về trạng thái chưa chốt. Hãy chọn kỳ này, vào Tồn kho để kiểm kê lại và chốt lại sau khi sửa.",
+                okText: "Mở lại kiểm kê",
+                cancelText: "Hủy",
+                autoFocusButton: "cancel",
+                onOk: async () => {
+                  try {
+                    await reopenYear(viewYear);
+                    workingYearStore.set(shop, { year: viewYear, locked: true });
+                    workingYearStore.setMonth(shop, undefined);
+                    setYearEndRefresh(value => value + 1);
+                    message.success("Đã mở lại. Vào Tồn kho để kiểm kê lại.");
+                  } catch (error) {
+                    message.error(toApiError(error).message);
+                  }
+                },
+              });
+            }}>Mở lại kiểm kê</AppActionButton>}
+            {!annualOnly && period.closed && latestPeriod?.year === viewYear && nextKey != null && <AppActionButton tone="create" icon={<PlayCircleOutlined />}
+              onClick={() => workingYearStore.set(shop, { year: nextKey, locked: false })}>Mở kỳ tiếp theo</AppActionButton>}
+            {!period.closed && <>
               <DatePicker aria-label="Ngày bắt đầu kỳ" placeholder="Ngày bắt đầu" allowClear={false} value={startDate} format="DD/MM/YYYY" maxDate={dayjs()} onChange={(value) => { if (value) setStartDate(value); setError(null); }} />
-              <AppActionButton tone="edit" icon={<SaveOutlined />} disabled={!startChanged || !periodName.trim()} loading={savingPeriod}
+              <AppActionButton tone="edit" icon={<SaveOutlined />} disabled={!startChanged} loading={savingPeriod}
                 onClick={() => confirmDateChange("start")}>Lưu ngày bắt đầu</AppActionButton>
-              {annualOnly && <><DatePicker aria-label="Ngày kết thúc dự kiến" placeholder="Ngày kết thúc dự kiến" allowClear={false} value={endDate} format="DD/MM/YYYY" disabled={!period.started || startChanged} onChange={value => { if (value) setEndDate(value); }} />
+              {period.started && <><DatePicker aria-label="Ngày kết thúc dự kiến" placeholder="Ngày kết thúc dự kiến" allowClear={false} value={endDate} format="DD/MM/YYYY" disabled={startChanged} onChange={value => { if (value) setEndDate(value); }} />
               <AppActionButton tone="edit" icon={<SaveOutlined />} disabled={!period.started || startChanged || !endChanged} loading={savingPeriod}
                 onClick={() => confirmDateChange("end")}>Lưu ngày dự kiến</AppActionButton></>}</>}
-            {!annualOnly ? <Link to="/chot-nam">Mở Chốt năm</Link> : periodicFactory ? <Link to={`/quyet-toan-xuong?year=${viewYear}#kiem-ke-cuoi-nam`}>
+            {!annualOnly ? <Link to="/chot-nam">Mở Chốt kỳ</Link> : periodicFactory ? <Link to="/quyet-toan-xuong#kiem-ke-cuoi-nam">
               <AppActionButton tone="confirm" icon={<CheckOutlined />}>Mở kiểm kê Xưởng</AppActionButton>
             </Link> : <AppActionButton tone="confirm" icon={<CheckOutlined />} disabled={period.closed || !period.endSaved || startChanged || endChanged || dayjs(period.plannedEnd).isAfter(dayjs(), "day")} onClick={() => { const dialog = Modal.confirm({
           title: "Bạn đã kiểm kê tồn kho chưa?",
-          content: `Kỳ ${viewYear}: ${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${dayjs(period.plannedEnd).format("DD/MM/YYYY")}. Hãy kiểm tra số cân thực tế của từng loại nhôm trước khi xác nhận chốt năm.`,
+          content: `${savedPeriodName}: ${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${dayjs(period.plannedEnd).format("DD/MM/YYYY")}. Hãy kiểm tra số cân thực tế trước khi chốt kỳ.`,
           okText: "Đã kiểm kê, chốt năm",
           autoFocusButton: "cancel",
           cancelText: "Quay lại",
@@ -385,15 +415,16 @@ export function DashboardPage({ annualOnly = false }: { annualOnly?: boolean } =
         {summaryFrom && summaryTo && <Typography.Text type="secondary">
           {dayjs(summaryFrom).format("DD/MM/YYYY")} – {dayjs(summaryTo).format("DD/MM/YYYY")}
         </Typography.Text>}
+        {sameSummaryRange && <Typography.Text type="secondary">Cả kỳ nằm trong tháng đang xem</Typography.Text>}
       </Space>
       <div className="dashboard-stat-grid">
-        <Card><Statistic title="Tổng tiền hàng nhập" value={formatMoney(summary?.purchaseAmount ?? 0)} /></Card>
-        <Card><Statistic title="Tổng nhôm nhập (gồm nội bộ)" value={summary ? `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary.purchaseKg ?? 0) / 1000)} tấn` : "—"} /></Card>
-        <Card><Statistic title="Tổng tiền thu dự kiến" value={formatMoney(summary?.revenue ?? 0)} /></Card>
-        <Card><Statistic title="Đã thu từ phiếu bán trong kỳ" value={formatMoney(summary?.cashCollected ?? 0)} /></Card>
-        <Card><Statistic title="Còn phải thu từ phiếu bán trong kỳ" value={formatMoney(summary?.customerDebt ?? 0)} /></Card>
-        <Card><Statistic title="Doanh nghiệp còn nợ nhà cung cấp" value={formatMoney(summary?.supplierDebt ?? 0)} /></Card>
-        <Card><Statistic title={shop === "DISTRIBUTION" ? "Tổng đã giao (gồm chuyển Xưởng)" : "Tổng khối lượng hàng đã giao"} value={`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary?.deliveredKg ?? 0) / 1000)} tấn`} />
+        <Card><Statistic title={`Tổng tiền hàng nhập ${summaryLabel}`} value={formatMoney(summary?.purchaseAmount ?? 0)} /></Card>
+        <Card><Statistic title={`Tổng nhôm nhập ${summaryLabel} (gồm nội bộ)`} value={summary ? `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary.purchaseKg ?? 0) / 1000)} tấn` : "—"} /></Card>
+        <Card><Statistic title={`Tổng tiền thu dự kiến ${summaryLabel}`} value={formatMoney(summary?.revenue ?? 0)} /></Card>
+        <Card><Statistic title={`Đã thu đến hiện tại từ phiếu bán lập ${summaryLabel}`} value={formatMoney(summary?.cashCollected ?? 0)} /></Card>
+        <Card><Statistic title={`Còn phải thu từ phiếu bán lập ${summaryLabel}`} value={formatMoney(summary?.customerDebt ?? 0)} /></Card>
+        <Card><Statistic title={`Còn nợ nhà cung cấp từ phiếu nhập lập ${summaryLabel}`} value={formatMoney(summary?.supplierDebt ?? 0)} /></Card>
+        <Card><Statistic title={shop === "DISTRIBUTION" ? `Tổng đã giao ${summaryLabel} (gồm chuyển Xưởng)` : `Tổng khối lượng hàng đã giao ${summaryLabel}`} value={`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(Number(summary?.deliveredKg ?? 0) / 1000)} tấn`} />
           {period?.started && summaryFrom && summaryTo && <DeliveredByCategory from={summaryFrom} to={summaryTo} shopKey={shop} unit="tấn" />}
         </Card>
       </div>

@@ -1,5 +1,5 @@
 import { SaveOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Radio, Select, Space, Statistic, Switch, Tag, message } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Radio, Select, Space, Statistic, Switch, Tag, Typography, message } from "antd";
 import { ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -74,9 +74,10 @@ export function AttendancePage() {
   useEffect(() => {
     let active = true;
     setResolvedWorkingYear(null);
+    setBoard(null);
     getYearPeriod(workingYear.year)
-      .then((value) => { if (active) { setWorkingPeriod(value); setPeriod(dayjs(workingYear.month ? `${workingYear.month}-01` : value.periodFrom)); setResolvedWorkingYear(workingYear.year); } })
-      .catch(() => { if (active) { setPeriod(dayjs(`${workingYear.year}-01-01`)); setResolvedWorkingYear(workingYear.year); } });
+      .then((value) => { if (active) { setWorkingPeriod(value); setPeriod(dayjs(workingYear.month ? `${workingYear.month}-01` : value.periodFrom)); setResolvedWorkingYear(value.started ? workingYear.year : null); } })
+      .catch((error) => { if (active) { setWorkingPeriod(null); message.error(toApiError(error).message); } });
     return () => { active = false; };
   }, [workingYear.year, workingYear.month]);
 
@@ -901,6 +902,49 @@ function PolicyModal({
   );
 }
 
+function HolidayBonusRecipients({
+  employees,
+  value = [],
+  onChange,
+}: {
+  employees: Employee[];
+  value?: number[];
+  onChange?: (ids: number[]) => void;
+}) {
+  if (employees.length === 0) return <Typography.Text type="secondary">Chưa có nhân viên đủ điều kiện.</Typography.Text>;
+  return (
+    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <Space wrap>
+        <Button size="small" onClick={() => onChange?.(employees.map(employee => employee.id))}>
+          Tất cả đã nhận
+        </Button>
+        <Button size="small" onClick={() => onChange?.([])}>
+          Tất cả nhận cùng lương
+        </Button>
+      </Space>
+      {employees.map(employee => (
+        <div key={employee.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 16px" }}>
+          <span style={{ flex: "0 1 176px", minWidth: 0, overflowWrap: "anywhere" }}>
+            {employee.employeeCode} · {employee.fullName}
+          </span>
+          <Radio.Group
+            style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px", flex: "0 1 auto" }}
+            aria-label={`Cách nhận thưởng của ${employee.fullName}`}
+            value={value.includes(employee.id) ? "direct" : "payroll"}
+            onChange={event => onChange?.(event.target.value === "direct"
+              ? [...value, employee.id]
+              : value.filter(id => id !== employee.id))}
+            options={[
+              { label: "Đã nhận trực tiếp", value: "direct" },
+              { label: "Nhận cùng lương", value: "payroll" },
+            ]}
+          />
+        </div>
+      ))}
+    </Space>
+  );
+}
+
 function HolidaysModal({
   year,
   onClose,
@@ -971,7 +1015,9 @@ function HolidaysModal({
           {
             title: "",
             render: (_, h) => (
-              <a
+              <Button
+                type="link"
+                size="small"
                 onClick={() => {
                   setEditing(h);
                   form.setFieldsValue({
@@ -985,8 +1031,8 @@ function HolidaysModal({
                   });
                 }}
               >
-                Sửa
-              </a>
+                Chi tiết
+              </Button>
             ),
           },
         ]}
@@ -998,20 +1044,24 @@ function HolidaysModal({
         initialValues={{ holidayType: "NATIONAL_HOLIDAY", paid: false, bonusAmount: 0, receivedEmployeeIds: [] }}
         onFinish={async (values) => {
           try {
-            await saveHoliday(editing?.id, {
+            const savedBonus = editing ? values.bonusAmount ?? 0 : 0;
+            const saved = await saveHoliday(editing?.id, {
               holidayDate: values.holidayDate.format("YYYY-MM-DD"),
               name: values.name,
               holidayType: values.holidayType,
-              paid: values.bonusAmount > 0 ? false : editing?.paid ?? false,
-              dayPay: values.bonusAmount > 0 ? 0 : editing?.dayPay ?? 0,
-              bonusAmount: values.bonusAmount,
-              receivedEmployeeIds: (values.receivedEmployeeIds ?? []).filter((id) => eligible.some((employee) => employee.id === id)),
+              paid: savedBonus > 0 ? false : editing?.paid ?? false,
+              dayPay: savedBonus > 0 ? 0 : editing?.dayPay ?? 0,
+              bonusAmount: savedBonus,
+              receivedEmployeeIds: editing && savedBonus > 0
+                ? (values.receivedEmployeeIds ?? []).filter((id) => eligible.some((employee) => employee.id === id))
+                : [],
               notes: values.notes,
             });
+            setHolidays(rows => [...rows.filter(row => row.id !== saved.id), saved]
+              .sort((a, b) => a.holidayDate.localeCompare(b.holidayDate)));
             setEditing(null);
             form.resetFields();
             form.setFieldValue("holidayDate", values.holidayDate);
-            await load();
             onChanged();
             message.success("Đã lưu ngày nghỉ lễ");
           } catch (error) {
@@ -1037,23 +1087,21 @@ function HolidaysModal({
               ]}
             />
           </Form.Item>
-          <Form.Item name="bonusAmount" label="Tiền thưởng mỗi nhân viên" rules={vndUnitPriceRules}>
+          {editing && <Form.Item name="bonusAmount" label="Tiền thưởng mỗi nhân viên" rules={vndUnitPriceRules}>
             <InputNumber {...vndInputNumberProps} style={{ width: 180 }} />
-          </Form.Item>
+          </Form.Item>}
         </Space>
         {editing && editing.dayPay > 0 && bonusAmount > 0 && (
           <Alert type="info" showIcon message="Lưu tiền thưởng sẽ thay mức lương ngày cũ của ngày lễ này." />
         )}
-        {bonusAmount > 0 && holidayDate && (
-          <Form.Item name="receivedEmployeeIds" label="Nhân viên đã nhận thưởng"
-            extra="Tích người đã nhận trực tiếp. Những người chưa tích sẽ nhận cùng tiền công cuối tháng.">
-            <Checkbox.Group options={eligible.map((employee) => ({
-              label: `${employee.employeeCode} · ${employee.fullName}`, value: employee.id,
-            }))} />
+        {editing && bonusAmount > 0 && holidayDate && (
+          <Form.Item name="receivedEmployeeIds" label="Cách nhận thưởng của từng nhân viên"
+            extra="Khoản nhận cùng lương được cộng vào tiền thực lĩnh của tháng có ngày lễ.">
+            <HolidayBonusRecipients employees={eligible} />
           </Form.Item>
         )}
         <Space>
-          <Button type="primary" htmlType="submit" disabled={employees == null}>
+          <Button type="primary" htmlType="submit" disabled={!!editing && bonusAmount > 0 && employees == null}>
             {editing ? "Lưu cập nhật" : "Thêm ngày lễ"}
           </Button>
           {editing ? (

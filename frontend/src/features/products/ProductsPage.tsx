@@ -2,7 +2,6 @@ import {
   Alert,
   Card,
   Col,
-  DatePicker,
   Form,
   Image,
   Input,
@@ -59,8 +58,8 @@ import {
   listProducts,
   listPurchasePrices,
   saveCategory,
+  applyCategoryPriceSet,
   saveProduct,
-  savePurchasePrice,
   syncCatalogToOtherShop,
   type Category,
   type Product,
@@ -726,7 +725,7 @@ function CategoriesModal({
               name: values.name,
               active: values.active,
               description: editing?.description ?? undefined,
-              referencePurchasePrice: Math.round(purchaseTon / KG_PER_TON),
+              referencePurchasePrice: purchaseTon / KG_PER_TON,
               defaultSellingPrice: sellingKg,
               defaultSellingPriceTa: Math.max(0, lastValid.current.sellingPriceTa ?? Math.round(sellingKg * KG_PER_TA)),
               defaultSellingPriceTon: Math.max(0, lastValid.current.sellingPriceTon ?? Math.round(sellingKg * KG_PER_TON)),
@@ -816,7 +815,7 @@ function CategoriesModal({
         <PurchasePricesModal
           category={pricesFor}
           onClose={() => setPricesFor(null)}
-          onChanged={() => onChanged()}
+          onChanged={onChanged}
         />
       ) : null}
     </Modal>
@@ -842,9 +841,6 @@ function PurchasePricesModal({
   const canWrite = useCanWrite();
   const [rows, setRows] = useState<PurchasePrice[]>([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form] = Form.useForm<{ pricePerTon: number; effectiveFrom?: dayjs.Dayjs; note?: string }>();
-  const lastValidPrice = useRef(Math.round(category.referencePurchasePrice * KG_PER_TON));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -861,10 +857,31 @@ function PurchasePricesModal({
     void load();
   }, [load]);
 
+  function confirmApply(row: PurchasePrice) {
+    Modal.confirm({
+      title: "Áp dụng lại bộ giá này?",
+      content: `Bộ giá ngày ${dayjs(row.effectiveFrom).format("DD/MM/YYYY")} sẽ áp dụng lại từ hôm nay cho ${category.name}.`,
+      okText: "Áp dụng",
+      cancelText: "Quay lại",
+      onOk: async () => {
+        try {
+          setRows(await applyCategoryPriceSet(category.id, row.id));
+          onChanged();
+          message.success("Đã áp dụng bộ giá");
+        } catch (error) {
+          message.error(toApiError(error).message);
+          throw error;
+        }
+      },
+    });
+  }
+
+  const savedMoney = (value: number | null) => value == null ? "—" : formatMoney(value);
+
   return (
     <Modal
       open
-      width={820}
+      width={1060}
       title={`Lịch sử giá nhập — ${category.name}`}
       footer={
         <AppActionButton tone="cancel" icon={<CloseOutlined />} onClick={onClose}>
@@ -877,15 +894,15 @@ function PurchasePricesModal({
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="Giá nhập theo tấn, hiệu lực từ ngày ghi"
-        description="Lưu giá mới sẽ đóng mốc cũ lại. Phiếu nhập lùi ngày lấy đúng giá của ngày phiếu, và phiếu đã xác nhận giữ nguyên chi phí chuẩn nên lãi đã chốt không bị tính lại."
+        message="3 mốc giá gần nhất"
+        description="Đổi giá ở form Sửa loại nhôm. Dấu — cho biết mốc cũ thiếu dữ liệu giá bán."
       />
       <Table<PurchasePrice>
         rowKey="id"
         size="small"
         loading={loading}
         pagination={false}
-        dataSource={rows}
+        dataSource={rows.slice(0, 3)}
         columns={[
           {
             title: "Hiệu lực từ",
@@ -916,78 +933,15 @@ function PurchasePricesModal({
             align: "center",
             render: (v: number) => <b>{formatMoney(Math.round(v * KG_PER_TON))}</b>,
           },
-          { title: "Ghi chú", dataIndex: "note", align: "center", render: (v: string | null) => v ?? "—" },
+          { title: "Giá bán / tấn", dataIndex: "sellingPriceTon", align: "center", render: savedMoney },
+          { title: "Giá bán / tạ", dataIndex: "sellingPriceTa", align: "center", render: savedMoney },
+          { title: "Giá bán / kg", dataIndex: "sellingPriceKg", align: "center", render: savedMoney },
+          { title: "Thao tác", key: "apply", align: "center", render: (_, row) => canWrite &&
+            <AppActionButton tone="confirm" icon={<SaveOutlined />}
+              disabled={row.open || row.sellingPriceKg == null || row.sellingPriceTa == null || row.sellingPriceTon == null}
+              onClick={() => confirmApply(row)}>Áp dụng</AppActionButton> },
         ]}
       />
-      {canWrite ? (
-        <Form
-          form={form}
-          layout="vertical"
-          style={{ marginTop: 16 }}
-          initialValues={{
-            effectiveFrom: dayjs(),
-            pricePerTon: Math.round(category.referencePurchasePrice * KG_PER_TON),
-          }}
-          onFinish={async (values) => {
-            setSaving(true);
-            try {
-              const shown = Math.max(0, Math.round(Number(values.pricePerTon ?? 0)));
-              setRows(
-                await savePurchasePrice(category.id, {
-                  pricePerBase: Math.max(0, Math.round(shown / KG_PER_TON)),
-                  effectiveFrom: values.effectiveFrom?.format("YYYY-MM-DD"),
-                  note: values.note,
-                }),
-              );
-              lastValidPrice.current = shown;
-              message.success("Đã ghi giá nhập mới");
-              onChanged();
-            } catch (error) {
-              message.error(toApiError(error).message);
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          <Space align="start" wrap size={[16, 32]}>
-            <Form.Item
-              name="pricePerTon"
-              label="Giá nhập / tấn"
-              rules={vndUnitPriceRules}
-              validateTrigger={[...documentFieldValidateTrigger]}
-            >
-              <InputNumber<number>
-                {...vndInputNumberProps}
-                style={{ width: 220 }}
-                onBlur={() => {
-                  const raw = form.getFieldValue("pricePerTon");
-                  const { value, error } = commitUnitPriceOnBlur(raw, lastValidPrice.current);
-                  form.setFieldsValue({ pricePerTon: value });
-                  if (!error) lastValidPrice.current = value;
-                  if (error) {
-                    form.setFields([{ name: "pricePerTon", errors: [error] }]);
-                  }
-                }}
-              />
-            </Form.Item>
-            <Form.Item
-              name="effectiveFrom"
-              label="Hiệu lực từ ngày"
-              tooltip="Mặc định hôm nay. Có thể đặt giá cho ngày mai. Không chọn ngày trước mốc giá sớm nhất, để không làm lệch chi phí đã chốt."
-            >
-              <DatePicker format="DD/MM/YYYY" style={{ width: 160 }} />
-            </Form.Item>
-            <Form.Item name="note" label="Ghi chú">
-              <Input placeholder="VD: nhà cung cấp tăng giá" style={{ width: 240 }} />
-            </Form.Item>
-            <Form.Item label=" ">
-              <AppActionButton tone="create" icon={<SaveOutlined />} htmlType="submit" loading={saving}>
-                Ghi giá mới
-              </AppActionButton>
-            </Form.Item>
-          </Space>
-        </Form>
-      ) : null}
     </Modal>
   );
 }

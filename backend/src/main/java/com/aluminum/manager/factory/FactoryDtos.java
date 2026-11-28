@@ -79,7 +79,7 @@ public final class FactoryDtos {
 	}
 
 	public record RawCountDto(long categoryId, String categoryName, BigDecimal quantityKg,
-			BigDecimal valueAmount, List<RawLayerDto> layers) {
+			BigDecimal valueAmount, BigDecimal openingKg, BigDecimal purchasedKg, BigDecimal deliveredKg, List<RawLayerDto> layers) {
 	}
 
 	public record PurchaseCostOption(long purchaseItemId, long categoryId, String categoryName,
@@ -132,6 +132,10 @@ public final class FactoryDtos {
 			LocalDateTime toExclusive, BigDecimal totalOpeningDebt,
 			BigDecimal totalPeriodSales, BigDecimal totalPeriodReceipts,
 			BigDecimal totalClosingDebt, int unlinkedSalesCount,
-			BigDecimal unlinkedSalesValue, List<CustomerSettlementRow> customers) {
+			BigDecimal unlinkedSalesValue, List<CustomerSettlementRow> customers, SupplierSettlement supplier) {
+	}
+
+	public record SupplierSettlement(BigDecimal openingDebt, BigDecimal purchases,
+			BigDecimal payments, BigDecimal closingDebt) {
 	}
 }

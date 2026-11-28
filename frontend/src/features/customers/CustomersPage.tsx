@@ -55,7 +55,7 @@ export function CustomersPage() {
   }, [shop, workingYear.year, workingYear.month]);
 
   const load = useCallback(async () => {
-    if (!periodReady) return;
+    if (!periodReady || !range) { setRows([]); setDue([]); return; }
     setLoading(true);
     try {
       const [customers, reminders] = await Promise.all([

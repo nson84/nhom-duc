@@ -16,6 +16,8 @@ Gửi lại mức công giống bản ghi mới nhất cùng ngày trả về b�
 
 Thưởng lễ được lưu riêng theo ngày và nhân viên. Tiền công tháng chỉ cộng thưởng chưa nhận. Ngày lễ trong tháng đã chốt chỉ sửa được sau khi mở lại kỳ.
 
+Tạo lịch cho ngày lễ tương lai chỉ có thông tin cơ bản được phép trước khi mở tháng, trong kỳ đang làm việc. Ghi nhận mức công hoặc thưởng vẫn cần tháng và kỳ công cho phép ghi.
+
 Lần ghi tăng ca mới mặc định dùng đơn giá giờ hiệu lực theo ngày công, lấy từ trường đơn giá ngày thường trước đây. Bản ghi đã có giữ đơn giá đã lưu cho đến khi người dùng sửa bản ghi đó.
 
 API thêm/sửa tăng ca nhận `hourlyRate` tùy chọn. Có giá trị thì dùng đơn giá đó (kể cả 0); bỏ trống thì lấy mức cấu hình hiệu lực vào ngày công. `hourly_rate_snapshot` và `amount` được tính và lưu cùng bản ghi; kỳ công chỉ cộng tăng ca đã duyệt.

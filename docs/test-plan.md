@@ -94,7 +94,7 @@ Kiểm tra mở trang Tiền công hoặc tải lại trang nhiều lần liên 
 
 Xem [biên bản rà soát responsive](responsive-audit.md). Quét các route chính ở 1920×1080, 1600×900, 1366×768, 1280×720, 1024×768 và 900×600; kiểm tra chiều rộng trang và vùng nội dung, thanh cuộn riêng của bảng nhiều cột, menu Drawer dưới 1200 px, modal nhập/bán thấp 600 px và footer luôn dùng được. Kiểm tra sáng/tối cho modal, trạng thái dữ liệu dài, dropdown, thông báo, bản xem trước PDF và các vai trò Admin/Phân phối/Xưởng khi có phiên tương ứng.
 
-Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và buộc đổi; bản production sinh mật khẩu ngẫu nhiên riêng cho tài khoản mới, form không tự điền. Khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có. Backup mới giữ hash của ba tài khoản vận hành trong archive mã hóa; sau dựng DB thử cần kiểm tra đăng nhập bằng mật khẩu cũ. Backup cũ vẫn dùng bootstrap cho tài khoản thiếu.
+Trong môi trường dev, script cấp mật khẩu khởi tạo `1234567` và buộc đổi; bản production sinh mật khẩu ngẫu nhiên riêng cho tài khoản mới. Kiểm tra form dev và production không điền mật khẩu khởi tạo. Trên web, đăng nhập thành công, lưu hoặc cập nhật mật khẩu trong trình duyệt, mở lại trang và kiểm tra tự điền. Khởi động lại không ghi đè hash hoặc trạng thái tài khoản đã có. Backup mới giữ hash của ba tài khoản vận hành trong archive mã hóa; sau dựng DB thử cần kiểm tra đăng nhập bằng mật khẩu cũ. Backup cũ vẫn dùng bootstrap cho tài khoản thiếu.
 Hồi quy xác nhận mật khẩu bắt buộc: nhập đúng mật khẩu hiện tại và cùng giá trị ở hai ô mới phải hoàn tất, giữ hash và thu hồi token cũ; nhập sai mật khẩu hiện tại vẫn bị từ chối.
 
 # Kiểm thử lọc và chốt tháng
@@ -150,6 +150,8 @@ StockLifecycleMysqlIT thêm4 ca theo hai sổ: chốt200kg+400kg và đọc đ�
 Kết quả lượt chuyển tồn:74 unit test,18 integration test MySQL riêng,0 lỗi; frontend build đạt. Flyway42 migrate thành công trên DB thử. Chưa áp dụng V42 vào database thật, chưa kiểm thử UI trực quan.
 
 Regression monthlyCountNeedsOnlyRawKgAndAnnualScrapCanStillBeRecordedLater: chỉ gửi kg nguyên liệu, openingValue/scrapKg/scrapValue null; lưu thành công, profit chưa đủ dữ liệu để null; không tạo bản chốt năm hoặc giả bằng chứng kiểm kê năm.
+
+Ở Chốt sổ tháng Xưởng, chọn tháng chỉ có phiếu giao 1.000 kg và có phiếu nhập/giao từ kỳ trước. Kiểm tra nhập tháng bằng 0, giao tháng bằng 1.000 kg và tồn chuyển sang nằm ở cột riêng. Kiểm tra giới hạn số cân trên giao diện và khi lưu.
 
 Nếu đã nhập kg vụn nhưng chưa có giá trị, endingValue và profit tháng để null; kg vẫn lưu và chuyển theo loại, không biến giá trị vụn chưa biết thành0 ở tháng sau. Đã kiểm tra74 unit test,6 ca MySQL liên quan và build frontend. Không kiểm thử UI trực quan trong lượt này.
 
@@ -224,3 +226,22 @@ Bộ lọc Tổng quan cần đối chiếu thẻ nhập/giao, bảng giao theo 
 Hồi quy thu và trả nợ chuyển kỳ trong tháng đã khóa: yêu cầu thường bị từ chối, xác nhận riêng cho phép ghi đúng ngày nếu kỳ năm còn mở. Kiểm tra tháng chọn sai, tháng chưa mở, kỳ năm đã chốt và phiếu lập trong kỳ đều bị từ chối.
 Hồi quy Công nợ: đang xem tháng 02/2026, mở thu và trả nợ phiếu 2025, chọn ngày 25/03/2026 và kiểm tra xác nhận dùng tháng 03/2026. Ngày thuộc tháng đã khóa hiện cảnh báo ngay trong lần xác nhận; tháng chưa mở báo lỗi tại ô ngày.
 Hồi quy giữ backup trên máy: tạo 52 bản đã ghi nhận, kiểm tra 50 bản mới nhất còn tồn tại và hai bản cũ đã dọn. Bảo toàn tệp ngoài thư mục cấu hình và tệp có checksum sai.
+# Kiểm tra công nợ khi quyết toán Xưởng
+
+- Với phiếu bán và phiếu nhập từ kỳ trước có thanh toán một phần trong tháng đang xem, đối chiếu số lúc mở kỳ, số đã thu hoặc trả trong kỳ và số còn lại cuối kỳ ở cả hai phần. Khoản thanh toán sau ngày kết thúc không làm giảm số cuối kỳ đang xem.
+
+- Mở Báo cáo cho kỳ có ngày bắt đầu đã lưu, chưa chốt và đã kéo dài quá 400 ngày. Kiểm tra chế độ Cả năm tải đủ khoảng kỳ và không hiện lỗi giới hạn ngày.
+- Trên cơ sở dữ liệu thử, mở lại kiểm kê năm cho mỗi sổ, sửa số cân và chốt lại. Kiểm tra bản chốt mới, tồn chuyển kỳ và nhật ký. Kiểm tra từ chối khi có bản chốt phụ thuộc hoặc Phân phối đã phát sinh kho sau ngày chốt.
+- Chốt kỳ năm khi tháng cuối còn mở, sau đó mở tháng đầu kỳ tiếp theo. Xác nhận tháng mới mở được và vẫn chặn mở thêm tháng nếu tháng của kỳ mới chưa khóa.
+- Kiểm tra kỳ Xưởng đầu tiên có phiếu bán trước ngày mở kỳ và phiếu trong kỳ: tổng kg đã giao chỉ cộng phiếu trong kỳ. Kiểm tra sáu ô Tồn kho dùng cùng khoảng ngày trên màn hình.
+- Xem công nợ kỳ cũ có một lần thanh toán trong kỳ và một lần sau kỳ. Kiểm tra cả hai hiện trong lịch sử, tổng trong kỳ chỉ có khoản trong kỳ và nút ẩn nếu hiện tại đã trả đủ. Với phiếu còn nợ, chọn ngày thực trả trong kỳ khác đã mở và đối chiếu Thu chi.
+- Kiểm tra danh sách kỳ với hai kỳ ngắn cùng năm và một kỳ qua 31/12. Chọn từng kỳ, đối chiếu khoảng ngày, trạng thái và tháng gợi ý. Sau khi chốt kỳ mới nhất, kiểm tra ngày bắt đầu gợi ý của kỳ tiếp theo.
+- Mở kiểm kê Xưởng ở kỳ mới sau khi chốt kỳ trước có nhập, giao và còn tồn. Kiểm tra nhập/giao bằng 0 nếu kỳ mới chưa phát sinh, tồn đầu kỳ bằng số kiểm kê trước, và lưu được số cân bằng lượng chuyển sang.
+- Với kỳ cũ chỉ có bản chốt số dư tổng và theo loại, kiểm tra kỳ kế tiếp lấy cả hai nguồn tồn đầu kỳ dù thiếu hồ sơ kiểm kê chi tiết của kỳ cũ.
+- Chọn một kỳ ở Tổng quan rồi mở Báo cáo, Thu chi, Công nợ, Tồn kho, Quyết toán Xưởng, Chốt kỳ và Sổ cuối kỳ. Đối chiếu khoảng ngày và dữ liệu mới sau khi đổi kỳ, kể cả khi mở lại liên kết kiểm kê cũ có `?year=`. Bản in lấy cả kỳ đã chọn.
+- Đổi riêng giá bán kg từ form sửa loại rồi kiểm tra mốc mới giữ đủ giá nhập, giá bán tạ và tấn. Áp dụng lại bộ giá cũ cùng ngày. Kiểm tra mốc cũ giữ nguyên và mốc mới áp dụng đủ bốn giá. Dòng thiếu giá bán không áp dụng được.
+- Với mốc đang áp dụng chưa lưu giá bán, kiểm tra lịch sử lấy đủ ba giá bán hiện tại. Lưu loại với bộ giá cũ rồi đổi giá bán, kiểm tra mốc cũ giữ đủ giá và lần lưu không đổi không sinh mốc trùng.
+
+Thêm một ngày lễ tương lai trong tháng chưa mở. Kiểm tra dòng mới xuất hiện ngay sau khi lưu và phần Chi tiết vẫn yêu cầu mở tháng để ghi thưởng.
+
+Tại tháng giao hai kỳ, đối chiếu danh sách nhập/bán và hao hụt với khoảng lọc. Mở tháng cũ có biến động kho sau đó để kiểm tra tồn lịch sử và lý do chặn điều chỉnh. Đối chiếu giá trị tồn cuối khoảng xem với lớp nhập tại mốc, gồm trường hợp thiếu lớp.

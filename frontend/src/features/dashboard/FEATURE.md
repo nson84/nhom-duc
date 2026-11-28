@@ -11,15 +11,24 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 | API | `GET /api/v1/dashboard/summary`, `.../charts`, backup status |
 
 **Chức năng**
-- Sáu thẻ số liệu Tổng quan cùng kích thước và tự giảm số cột khi màn hình hẹp.
+- Bảy thẻ số liệu Tổng quan xếp 4 thẻ hàng trên và 3 thẻ hàng dưới trên màn hình rộng. Mỗi hàng lấp đầy chiều ngang. Màn hình hẹp tự giảm xuống 2 hoặc 1 cột.
+
+Trong thẻ **Số dư chốt kỳ chuyển sang kỳ sau**, hai ô hàng dưới chia đều toàn bộ chiều ngang, bằng tổng bề rộng của hàng ba ô phía trên trên màn hình rộng.
 - Chọn tên năm để xem đúng kỳ của năm đó; ngày bắt đầu/kết thúc hiện cạnh bộ lọc.
-- Chọn năm ở Tổng quan áp dụng ngay kỳ làm việc cho cửa hàng hiện tại: danh sách phiếu nhập/bán, Thu chi và Báo cáo chỉ xem khoảng ngày của năm đó. Nút **Khóa năm** giữ bộ chọn ở năm hiện tại; **Mở khóa năm** hỏi xác nhận trước khi cho đổi năm. Năm và tháng dùng chung trong các màn, được lưu trên thiết bị qua lần chuyển trang và tải lại.
-- Thẻ **Kỳ kinh doanh** ở đầu Tổng quan cho cả hai sổ hiển thị trạng thái và tên kỳ tùy ý; tên kỳ từ 02/2026 đến 02/2027 có thể là “Kỳ 2026–2027”. Bộ chọn năm vẫn là khóa tra cứu số năm. Kỳ chưa bắt đầu không hiện số liệu theo năm.
+- Bộ chọn **Theo tháng / Từ đầu kỳ** luôn hiển thị ở Tổng quan. Khi hai khoảng ngày trùng nhau, màn hình giải thích rằng cả kỳ nằm trong tháng đang xem.
+- Tiêu đề bảy thẻ số liệu ghi rõ tháng đang chọn hoặc “từ đầu kỳ”. Thẻ đã thu ghi rõ số tiền thu đến hiện tại từ các phiếu lập trong khoảng đang xem.
+- **Chọn kỳ làm việc** ở Tổng quan liệt kê từng kỳ theo tên, ngày bắt đầu, ngày kết thúc và trạng thái. Kỳ đã lưu với tên mặc định dạng “Năm 2027” hiển thị theo thứ tự kỳ. Chốt kỳ và Chốt sổ tháng dùng kỳ và tháng từ Tổng quan.
+- Giao diện tự đặt tên theo thứ tự khi lưu ngày bắt đầu kỳ mới. Các kỳ đã có tên giữ tên đã lưu.
+- Có thể chuyển trực tiếp giữa các kỳ đã lưu bằng bộ chọn, kể cả khi thiết bị từng cố định kỳ đang xem.
+- Thẻ số dư chốt kỳ nhận diện bản chốt bằng khoảng ngày hiển thị.
+- Khi xem một kỳ đã chốt, nhãn cạnh bộ chọn tháng là **Kỳ đã chốt · Chỉ xem**. Kỳ đang làm việc hiển thị trạng thái mở hoặc khóa của tháng.
+- **Mở kỳ tiếp theo** từ kỳ mới nhất đã chốt gợi ý ngày ngay sau ngày chốt. Có thể lưu ngày kết thúc dự kiến ngay ở Tổng quan. Mã kỳ cũ vẫn dùng nội bộ để mở dữ liệu đã lưu.
 - Người dùng chọn ngày bắt đầu rồi bấm **Lưu ngày bắt đầu**. Ô ngày được xóa khi đổi năm để tránh mang ngày của năm khác; không cho chọn ngày tương lai. Từ đó Tổng quan, Thu chi và Báo cáo lọc từ ngày bắt đầu đến ngày hiện tại. Ngày kết thúc được chọn và lưu riêng bằng **Lưu ngày dự kiến**; chỉ sau bước này mới bật **Chốt năm**. Phân phối chốt tại /chot-nam; Xưởng mở đúng năm tại Quyết toán Xưởng để xác nhận. Có thể sửa ngày dự kiến khi kỳ đang làm việc. Mốc dự kiến không đổi phạm vi lọc và ghi phiếu. Có thể chốt kỳ ngắn hơn một năm mà không cần khóa tháng cuối. Ngày kỳ đã chốt không sửa được. Kỳ sau bắt đầu sát ngày chốt kỳ trước.
 - KPI chính: tổng tiền hàng nhập, tiền bán dự kiến, đã thu từ các phiếu bán lập trong kỳ, phần còn phải thu của chính các phiếu đó, doanh nghiệp còn nợ nhà cung cấp từ phiếu nhập trong kỳ, tổng khối lượng đã giao (kg quy đổi thành tấn). Tiền đã thu và công nợ phản ánh mọi lần thanh toán đã ghi cho phiếu trong kỳ, kể cả thanh toán sau kỳ; đây không phải bản chụp công nợ tại ngày chốt. Bản chụp tại ngày chốt ở Sổ cuối năm. Sổ Thu chi vẫn dùng ngày nhận/chi tiền thực tế.
 - Ô tổng khối lượng đã giao liệt kê thêm số tấn theo từng loại nhôm trong cùng kỳ; phiếu chuyển nội bộ vẫn nằm trong khối lượng giao Phân phối.
 - Tổng quan tự chọn tháng bắt đầu của kỳ năm và có nút **Mở tháng** / **Khóa tháng**. Chọn tháng lấy giao của tháng với khoảng đầu/cuối kỳ, ví dụ kỳ bắt đầu 18/02 thì tháng 02 chỉ tính từ ngày 18. Tháng sau chỉ mở khi tháng trước đã khóa; Xưởng cần chốt kỳ công trước khi khóa. Khóa tháng không tự chốt năm, không đổi tồn hay công nợ.
-- Hộp xác nhận **Khóa tháng** hiển thị tên/khoảng ngày của kỳ và nhắc đối chiếu phiếu, thu chi, công nợ; mặc định đặt focus ở **Quay lại**.
+- Hộp xác nhận **Khóa tháng** dùng tên kỳ hiển thị ở Tổng quan và khoảng ngày của tháng cần khóa. Hộp thoại nhắc đối chiếu phiếu, thu chi, công nợ và mặc định đặt focus ở **Quay lại**.
+- Khi mở tháng đầu của kỳ mới, tháng cuối của kỳ đã chốt không chặn thao tác. Nếu một tháng của kỳ chưa chốt đang chặn, Tổng quan hiện rõ tháng đó.
 - Chọn tháng đã khóa rồi bấm **Mở lại tháng** để chỉnh chứng từ. Có thể mở lại khi tháng sau đang mở. Kỳ đã chốt hoặc có bản chốt sổ từ tháng đó trở đi sẽ bị từ chối.
 - Biểu đồ cột theo ngày (lọc ngày có phát sinh / tất cả)
 - Biểu đồ dùng hết chiều rộng vùng nội dung ở màn hình lớn và co theo vùng xem ở màn hình nhỏ.
@@ -56,6 +65,8 @@ Nếu đã nhập kg vụn nhưng chưa có giá trị, endingValue và profit t
 
 Ở Chốt sổ tháng, ô nguyên liệu để trống chưa được coi là số cân 0. Có thể bấm Bỏ qua, về Tổng quan để không tạo bản chốt. Phân phối nhập theo sản phẩm và loại nhôm, xem số chênh lệch rồi cập nhật kho và lưu bản chốt trong một lần. Xưởng lưu bản kiểm kê tháng, không điều chỉnh tồn kho liên tục.
 
+Bảng Xưởng tách tồn đầu tháng khỏi kg nhập và giao trong tháng thuộc kỳ đang chọn. Giới hạn số cân dùng tồn đầu tháng cộng nhập và trừ giao.
+
 
 /chot-nam dùng cùng kỳ đang chọn. Lưu ngày kết thúc dự kiến, kiểm kê Phân phối tại Tồn kho và quay lại xác nhận sau khi đến ngày chốt. Xưởng mở kiểm kê đúng kỳ tại Quyết toán Xưởng. Chốt sổ tháng là tùy chọn.
 
@@ -65,3 +76,6 @@ Trang Chốt năm có nút Xóa kỳ với hộp xác nhận hiện ngày bắt 
 
 Ngày đã lưu không thể xóa bằng bộ chọn ngày. Đổi ngày đầu hoặc ngày kết thúc đã lưu có xác nhận ngày cũ và mới. Lưu ngày bắt đầu mới thành công tự chọn tháng chứa ngày đó. Tổng quan báo lỗi khi chọn một tháng chưa mở mà tháng trước chưa khóa.
 Chế độ **Theo tháng** xem khoảng tháng làm việc. **Từ đầu kỳ** áp dụng ngày bắt đầu đến hôm nay hoặc ngày chốt cho toàn bộ chỉ tiêu, khối lượng giao theo loại và biểu đồ. Bộ chọn tháng làm việc vẫn dùng cho thao tác mở và khóa tháng. Tổng nhôm nhập quy đổi từ kg sang tấn, gồm phiếu nhập nội bộ đã xác nhận.
+Tại **Chốt năm** của Phân phối, dùng **Mở lại kiểm kê** ở kỳ đã chốt, rồi vào Tồn kho cân lại và chốt lại. Chỉ có thể mở lại khi chưa có bản chốt phụ thuộc và chưa có biến động kho sau ngày chốt.
+
+Chốt sổ tháng Phân phối ghi ngày của tồn sổ và lấy tồn đến ngày đó. Khi kho có biến động sau ngày chốt, màn hình chỉ xem và giải thích vì sao không thể điều chỉnh.

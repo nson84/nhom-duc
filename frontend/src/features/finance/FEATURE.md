@@ -2,18 +2,23 @@
 
 Hai nhóm Công nợ hiển thị mỗi phiếu trong một thẻ tự xuống dòng theo chiều rộng khung. Lịch sử hiển thị một dòng tổng tiền cho mỗi ngày thu hoặc trả, bỏ phần giờ. Các giao dịch gốc vẫn được lưu riêng.
 
+Mỗi nhóm có ba ô có viền riêng cho nợ đầu kỳ, số đã thu hoặc trả trong kỳ và nợ cũ cuối kỳ. Các ô xếp dọc trên màn hình hẹp.
+
 Tab **Lãi gộp hóa đơn** ở cả hai sổ cho nhóm theo ngày lập phiếu hoặc theo tháng. Bảng nhóm cộng doanh thu và giá vật tư của hóa đơn bán ngoài, trước chi hoạt động và tiền công. Nhóm thiếu giá vốn hiện trạng thái thiếu dữ liệu.
 
 Nút **Thu nợ** và **Trả nhà cung cấp** mở phiếu gốc trực tiếp. Ngày thực thu hoặc thực trả quyết định tháng ghi sổ, độc lập với tháng đang xem ở Tổng quan. Form gợi ý hôm nay trong kỳ đang làm việc và số nợ còn lại. **Ghi nhận** lưu ngay nếu tháng đã mở. Tháng khóa cần xác nhận thêm; tháng chưa mở hoặc kỳ năm đã chốt từ chối ghi.
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
 
+Báo cáo, Thu chi và Công nợ dùng kỳ đang chọn ở Tổng quan. Bộ lọc tháng trong Báo cáo chỉ thu hẹp phạm vi trong kỳ. Công nợ chuyển kỳ dùng toàn kỳ.
+
 Khung Báo cáo giãn theo nội dung; bảng nhiều cột, gồm bảng tiền công, cuộn ngang trong bảng ở cửa sổ hẹp. Modal Thu chi dài cuộn thân và giữ footer nhìn thấy.
 
 Tab **Công nợ chuyển kỳ** ở Báo cáo hiển thị cả kỳ năm đã chọn của cửa hàng. Nợ khách và nợ nhà cung cấp ghi số phiếu, nợ đầu kỳ, số thu hoặc trả trong kỳ, nợ cũ cuối kỳ và tổng thanh toán theo ngày.
 
 Menu **Công nợ** mở trang riêng `/cong-no` cho Xưởng và Phân phối. Trang dùng kỳ năm đang chọn ở Tổng quan và hiển thị toàn bộ công nợ chuyển kỳ của cửa hàng.
-Form thanh toán công nợ dùng ngày lập phiếu gốc và khoảng kỳ đang mở để giới hạn ngày thu hoặc trả. Với phiếu lập trước khoảng đó, form gợi ý ngày đầu khoảng đang mở.
+Trang và tab dùng chung ô tìm tên khách hoặc nhà cung cấp và số phiếu, hỗ trợ gõ không dấu. Mỗi nhóm lọc riêng theo số còn nợ hiện tại và phân trang tối đa 30 phiếu. Các thẻ tổng phản ánh cả kỳ khi tìm hoặc lọc danh sách.
+Form thanh toán công nợ cho chọn ngày thực tế từ ngày lập phiếu đến hôm nay, độc lập với kỳ đang xem. Chỉ lưu vào tháng đã mở thuộc kỳ chưa chốt, và hỏi xác nhận thêm nếu tháng đã khóa. Lịch sử hiển thị các khoản trước, trong và sau kỳ. Nút thanh toán chỉ hiện khi phiếu còn nợ hiện tại.
 
 ### `/thu-chi` — Sổ thu chi
 
@@ -35,6 +40,14 @@ Form thanh toán công nợ dùng ngày lập phiếu gốc và khoảng kỳ đ
 - Khi Tổng quan chọn tháng, Thu chi và Báo cáo dùng phần giao của tháng với kỳ năm; chọn Cả kỳ để xem lại toàn kỳ. Phiếu chi thủ công thuộc tháng đã chốt bị backend từ chối sửa/hủy.
 
 ### `/bao-cao` — Báo cáo
+
+Khi chuyển giữa Cả năm và Tháng, khoảng ngày được tính từ kỳ đã tải. Báo cáo giữ bố cục trong lúc tải số liệu và chỉ áp dụng phản hồi của lựa chọn mới nhất.
+
+Tab **Doanh thu & Lợi nhuận** của Xưởng hiển thị số liệu phiếu bán trong tháng khi chọn Tháng. Quyết toán theo kiểm kê chỉ hiển thị ở chế độ Cả năm ở cả hai sổ. Tab **Công nợ chuyển kỳ** luôn theo cả kỳ năm và ẩn nút chọn phạm vi.
+
+Có thể xem cả kỳ đang mở đã kéo dài quá 400 ngày.
+
+Báo cáo quyết toán Xưởng hiển thị lãi từ bản chốt nếu có. Khi chưa chốt và tồn kiểm kê vượt lượng có thể còn, báo cáo nhắc đối chiếu tồn đầu kỳ với số cân cuối kỳ trước khi tính lợi nhuận.
 
 Phân phối hiển thị năm thẻ tổng hợp doanh thu và công nợ theo bố cục ba thẻ trên, hai thẻ dưới trên màn hình đủ rộng. Hai hàng trải hết cùng chiều rộng.
 
@@ -62,7 +75,7 @@ Phân phối ghi nước, bánh cho đội giao nhôm, bảo trì trong chi phí
 
 Báo cáo Phân phối hiển thị doanh thu, thực thu và công nợ.
 
-Tab Doanh thu & Công nợ còn hiển thị lãi năm Phân phối từ bản chốt theo khoảng ngày đã chọn. Trước khi kiểm kê và chốt, báo chưa có lãi năm chính xác; lãi vật tư hóa đơn/tháng ở tab riêng chỉ là ước tính tham khảo. Sổ thu chi gom khoản thu bán hàng và chi trả hàng nhập theo **ngày phiếu kho gốc** trong kỳ (kể cả thanh toán được ghi sau kỳ), còn chi phí độc lập theo ngày chi. Cột ngày trên từng khoản giữ ngày thực thu/chi để đối chiếu; không thay đổi ngày giao dịch trong cơ sở dữ liệu.
+Tab Doanh thu & Lợi nhuận ở cả Xưởng và Phân phối hiển thị quyết toán lợi nhuận cả năm (gồm trạng thái Đã chốt năm / Đã kiểm kê đủ / Tạm tính theo tồn sổ, doanh thu, đã thu, còn phải thu, tiền nhập, giá trị tồn cuối năm sau kiểm kê, giá vốn & hao hụt, chi phí hoạt động và lãi cả năm), mặc định xem phạm vi Cả năm (Từ đầu kỳ) và cho phép chuyển sang Theo tháng đang chọn. Sổ thu chi gom khoản thu bán hàng và chi trả hàng nhập theo **ngày phiếu kho gốc** trong kỳ (kể cả thanh toán được ghi sau kỳ), còn chi phí độc lập theo ngày chi. Cột ngày trên từng khoản giữ ngày thực thu/chi để đối chiếu; không thay đổi ngày giao dịch trong cơ sở dữ liệu.
 
 Phiếu chi Phân phối có nhóm bảo trì và người chi. Ghi chú phiếu chi là tùy chọn ở cả hai bên. Phân phối ẩn tab bán theo sản phẩm.
 
@@ -81,3 +94,5 @@ Thu chi có lựa chọn Tổng tháng từ sổ giấy. Chọn tháng, nhóm ch
 
 Tab Lãi gộp hóa đơn / tháng có bảng Lãi tháng sau chi phí (tạm tính): lấy lãi hóa đơn theo ngày bán trừ chi hoạt động và công thợ. Ưu tiên giá vốn nhập tay, sau đó tra giá tham chiếu. Thiếu giá vốn thì để trống lãi, không giả định bằng 0.
 Cột Khách / nơi nhận chỉ hiện nhãn Nội bộ cho phiếu chuyển nội bộ.
+
+Báo cáo theo tháng lấy phần tháng thuộc kỳ, kể cả danh sách hao hụt. Báo cáo cả kỳ đang mở đến hiện tại, còn thẻ quyết toán ghi rõ nếu dùng mốc kiểm kê khác. Giá trị nhập – xuất – tồn Phân phối định giá tồn cuối khoảng xem theo các lớp nhập mới nhất tính đến mốc đó; nếu thiếu lớp thì báo thiếu dữ liệu.

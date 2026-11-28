@@ -4,9 +4,17 @@
 
 ## Chức năng hiện có
 
-`FactoryService` xử lý kiểm kê, phế liệu, báo cáo khách và công nợ. `FactoryLayerAllocator` phân bổ tồn theo phiếu nhập gần nhất cho từng loại. Bảng V20–V22; lịch sử nhập thiếu kg sẽ báo lỗi, chưa có lớp tồn đầu kỳ theo loại riêng.
+Mã kỳ dùng để tra cứu kiểm kê Xưởng, kể cả khi nhiều kỳ bắt đầu trong cùng một năm dương lịch.
+
+Tồn đầu kỳ tổng và theo loại ưu tiên bản chốt chính thức kết thúc ngay trước ngày đầu kỳ, kể cả khi kỳ cũ chỉ có bản chốt số dư mà thiếu hồ sơ kiểm kê Xưởng. Số cân đã lưu vẫn là số người dùng kiểm kê.
+
+`FactoryService` xử lý kiểm kê, phế liệu, báo cáo khách và công nợ. Bảng kiểm kê lọc nhập và giao theo đúng kỳ, và đọc tồn đầu kỳ theo loại từ số kiểm kê liền trước đã chốt. Giới hạn từng loại là `đầu kỳ + nhập − giao`, giới hạn tổng trừ thêm phế liệu đã bán. `FactoryLayerAllocator` vẫn định giá theo phiếu nhập gần nhất, có thể dùng phiếu trước kỳ để định giá số cân còn lại.
 
 Phiếu bán phế liệu và lần thu phế liệu qua `ensureOpen` kiểm tra thêm tháng đã chốt. Quyết toán nhôm vẫn là phép tính của toàn kỳ năm; bảng phiếu bán thành phẩm, phiếu phế liệu và công nợ có thể xem theo tháng đang chọn.
+
+Báo cáo năm lọc phiếu nhập và phiếu bán thành phẩm đúng ngày đầu và cuối kỳ, kể cả kỳ đầu tiên chưa có kiểm kê liền trước. Khi tồn kiểm kê vượt lượng có thể còn, báo cáo trả chênh lệch âm để đối chiếu và chưa tính chi phí nhôm hay lãi tạm tính. Nếu có bản chốt, `estimatedProfit` trả lãi đã lưu trong bản chốt.
+
+Báo cáo `settlement` tổng hợp phải trả nhà cung cấp từ phiếu nhập ngoài đã xác nhận và các giao dịch trả tiền tương ứng, theo cùng khoảng ngày với phải thu khách.
 
 Chốt năm ghi bản số dư `year_end_balances` trong cùng giao dịch với kiểm kê. Giá trị tồn cuối năm chuyển sang đầu năm sau; phải thu/phải trả tiếp tục theo phiếu gốc. Nợ bán phế liệu chưa gắn khách không nằm trong chỉ tiêu phải thu khách của bản chụp.
 
@@ -30,3 +38,4 @@ V42 thêm year_end_inventory_categories, lưu kg và tên từng loại nguyên 
 Audit b361221: closeYear và saveInventory khi kèm chốt lấy khóa ghi shop trước khi đọc/tính dữ liệu chốt, đồng bộ với guard ghi ngày nghiệp vụ. Không đổi phương pháp định giá, tiền công hoặc quy trình kiểm kê/chốt. Giới hạn nghiệm thu và kiểm thử đồng thời ghi tại docs/audit-next-main.md.
 
 Kiểm tra ngày đầu kỳ xưởng dùng chung gợi ý ngày với Tổng quan: báo ngày chốt kỳ trước và ngày bắt đầu hợp lệ ngay sau đó.
+Khi mở lại bản chốt năm Xưởng qua dashboard, kiểm kê trở về bản nháp, giữ các số lượng đã nhập để sửa và chốt lại.

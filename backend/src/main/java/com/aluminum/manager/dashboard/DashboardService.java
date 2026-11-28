@@ -266,6 +266,104 @@ public class DashboardService {
 
 	private record Valuation(BigDecimal quantity, BigDecimal value) {}
 
+	public record DistributionYearReport(
+			int year,
+			String status,
+			LocalDate periodFrom,
+			LocalDate periodTo,
+			int uncountedItems,
+			BigDecimal revenue,
+			BigDecimal cashCollected,
+			BigDecimal customerDebt,
+			BigDecimal supplierDebt,
+			BigDecimal openingValue,
+			BigDecimal purchaseValue,
+			BigDecimal internalOutValue,
+			BigDecimal endingKg,
+			BigDecimal endingValue,
+			BigDecimal materialCost,
+			BigDecimal operatingExpenses,
+			BigDecimal profit) {}
+
+	@Transactional(readOnly = true)
+	public DistributionYearReport distributionYearReport(int year) {
+		YearEndBalanceService.Period period = yearEndBalances.period(year);
+		if (!period.started()) {
+			return new DistributionYearReport(year, "NOT_STARTED", period.periodFrom(), period.periodTo(), 0,
+					BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+					BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, null, null, BigDecimal.ZERO, null);
+		}
+		LocalDate from = period.periodFrom();
+		LocalDate today = LocalDate.now(clock);
+		LocalDate to = period.closed()
+				? period.periodTo()
+				: (period.plannedEnd() != null && !period.plannedEnd().isAfter(today) ? period.plannedEnd() : period.periodTo());
+		DateRange range = range(from, to);
+		DashboardSummary sum = summary(from, to);
+		BigDecimal purchases = money("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM stock_documents
+				WHERE document_type = 'PURCHASE' AND status = 'CONFIRMED'
+				  AND document_date >= ? AND document_date < ?
+				""", range);
+		BigDecimal internalOut = money("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM stock_documents
+				WHERE document_type = 'SALE' AND is_internal = 1 AND status = 'CONFIRMED'
+				  AND document_date >= ? AND document_date < ?
+				""", range);
+		Valuation opening = safeValuation(range.from());
+		BigDecimal openingVal = opening != null ? opening.value() : BigDecimal.ZERO;
+		if (period.closed()) {
+			YearEndBalanceService.Balance bal = yearEndBalances.get(year);
+			BigDecimal endingKg = bal != null ? bal.inventoryKg() : BigDecimal.ZERO;
+			BigDecimal endingValue = bal != null ? bal.inventoryValue() : BigDecimal.ZERO;
+			BigDecimal profit = bal != null ? bal.profit() : null;
+			BigDecimal materialCost = openingVal.add(purchases).subtract(internalOut).subtract(endingValue);
+			return new DistributionYearReport(year, "CLOSED", from, to, 0,
+					sum.revenue(), sum.cashCollected(),
+					bal != null ? bal.customerDebt() : sum.customerDebt(),
+					bal != null ? bal.supplierDebt() : sum.supplierDebt(),
+					openingVal, purchases, internalOut, endingKg, endingValue,
+					materialCost, sum.operatingExpenses(), profit);
+		}
+		Timestamp cutoff = Timestamp.valueOf(range.to().plusDays(1).atStartOfDay());
+		Integer uncounted = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM stock_balances b
+				JOIN products p ON p.id = b.product_id
+				LEFT JOIN distribution_inventory_count_evidence c
+				  ON c.shop_id = p.shop_id AND c.product_id = b.product_id AND c.category_id = b.category_id
+				WHERE p.shop_id = ?
+				  AND EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = b.product_id
+				              AND m.category_id = b.category_id AND m.movement_at < ?)
+				  AND (c.counted_at IS NULL OR c.counted_at < ?
+				    OR c.counted_quantity_kg <> b.quantity_base
+				    OR EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = b.product_id
+				       AND m.category_id = b.category_id
+				       AND (m.created_at > c.counted_at OR m.movement_at > c.counted_at)))
+				""", Integer.class, shops.currentId(), cutoff, Timestamp.valueOf(range.to().atStartOfDay()));
+		Valuation ending = safeValuation(range.to().plusDays(1));
+		int remainingUncounted = uncounted == null ? 0 : uncounted;
+		if (opening == null || ending == null) {
+			return new DistributionYearReport(year, "MISSING_COUNT", from, to, remainingUncounted,
+					sum.revenue(), sum.cashCollected(), sum.customerDebt(), sum.supplierDebt(),
+					openingVal, purchases, internalOut, null, null, null, sum.operatingExpenses(), null);
+		}
+		BigDecimal materialCost = opening.value().add(purchases).subtract(internalOut).subtract(ending.value());
+		BigDecimal profit = sum.revenue().subtract(materialCost).subtract(sum.operatingExpenses());
+		String status = remainingUncounted == 0 ? "COUNTED" : "ESTIMATED";
+		return new DistributionYearReport(year, status, from, to, remainingUncounted,
+				sum.revenue(), sum.cashCollected(), sum.customerDebt(), sum.supplierDebt(),
+				opening.value(), purchases, internalOut, ending.quantity(), ending.value(),
+				materialCost, sum.operatingExpenses(), profit);
+	}
+
+	private Valuation safeValuation(LocalDate cutoff) {
+		try {
+			return valuation(cutoff);
+		} catch (BusinessException ex) {
+			return null;
+		}
+	}
+
 	@Transactional(readOnly = true)
 	public List<DashboardPoint> charts(LocalDate from, LocalDate to) {
 		DateRange range = range(from, to);
@@ -346,9 +444,6 @@ public class DashboardService {
 		LocalDate end = to == null ? today : to;
 		if (end.isBefore(start)) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu", null);
-		}
-		if (start.plusDays(400).isBefore(end)) {
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Khoảng thời gian báo cáo không quá 400 ngày", null);
 		}
 		return new DateRange(start, end);
 	}

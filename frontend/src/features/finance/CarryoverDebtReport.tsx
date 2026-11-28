@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Empty, Spin, Typography, message } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Col, Empty, Input, Row, Select, Space, Spin, Statistic, Typography, message } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { AppPagination, PAGE_SIZE } from "../../components/PagedTable";
@@ -18,24 +19,55 @@ type Invoice = {
   openingDebt: number;
   paidInPeriod: number;
   remainingDebt: number;
+  currentDebt: number;
   payments: { date: string; amount: number }[];
 };
 type Report = { from: string; to: string; invoices: Invoice[] };
 const date = (value: string) => dayjs(value).format("DD/MM/YYYY");
+const searchText = (value: string) => value.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d");
 
-function DebtInvoices({ rows, type, canWrite, onPay }: {
+function DebtInvoices({ rows, type, canWrite, from, to, onPay }: {
   rows: Invoice[];
   type: Invoice["type"];
   canWrite: boolean;
+  from: string;
+  to: string;
   onPay: (id: number) => void;
 }) {
   const [page, setPage] = useState(1);
-  const current = Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const keyword = searchText(query.trim());
+  const matches = rows.filter(row =>
+    searchText(`${row.party ?? ""} ${row.code}`).includes(keyword) &&
+    (status === "all" || (status === "outstanding" ? row.currentDebt > 0 : row.currentDebt <= 0)));
+  const current = Math.min(page, Math.max(1, Math.ceil(matches.length / PAGE_SIZE)));
   const paidLabel = type === "SALE" ? "Đã thu" : "Đã trả";
   if (!rows.length) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có công nợ chuyển kỳ" />;
 
   return <>
-    {rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE).map(row => {
+    <Space wrap style={{ marginBottom: 12 }}>
+      <Input
+        allowClear
+        prefix={<SearchOutlined />}
+        aria-label={type === "SALE" ? "Tìm khách hàng hoặc số phiếu" : "Tìm nhà cung cấp hoặc số phiếu"}
+        placeholder={type === "SALE" ? "Tên khách hàng hoặc số phiếu" : "Tên nhà cung cấp hoặc số phiếu"}
+        value={query}
+        onChange={event => { setQuery(event.target.value); setPage(1); }}
+      />
+      <Select
+        aria-label={type === "SALE" ? "Trạng thái phải thu hiện tại" : "Trạng thái phải trả hiện tại"}
+        value={status}
+        onChange={value => { setStatus(value); setPage(1); }}
+        options={[
+          { value: "all", label: "Tất cả trạng thái" },
+          { value: "outstanding", label: "Còn nợ hiện tại" },
+          { value: "settled", label: "Đã thanh toán đủ" },
+        ]}
+      />
+    </Space>
+    {matches.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không tìm thấy phiếu phù hợp" />}
+    {matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE).map(row => {
       const payments = new Map<string, number>();
       for (const payment of row.payments) {
         const day = dayjs(payment.date).format("YYYY-MM-DD");
@@ -47,23 +79,24 @@ function DebtInvoices({ rows, type, canWrite, onPay }: {
             <Typography.Text strong>{row.party || "—"}</Typography.Text>
             <div><Typography.Text type="secondary">{row.code} · {date(row.date)}</Typography.Text></div>
           </div>
-          {canWrite && row.remainingDebt > 0 && <Button onClick={() => onPay(row.id)}>
+          {canWrite && row.currentDebt > 0 && <Button onClick={() => onPay(row.id)}>
             {type === "SALE" ? "Thu nợ" : "Trả nhà cung cấp"}
           </Button>}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 8, marginTop: 8 }}>
           <span>Nợ đầu kỳ <b>{formatMoney(row.openingDebt)}</b></span>
           <span>{paidLabel} trong kỳ <b>{formatMoney(row.paidInPeriod)}</b></span>
-          <span>Còn nợ <b>{formatMoney(row.remainingDebt)}</b></span>
+          <span>Còn nợ cuối kỳ <b>{formatMoney(row.remainingDebt)}</b></span>
+          <span>Còn nợ hiện tại <b>{formatMoney(row.currentDebt)}</b></span>
         </div>
         {payments.size > 0 && <div style={{ marginTop: 8 }}>
           {Array.from(payments, ([day, amount]) => <div key={day}>
-            <Typography.Text type="secondary">{paidLabel} ngày {date(day)} · {formatMoney(amount)}</Typography.Text>
+            <Typography.Text type="secondary">{paidLabel} ngày {date(day)} · {formatMoney(amount)}{day > to ? " (sau kỳ)" : day < from ? " (trước kỳ)" : ""}</Typography.Text>
           </div>)}
         </div>}
       </Card>;
     })}
-    {rows.length > PAGE_SIZE && <AppPagination current={current} total={rows.length} onChange={setPage} />}
+    {matches.length > PAGE_SIZE && <AppPagination current={current} total={matches.length} onChange={setPage} />}
   </>;
 }
 
@@ -98,7 +131,7 @@ export function CarryoverDebtReport({ year }: { year: number }) {
 
   return <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 16, minWidth: 0 }}>
     <Alert showIcon type="info" message={report ? `Cả kỳ từ ${date(report.from)} đến ${date(report.to)}` : "Công nợ của cả kỳ năm đang chọn"}
-      description="Theo dõi phiếu lập trước ngày đầu kỳ còn nợ tại mốc đó. Các lần thu hoặc trả bên dưới tính theo ngày thanh toán trong kỳ." />
+      description="Tổng thu hoặc trả trong kỳ dùng ngày thanh toán thuộc kỳ. Lịch sử trên từng phiếu hiển thị cả các lần ngoài kỳ." />
     {error && <Alert type="error" showIcon message={error} />}
     {(["SALE", "PURCHASE"] as const).map((type) => {
       const rows = report?.invoices.filter((row) => row.type === type) ?? [];
@@ -106,9 +139,13 @@ export function CarryoverDebtReport({ year }: { year: number }) {
       const total = (key: "openingDebt" | "paidInPeriod" | "remainingDebt") =>
         formatMoney(rows.reduce((sum, row) => sum + row[key], 0));
       return <section key={type} style={{ minWidth: 0 }}>
-        <h3>{type === "SALE" ? "Khách còn nợ" : "Còn nợ nhà cung cấp"}</h3>
-        {report && <p>Nợ đầu kỳ <b>{total("openingDebt")}</b> · {paidLabel} <b>{total("paidInPeriod")}</b> · Nợ cũ cuối kỳ <b>{total("remainingDebt")}</b></p>}
-        {report ? <DebtInvoices rows={rows} type={type} canWrite={canWrite} onPay={id => void startPayment(id)} />
+        <h3>{type === "SALE" ? "Phải thu chuyển kỳ" : "Phải trả nhà cung cấp chuyển kỳ"}</h3>
+        {report && <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+          <Col xs={24} md={8}><Card size="small" style={{ height: "100%" }}><Statistic title="Nợ đầu kỳ" value={total("openingDebt")} /></Card></Col>
+          <Col xs={24} md={8}><Card size="small" style={{ height: "100%" }}><Statistic title={paidLabel} value={total("paidInPeriod")} /></Card></Col>
+          <Col xs={24} md={8}><Card size="small" style={{ height: "100%" }}><Statistic title="Nợ cũ cuối kỳ" value={total("remainingDebt")} /></Card></Col>
+        </Row>}
+        {report ? <DebtInvoices rows={rows} type={type} from={report.from} to={report.to} canWrite={canWrite} onPay={id => void startPayment(id)} />
           : !error && <Spin />}
       </section>;
     })}
@@ -120,7 +157,7 @@ export function CarryoverDebtReport({ year }: { year: number }) {
       onClose={() => setPaying(undefined)}
       onSubmit={async (values) => {
         try {
-          await addPayment(paying.id, values, { workingYear: year, workingMonth: values.paymentDate.slice(0, 7) });
+          await addPayment(paying.id, values, { workingYear: null, workingMonth: values.paymentDate.slice(0, 7) });
           setPaying(undefined);
           setRefresh(value => value + 1);
           message.success("Đã ghi thanh toán cho phiếu gốc");

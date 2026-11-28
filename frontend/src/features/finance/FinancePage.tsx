@@ -26,8 +26,8 @@ import { PagedTable } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
 import { useCanWrite, useSession } from "../auth/auth-store";
 import { getMonthStatus, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
-import { useWorkingYear, workingYearStore } from "../dashboard/working-year";
-import { visiblePeriod } from "../dashboard/working-period";
+import { useWorkingYear } from "../dashboard/working-year";
+import { useWorkingPeriodInfo, visiblePeriod } from "../dashboard/working-period";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
@@ -60,6 +60,7 @@ export function FinancePage() {
   const [scope, setScope] = useState<"shop" | "all">("shop");
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
   const year = workingYear.year;
+  const periodInfo = useWorkingPeriodInfo(year);
   const [period, setPeriod] = useState<YearPeriod | null>(null);
   const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
   useEffect(() => {
@@ -205,9 +206,7 @@ export function FinancePage() {
             ]}
           />
         ) : null}
-        <DatePicker picker="year" aria-label="Năm xem thu chi" allowClear={false} disabled={workingYear.locked}
-          value={dayjs(`${year}-01-01`)} onChange={(value) => value && workingYearStore.set(shop, { year: value.year(), locked: false })} />
-        {period && <span>{period.periodName}: {period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${period.closed ? dayjs(period.periodTo).format("DD/MM/YYYY") : "đang làm việc"}` : "chưa bắt đầu"}</span>}
+        {period && <span>{periodInfo.name}: {period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${period.closed ? dayjs(period.periodTo).format("DD/MM/YYYY") : "đang làm việc"}` : "chưa bắt đầu"}</span>}
         <Select
           allowClear
           placeholder="Loại phiếu"

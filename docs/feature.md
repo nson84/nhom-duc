@@ -70,7 +70,7 @@ Các tài liệu xuyên chức năng: [API](api-specification.md), [cơ sở d�
 
 Mục Chốt sổ tháng (/chot-so-thang) thuộc dashboard cho Xưởng và Phân phối.
 
-Tồn đầu kỳ theo từng loại: OpeningInventory dùng chung ở Tồn kho, Chốt sổ tháng và Quyết toán Xưởng; API InventoryCarryoverController/Service thuộc dashboard. Tự xem nguồn chốt liền trước, không có thao tác nhập lại hàng.
+Tồn đầu kỳ theo từng loại: OpeningInventory dùng chung ở Nhập kho, Tồn kho, Chốt sổ tháng và Quyết toán Xưởng; API InventoryCarryoverController/Service thuộc dashboard. Tự xem nguồn chốt liền trước, không có thao tác nhập lại hàng.
 
 
-Nhóm Kiểm kê & chốt sổ có /chot-so-thang và /chot-nam cho Xưởng và Phân phối. Khóa tháng để mở tháng tiếp theo nằm tại Tổng quan.
+Nhóm Kiểm kê & chốt sổ có Chốt sổ tháng (`/chot-so-thang`) và Chốt kỳ (`/chot-nam`) cho Xưởng và Phân phối. Chọn kỳ, chọn tháng và khóa tháng tại Tổng quan. Bản in Sổ cuối kỳ ở `/so-cuoi-nam`.

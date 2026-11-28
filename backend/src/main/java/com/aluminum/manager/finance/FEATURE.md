@@ -2,7 +2,7 @@
 
 Đọc tài liệu này trước khi sửa code trong thư mục; cập nhật cùng thay đổi.
 
-`GET /api/v1/reports/carryover-debt?year=...` dùng ngày đầu và cuối kỳ của cửa hàng đăng nhập. Chỉ lấy phiếu ngoài đã xác nhận trước ngày đầu kỳ và còn nợ tại mốc đó. Các lần thanh toán thuộc kỳ dùng ngày giao dịch thực tế. Báo cáo chỉ đọc.
+`GET /api/v1/reports/carryover-debt?year=...` chỉ lấy phiếu ngoài đã xác nhận trước ngày đầu kỳ và còn nợ tại mốc đó. Trả lịch sử thanh toán đầy đủ và `currentDebt` bên cạnh các tổng đúng mốc kỳ. Báo cáo chỉ đọc.
 
 ## Chức năng hiện có
 
@@ -16,7 +16,7 @@ Khi giao diện chọn tháng, khoảng ngày lọc Thu chi/Báo cáo là phần
 
 Bảng báo cáo theo ngày xếp ngày mới nhất trước và đếm tất cả phiếu bán đã xác nhận, gồm phiếu chuyển nội bộ sang Xưởng. Cột doanh thu và đã thu chỉ tính phiếu bán cho khách bên ngoài; chuyển nội bộ không tạo doanh thu hay lãi.
 
-Khoảng báo cáo cho phép tối đa 400 ngày, khớp kỳ làm việc có thể đi qua Tết âm lịch; giới hạn 366 ngày cũ làm Báo cáo lỗi khi kỳ chưa chốt dài hơn một năm dương lịch.
+Truy vấn đọc Thu chi và Báo cáo nhận cả khoảng của kỳ đang mở dù đã kéo dài quá 400 ngày. Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.
 
 Báo cáo lãi gộp hóa đơn chỉ dùng giá nhập tham khảo theo ngày bán. Giá tham khảo bằng 0 hoặc thiếu được coi là chưa đủ dữ liệu; lãi hóa đơn và tổng tháng tương ứng để trống, không coi giá vốn là 0. Lãi này không phải giá vốn thực tế hoặc lãi quyết toán cuối kỳ.
 
@@ -50,3 +50,5 @@ Báo cáo ngày trả đủ cột missing_standard; giá tham khảo NULL hoặc
 
 
 Khoản chi tổng hợp tháng dùng mốc phân kỳ nội bộ, hiển thị tháng thay vì ngày thực chi và không đưa vào bảng chi theo ngày. Báo cáo /reports/monthly-margins lấy doanh thu bán ngoài, giá vốn nhập tay hoặc tham chiếu, chi hoạt động và công thợ. Công thợ lấy công theo kỳ và thưởng lễ theo ngày, cộng phiếu chi lương thủ công. Ứng và trả lương qua kỳ công không được cộng lần nữa vào chi phí.
+
+Báo cáo nhập – xuất – tồn Phân phối tính giá trị cuối khoảng xem từ lớp phiếu nhập mới nhất theo cặp sản phẩm–loại. Thiếu lớp trả null và CSV để trống giá trị.

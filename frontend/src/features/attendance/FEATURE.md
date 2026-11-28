@@ -4,6 +4,8 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 Bảng nhân viên, chấm công, tiền công và bảng trong modal cuộn ngang riêng ở cửa sổ nhỏ; modal dài cuộn phần nội dung và giữ nút xác nhận trong viewport.
 
+Chấm công và Tiền công chỉ tải dữ liệu sau khi đã xác định được kỳ đang làm việc và ngày bắt đầu từ Tổng quan.
+
 ### `/nhan-vien` — Nhân viên
 
 | | |
@@ -29,7 +31,11 @@ Khi mở trang, tháng mặc định là tháng bắt đầu của kỳ làm vi�
 | Ai dùng | **Xưởng only** |
 | API | attendance board, overtime, holidays, policies |
 
-Trong **Lịch nghỉ lễ**, chọn ngày trong năm đang xem, nhập mức thưởng mỗi người và tích từng nhân viên đã nhận trực tiếp. Những người chưa tích được cộng thưởng vào kỳ tiền công của tháng có ngày lễ.
+Trong **Lịch nghỉ lễ**, form **Thêm ngày lễ** chỉ nhập ngày, tên và loại. Sau khi lưu, bấm **Chi tiết** để nhập mức thưởng mỗi người và chọn **Đã nhận trực tiếp** hoặc **Nhận cùng lương** cho từng nhân viên. Có thể chọn nhanh **Tất cả đã nhận** hoặc **Tất cả nhận cùng lương** rồi đổi riêng từng người trước khi lưu. Khoản nhận cùng lương được cộng vào kỳ tiền công của tháng có ngày lễ.
+
+Ngày lễ vừa lưu xuất hiện ngay trong bảng. Có thể thêm trước ngày lễ tương lai trong kỳ đang làm việc. Ghi thưởng tại **Chi tiết** vẫn cần mở tháng.
+
+Danh sách nhận thưởng căn tên nhân viên và các lựa chọn theo cột. Trên cửa sổ hẹp, các lựa chọn có thể xuống dòng.
 
 **Chức năng**
 - Bảng tháng: bấm số ngày để mở phiếu từ 00:01 đến hết 23:59 của chính ngày đó. Tìm theo tên hoặc mã nhân viên. Sáng và chiều mỗi buổi 0,5 công. Tăng ca có checkbox và ô số giờ lẻ riêng, bỏ tích đặt số giờ về 0. Tổng công và tổng giờ tăng ca hiển thị riêng. Lưu xong khóa phiếu, mở lại trong ngày phải xác nhận.

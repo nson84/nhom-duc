@@ -25,6 +25,8 @@ Hai API tăng ca nhận thêm `payUnit: HOUR | SESSION` (thiếu thì mặc đ�
 | GET | `/dashboard/summary?from&to` | Doanh thu, tiền thu, lãi gộp, chi phí, tồn, tiền công, kg nhập (`purchaseKg`) và kg giao |
 | POST | `/dashboard/distribution-close?from&to&annual=true&year=2026` | Chốt năm Phân phối theo khoảng ngày tự chọn; `year` là tên kỳ. Kỳ liền sau phải bắt đầu ngày tiếp theo. |
 | GET | `/dashboard/year-end?year` | Bản số dư chốt năm theo sổ đang chọn; `data: null` nếu chưa chốt. Gồm `periodFrom`, `periodTo`, `inventoryKg`, `inventoryValue`, `customerDebt`, `supplierDebt`, `profit`, `closedAt` |
+| GET | `/dashboard/year-periods` | Danh sách kỳ đã lưu của sổ hiện tại theo thứ tự ngày bắt đầu. Trả cùng cấu trúc với `/dashboard/year-period`. `year` là mã tra cứu nội bộ. |
+| POST | `/dashboard/year-reopen?year` | Mở lại bản chốt năm của sổ đang đăng nhập để sửa kiểm kê. Từ chối nếu có bản chốt phụ thuộc hoặc kho Phân phối đã biến động sau ngày chốt. |
 | GET | `/reports/annual-book?year&shopCode` | Dữ liệu sổ cuối năm: khách, phiếu bán/nhập, thanh toán, thu chi, công thợ, tồn kho. `transfersOut`/`transferItems` chứa phiếu xuất nội bộ Phân phối trong kỳ; `purchases` của Xưởng gồm phiếu nhập nội bộ trước kỳ để đối chiếu. Xưởng/Phân phối chỉ xem sổ của mình; Admin bị từ chối. |
 | GET | `/stock-movements?productId` | Biến động tồn của sản phẩm trong sổ hiện tại; mỗi dòng trả `internal` để nhận biết phiếu chuyển nội bộ. |
 | GET | `/dashboard/charts?from&to` | Theo ngày, múi giờ Việt Nam, `to` tính đến hết ngày |
@@ -50,7 +52,7 @@ Quy tắc chống spam đã bật:
 
 Chạy thử: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke-landing.ps1`
 
-Khoảng ngày kết thúc được hiểu là trước 00:00 ngày kế tiếp. Khoảng tối đa 400 ngày để hỗ trợ kỳ theo Tết âm lịch.
+Với truy vấn đọc Thu chi và Báo cáo, ngày kết thúc được hiểu là trước 00:00 ngày kế tiếp. Có thể truy vấn kỳ đang mở kéo dài quá 400 ngày.
 
 ## Giá nhập theo ngày và chi phí chuẩn
 
@@ -60,8 +62,9 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 | --- | --- | --- |
 | GET | `/reports/sales-by-product`, `/reports/inventory` | Trả từng cặp sản phẩm và loại nhôm. Bộ lọc loại dùng loại trên dòng phiếu bán hoặc dòng tồn kho. |
 | GET | `/categories` | Loại nhôm + giá nhập/bán (kg, tạ, tấn); trường giá m² cũ chỉ giữ để đọc dữ liệu lịch sử |
-| POST / PUT | `/categories` / `/categories/{id}` | Tạo/sửa loại kèm giá; lịch sử giá nhập theo loại |
-| GET/POST | `/categories/{id}/purchase-prices` | Lịch sử giá nhập loại (`pricePerBase` = đ/kg); đổi giá trong cùng ngày giữ mốc cũ, mốc ID mới nhất áp dụng cho ngày đó |
+| POST / PUT | `/categories` / `/categories/{id}` | Tạo/sửa loại kèm giá. Khi sửa, bỏ `referencePurchasePrice` để giữ lịch sử giá nhập hiện có. |
+| GET/POST | `/categories/{id}/purchase-prices` | Lịch sử giá nhập loại (`pricePerBase` = đ/kg). Dòng lưu từ form loại nhôm có thêm `sellingPriceKg`, `sellingPriceTa`, `sellingPriceTon`. Mốc ID mới nhất áp dụng nếu trùng ngày. |
+| POST | `/categories/{id}/purchase-prices/{priceId}/apply` | Áp dụng lại một bộ giá đủ dữ liệu của chính loại nhôm đó kể từ hôm nay. Trả lịch sử cập nhật. |
 | POST | `/catalog/sync-to-other-shop` | Phân phối đẩy tên/ảnh SP và loại/giá nhập tham khảo sang Xưởng; giữ giá bán, mô tả, trạng thái SP/loại đã có và không đụng tồn |
 | GET/POST | `/customers` | Sổ khách theo shop; Admin `?scope=all` xem gộp |
 | GET/PUT | `/customers/{id}` | Chi tiết / sửa khách; GET trả `totalSales`, `receivedAmount`, `outstandingDebt`, `deliveredKg` |
@@ -72,7 +75,7 @@ Giá nhập tham khảo được quản lý theo loại nhôm (`category_purchas
 | PUT | `/stock-documents/{id}/customer` | Gắn / gỡ `customerId` trên phiếu bán |
 | GET | `/stock-documents/delivered-by-category` | Kg đã giao theo loại từ phiếu bán đã xác nhận; lọc `from`, `to`, `categoryId`, `customerIds` (danh sách ID phân cách dấu phẩy), `scope=all` cho Admin |
 | GET | `/dashboard/month-status` | Nhận `month=YYYY-MM`, trả `NOT_OPEN` / `OPEN` / `CLOSED` cho cửa hàng đang chọn |
-| POST | `/dashboard/month-open` | Nhận `year`, `month`; mở tháng đầu hoặc tháng kế tiếp sau khi tháng trước đã khóa |
+| POST | `/dashboard/month-open` | Nhận `year`, `month`; mở tháng đầu hoặc tháng kế tiếp sau khi tháng trước đã khóa. Tháng còn mở thuộc kỳ đã chốt không chặn kỳ mới. |
 | POST | `/dashboard/month-close` | Nhận `year`, `month`; khóa tháng đã mở sau khi hết tháng (Xưởng cần chốt kỳ công trước) |
 | POST | `/dashboard/month-reopen` | Nhận `year`, `month=YYYY-MM`; mở lại tháng đã khóa của sổ đăng nhập nếu không có bản chốt liên quan |
 | GET | `/products` | SP: mã, tên, ảnh, trạng thái, tổng tồn gộp |
@@ -91,9 +94,9 @@ Quy tắc bắt buộc:
 
 | Method | Đường dẫn | Ghi chú |
 | --- | --- | --- |
-| GET | `/factory/years/{year}/report` | Khối lượng, hao hụt, doanh thu, chi phí nhôm và lãi năm; lãi/hao hụt `null` nếu chưa kiểm kê |
+| GET | `/factory/years/{year}/report` | Khối lượng, hao hụt, doanh thu, chi phí nhôm và lãi năm. Chỉ cộng phiếu nhập và bán thành phẩm có ngày thuộc kỳ, kể cả kỳ đầu tiên. Lãi và hao hụt `null` nếu chưa kiểm kê. Kỳ đã chốt trả lãi từ bản chốt nếu có. |
 | GET/PUT | `/factory/years/{year}/count` | Xem/lưu tổng kiểm kê cùng `periodFrom`, `periodTo`; đầu kỳ lấy số cuối kỳ trước khi có |
-| GET/PUT | `/factory/years/{year}/raw-counts` | Xem/lưu kg nguyên liệu theo loại và các lớp phiếu nhập gần nhất; báo lỗi nếu lịch sử nhập không đủ |
+| GET/PUT | `/factory/years/{year}/raw-counts` | Xem/lưu kg nguyên liệu theo loại và các lớp phiếu nhập gần nhất. Mỗi dòng có `openingKg` từ kiểm kê trước và `purchasedKg`, `deliveredKg` chỉ trong kỳ. Báo lỗi nếu lịch sử nhập không đủ để định giá. |
 | GET | `/factory/purchase-costs` | Các dòng nhập xưởng đã xác nhận và chưa đảo, dùng làm lựa chọn giá tham chiếu |
 | GET | `/factory/years/{year}/sale-costs?categoryId&costPerKg` | Lọc phiếu bán theo loại và giá tham chiếu, cộng kg và tiền |
 | PUT | `/factory/sale-items/{itemId}/purchase-reference` | Gắn dòng nhập cùng loại, trước ngày bán cho dòng bán xưởng chưa thuộc năm đã chốt; body `{ "purchaseItemId": ... }` |
@@ -103,7 +106,7 @@ Quy tắc bắt buộc:
 | POST | `/factory/scrap-sales/{id}/payments` | Ghi thu một phần hoặc đủ; tạo phiếu thu trong sổ thu chi |
 | POST | `/factory/scrap-sales/{id}/void` | Hủy phiếu chưa thu tiền |
 | GET | `/factory/customers/{id}/years/{year}` | Kg thành phẩm và từng dòng phiếu đã giao của khách |
-| GET | `/factory/years/{year}/settlement?month=1..12&monthYear=2027` | Công nợ tháng giao với kỳ đã chọn; bỏ `month` để lấy cả kỳ. `monthYear` dùng cho kỳ đi qua năm dương lịch. |
+| GET | `/factory/years/{year}/settlement?month=1..12&monthYear=2027` | Công nợ tháng giao với kỳ đã chọn; bỏ `month` để lấy cả kỳ. `monthYear` dùng cho kỳ đi qua năm dương lịch. `supplier` gồm `openingDebt`, `purchases`, `payments`, `closingDebt`. |
 
 Mục lục [feature.md](feature.md) dẫn tới tài liệu từng module và màn hình. Quyết toán công nợ được tính theo dữ liệu tại lúc xem; dữ liệu nhập lùi ngày có thể thay đổi kết quả.
 
@@ -132,6 +135,8 @@ Mục lục [feature.md](feature.md) dẫn tới tài liệu từng module và m
 
 GET /api/v1/dashboard/monthly-book?year=...&month=YYYY-MM đọc số liệu hoặc bản chốt. POST cùng đường dẫn với year, month, counts lưu bản chốt bất biến theo shop/tháng. counts gồm categoryId, rawKg, scrapKg.
 
+categoryFlows của Xưởng gồm categoryId, openingKg, purchasedKg và deliveredKg. Hai số phát sinh lọc theo giao của tháng và kỳ. Bản chốt cũ có thể thiếu trường này.
+
 ## Bổ sung 19/11/2026
 
 POST /api/v1/payroll/periods/{id}/details/{detailId}/advances: ghi ứng lương có date, amount, note, idempotencyKey. Chỉ kỳ lương và tháng đang mở; ngày ứng phải thuộc tháng lương và kỳ làm việc. Khoản ứng ghi chi PAYROLL_ADVANCE, trừ tiền còn lĩnh.
@@ -153,12 +158,13 @@ POST /api/v1/backups/{id}/prepare và /api/v1/backups/cloud/prepare trả databa
 
 - Stock document request nhận paperSource và items[].enteredCostPerKg. Chi tiết phiếu trả các trường này.
 - PUT /api/v1/stock-documents/{id}/payments/{paymentId}/date nhận date dạng YYYY-MM-DD, trả phiếu đã cập nhật.
-- POST /api/v1/stock-documents/{id}/payments nhận `confirmLockedCarryoverMonth` để ghi khoản thanh toán phiếu nợ chuyển kỳ trong tháng đã khóa. Màn Công nợ gửi `workingYear` theo kỳ báo cáo và `workingMonth` theo ngày thanh toán. Kỳ thanh toán phải còn mở và phiếu gốc phải lập trước ngày đầu kỳ với xác nhận qua khóa tháng.
+- POST /api/v1/stock-documents/{id}/payments nhận `confirmLockedCarryoverMonth` để ghi khoản thanh toán phiếu nợ chuyển kỳ trong tháng đã khóa. Màn Công nợ chỉ gửi `workingMonth` theo ngày thanh toán. Khi thiếu `workingYear`, backend dùng kỳ theo ngày thanh toán. Kỳ thanh toán phải còn mở và phiếu gốc phải lập trước ngày đầu kỳ với xác nhận qua khóa tháng.
+- GET /api/v1/reports/carryover-debt trả `remainingDebt` tại cuối kỳ, `currentDebt` theo toàn bộ các khoản đã ghi và `payments` gồm lịch sử trước, trong và sau kỳ.
 - API ghi và sửa ngày thanh toán từ chối ngày trước ngày lập phiếu. API sửa phiếu từ chối dời ngày lập qua ngày đã thanh toán.
 - Finance transaction request và response có monthlySummary. transactionDate dùng mốc phân kỳ khi monthlySummary là true.
 - GET /api/v1/reports/monthly-margins?from=YYYY-MM-DD&to=YYYY-MM-DD trả month, grossProfit, operatingCost, payrollCost, profitAfterExpenses. Lãi null khi thiếu giá vốn. Bản in năm trả monthlySummary trên các dòng thu chi.
 
-POST /api/v1/dashboard/monthly-book/reconcile nhận year, month và items gồm productId, categoryId, countedQuantityKg, scrapKg tùy chọn. Chỉ Phân phối có tháng đang mở được dùng. Trả bản chốt tháng sau khi cập nhật kho trong cùng giao dịch.
+POST /api/v1/dashboard/monthly-book/reconcile nhận year, month và items gồm productId, categoryId, countedQuantityKg, scrapKg tùy chọn. Phân phối dùng được với tháng đang mở hoặc đã khóa trong kỳ năm chưa chốt, miễn kho chưa có biến động sau ngày cuối tháng. Trả bản chốt tháng sau khi cập nhật kho trong cùng giao dịch. POST /api/v1/stock-balances/count cũng cho phép kiểm kê trong cả tháng đang mở và tháng đã khóa khi kỳ năm chưa chốt và kho chưa có biến động sau ngày kiểm kê.
 
 
 DELETE /api/v1/dashboard/year-period?year=2025&from=2026-02-22 trả trạng thái kỳ sau khi xóa thiết lập. Chỉ Xưởng và Phân phối trong sổ tương ứng. Kỳ đã sử dụng hoặc ngày bắt đầu đã đổi trả lỗi kiểm tra.
@@ -174,3 +180,7 @@ GET /api/v1/stock-documents?filter=internal-history và GET /api/v1/stock-docume
 
 
 PUT /api/v1/finance/transactions/{id} dùng các trường của yêu cầu lập phiếu chi. Chỉ sửa khoản EXPENSE, MANUAL, CONFIRMED của sổ hiện tại, ngoài PAYROLL. Ngày gốc và ngày mới phải thuộc tháng mở chưa chốt sổ.
+
+POST /api/v1/holidays cho phép tạo lịch ngày lễ tương lai trong kỳ đang làm việc khi không ghi mức công, thưởng hay người đã nhận. PUT ghi thưởng giữ kiểm tra mở tháng và kỳ công.
+
+GET /api/v1/stock-documents lấy giao giữa from/to và kỳ đã chọn cho danh sách thường. GET /api/v1/dashboard/monthly-book trả stockAtClose và reconciliationBlock cho bản xem trước Phân phối. GET /api/v1/reports/inventory trả inventoryValue cuối khoảng ngày cho Phân phối, null nếu không đủ lớp giá; CSV thể hiện cùng mốc.

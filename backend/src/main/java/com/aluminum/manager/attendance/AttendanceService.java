@@ -416,7 +416,15 @@ public class AttendanceService {
 		if (bonus.signum() > 0 && dayPay.signum() > 0) {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Hãy tách tiền thưởng khỏi mức lương ngày lễ cũ", null);
 		}
-		requireNotLocked(request.holidayDate());
+		boolean planning = id == null && request.holidayDate().isAfter(LocalDate.now(clock))
+				&& !paid && dayPay.signum() == 0 && bonus.signum() == 0
+				&& (request.receivedEmployeeIds() == null || request.receivedEmployeeIds().isEmpty());
+		if (planning) {
+			yearEndBalances.requireHolidayPlanningDate(request.holidayDate());
+			requirePayrollNotClosed(request.holidayDate());
+		} else {
+			requireNotLocked(request.holidayDate());
+		}
 		if (id != null) {
 			var dates = jdbc.query("SELECT holiday_date FROM holidays WHERE id = ? FOR UPDATE",
 					(rs, row) -> rs.getDate(1).toLocalDate(), id);
@@ -441,7 +449,7 @@ public class AttendanceService {
 						dayPay,
 						blank(request.notes()));
 				audit.record(CurrentAdmin.get().id(), "CREATE_HOLIDAY", "holidays", String.valueOf(newId), request.name());
-				saveHolidayBonuses(newId, request, bonus);
+				if (!planning) saveHolidayBonuses(newId, request, bonus);
 				return jdbc.query("SELECT * FROM holidays WHERE id = ?", (rs, i) -> mapHoliday(rs), newId).get(0);
 			}
 			jdbc.update("""
@@ -1588,6 +1596,10 @@ public class AttendanceService {
 
 	private void requireNotLocked(LocalDate date) {
 		yearEndBalances.requireWorkingDate(date.atStartOfDay());
+		requirePayrollNotClosed(date);
+	}
+
+	private void requirePayrollNotClosed(LocalDate date) {
 		if (isPeriodClosed(date.getYear(), date.getMonthValue())) {
 			throw new BusinessException(ErrorCode.PAYROLL_PERIOD_LOCKED,
 					"Kỳ công tháng " + date.getMonthValue() + "/" + date.getYear() + " đã chốt, không thể chỉnh sửa", null);

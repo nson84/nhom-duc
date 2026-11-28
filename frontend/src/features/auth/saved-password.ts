@@ -9,3 +9,9 @@ export async function savePassword(account: string, password: string): Promise<v
   if (!isTauri()) return;
   await invoke("save_password", { account, password });
 }
+
+export async function offerBrowserPassword(account: string, password: string): Promise<void> {
+  if (isTauri() || !("PasswordCredential" in window) || !navigator.credentials) return;
+  const PasswordCredential = window.PasswordCredential as new (data: { id: string; password: string }) => Credential;
+  await navigator.credentials.store(new PasswordCredential({ id: account, password }));
+}

@@ -130,8 +130,8 @@ export type InventoryReportRow = {
   inQuantityBase: number;
   outQuantityBase: number;
   closingQuantityBase: number;
-  averageCostPerBase: number;
-  inventoryValue: number;
+  averageCostPerBase: number | null;
+  inventoryValue: number | null;
 };
 
 export type PayrollReportRow = {

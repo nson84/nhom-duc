@@ -49,8 +49,11 @@ export type YearCount = YearCountInput & {
 export type RawCount = {
   categoryId: number;
   categoryName: string;
-  quantityKg: number;
-  valueAmount: number;
+  quantityKg: number | null;
+  valueAmount: number | null;
+  openingKg: number;
+  purchasedKg: number;
+  deliveredKg: number;
   layers: { purchaseItemId: number; documentCode: string; documentDate: string;
     quantityKg: number; unitCostPerKg: number; valueAmount: number }[];
 };
@@ -171,6 +174,7 @@ export type SettlementReport = {
   unlinkedSalesCount: number;
   unlinkedSalesValue: number;
   customers: CustomerSettlement[];
+  supplier: { openingDebt: number; purchases: number; payments: number; closingDebt: number };
 };
 
 export async function getYearReport(year: number) {

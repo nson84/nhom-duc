@@ -45,7 +45,7 @@ public class AnnualBookService {
                           String collector, String note) {}
     public record DebtPayment(LocalDateTime date, BigDecimal amount) {}
     public record DebtInvoice(long id, String code, String type, String party, LocalDateTime date,
-                              BigDecimal openingDebt, BigDecimal paidInPeriod, BigDecimal remainingDebt,
+                              BigDecimal openingDebt, BigDecimal paidInPeriod, BigDecimal remainingDebt, BigDecimal currentDebt,
                               List<DebtPayment> payments) {}
     public record Carryover(LocalDate from, LocalDate to, List<DebtInvoice> invoices) {}
 
@@ -79,13 +79,15 @@ public class AnnualBookService {
                 ), balances AS (
                     SELECT document_id,
                            SUM(CASE WHEN paid_at < ? THEN amount ELSE 0 END) AS paid_before,
-                           SUM(CASE WHEN paid_at >= ? AND paid_at < ? THEN amount ELSE 0 END) AS paid_in_period
+                           SUM(CASE WHEN paid_at >= ? AND paid_at < ? THEN amount ELSE 0 END) AS paid_in_period,
+                           SUM(amount) AS paid_total
                     FROM payments GROUP BY document_id
                 )
                 SELECT d.*, d.total_amount - COALESCE(b.paid_before, 0) AS opening_debt,
-                       COALESCE(b.paid_in_period, 0) AS paid_in_period, p.paid_at, p.amount
+                       COALESCE(b.paid_in_period, 0) AS paid_in_period,
+                       GREATEST(d.total_amount - COALESCE(b.paid_total, 0), 0) AS current_debt, p.paid_at, p.amount
                 FROM old_docs d LEFT JOIN balances b ON b.document_id = d.id
-                LEFT JOIN payments p ON p.document_id = d.id AND p.paid_at >= ? AND p.paid_at < ?
+                LEFT JOIN payments p ON p.document_id = d.id
                 WHERE d.total_amount > COALESCE(b.paid_before, 0)
                 ORDER BY d.document_date DESC, d.id DESC, p.paid_at
                 """, rs -> {
@@ -96,12 +98,12 @@ public class AnnualBookService {
                 var paid = rs.getBigDecimal("paid_in_period");
                 invoice = new DebtInvoice(id, rs.getString("document_code"), rs.getString("document_type"),
                         rs.getString("party"), rs.getTimestamp("document_date").toLocalDateTime(),
-                        opening, paid, opening.subtract(paid).max(BigDecimal.ZERO), new ArrayList<>());
+                        opening, paid, opening.subtract(paid).max(BigDecimal.ZERO), rs.getBigDecimal("current_debt"), new ArrayList<>());
                 invoices.put(id, invoice);
             }
             var paidAt = rs.getTimestamp("paid_at");
             if (paidAt != null) invoice.payments().add(new DebtPayment(paidAt.toLocalDateTime(), rs.getBigDecimal("amount")));
-        }, shopId, start, start, start, end, start, end);
+        }, shopId, start, start, start, end);
         return new Carryover(period.periodFrom(), period.periodTo(), List.copyOf(invoices.values()));
     }
     public record Transaction(String code, LocalDateTime date, String category, BigDecimal amount,

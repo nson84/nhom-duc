@@ -1,10 +1,13 @@
 package com.aluminum.manager.dashboard;
 
 import com.aluminum.manager.common.ApiResponse;
+import com.aluminum.manager.security.CurrentAdmin;
+import com.aluminum.manager.system.AuditService;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,10 +20,20 @@ public class DashboardController {
 
 	private final DashboardService dashboardService;
 	private final YearEndBalanceService yearEndBalances;
+	private final AuditService audit;
 
-	public DashboardController(DashboardService dashboardService, YearEndBalanceService yearEndBalances) {
+	public DashboardController(DashboardService dashboardService, YearEndBalanceService yearEndBalances, AuditService audit) {
 		this.dashboardService = dashboardService;
 		this.yearEndBalances = yearEndBalances;
+		this.audit = audit;
+	}
+
+	@PostMapping("/year-reopen")
+	@Transactional
+	public ApiResponse<Boolean> reopenYear(@RequestParam int year) {
+		var previous = yearEndBalances.reopenYear(year);
+		audit.record(CurrentAdmin.get().id(), "REOPEN_YEAR", "year_end_balances", String.valueOf(year), previous.toString());
+		return ApiResponse.ok(true, "Đã mở lại kiểm kê năm");
 	}
 
 	@GetMapping("/year-end")
@@ -28,9 +41,19 @@ public class DashboardController {
 		return ApiResponse.ok(yearEndBalances.get(year), null);
 	}
 
+	@GetMapping("/distribution-year-report")
+	public ApiResponse<DashboardService.DistributionYearReport> distributionYearReport(@RequestParam int year) {
+		return ApiResponse.ok(dashboardService.distributionYearReport(year), null);
+	}
+
 	@GetMapping("/year-period")
 	public ApiResponse<YearEndBalanceService.Period> yearPeriod(@RequestParam int year) {
 		return ApiResponse.ok(yearEndBalances.period(year), null);
+	}
+
+	@GetMapping("/year-periods")
+	public ApiResponse<List<YearEndBalanceService.Period>> yearPeriods() {
+		return ApiResponse.ok(yearEndBalances.listPeriods(), null);
 	}
 
 	@GetMapping("/month-close")

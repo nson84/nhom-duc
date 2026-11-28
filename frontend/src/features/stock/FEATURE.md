@@ -2,9 +2,11 @@
 
 VietQR trên hóa đơn bán ngoài chỉ điền số còn phải trả. Hóa đơn đã trả đủ hiện QR tài khoản nhận với số tiền trống và nhãn đã thanh toán.
 
-Màn Công nợ đọc chi tiết phiếu kỳ trước qua `getCarryoverDocument`. Form cho chọn ngày thực thu hoặc thực trả trong kỳ báo cáo; yêu cầu thanh toán gửi tháng tương ứng với ngày đó và cờ xác nhận nếu tháng đã khóa. Tên người thu, trả hoặc nhận có thể bổ sung nếu cần in. Với phiếu bán, khi để trống người thu, backend dùng tên tài khoản theo quy tắc hiện có. Form từ màn phiếu vẫn theo tháng làm việc.
+Màn Công nợ đọc chi tiết phiếu kỳ trước qua `getCarryoverDocument`. Form cho chọn ngày thực thu hoặc thực trả độc lập với kỳ báo cáo; yêu cầu thanh toán gửi tháng tương ứng với ngày đó và cờ xác nhận nếu tháng đã khóa. Backend xác định kỳ theo ngày thanh toán. Tên người thu, trả hoặc nhận có thể bổ sung nếu cần in. Với phiếu bán, khi để trống người thu, backend dùng tên tài khoản theo quy tắc hiện có. Form từ màn phiếu vẫn theo tháng làm việc.
 
 Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cập nhật cùng thay đổi. Xem [mục lục](../../../../docs/feature.md) và [quy tắc chung](../../../../docs/requirements.md).
+
+Tồn kho Xưởng hiển thị sáu ô theo kỳ đã chọn ở Tổng quan. Tiền hàng nhập, kg nhập và giao Phân phối theo khoảng xem. Kỳ đã chốt hiển thị số dư đã chốt. Bảng tồn sổ hiện tại và thao tác kiểm kê Phân phối dùng cho kỳ đang làm việc. Danh sách phiếu nhập nội bộ và các biến động kho hiển thị trong khoảng ngày đã chọn.
 
 Danh sách phiếu, tồn kho và bảng dòng hàng cuộn ngang riêng khi cần; modal nhập/bán ở cửa sổ thấp cuộn phần thân, giữ nút lưu/đóng ở footer trong màn hình.
 Hàng đầu biểu mẫu phiếu giữ chiều cao nhãn nhất quán để các ô Nguồn phiếu, Ngày phiếu và Người nhập cùng mép trên.
@@ -32,14 +34,14 @@ Các thẻ thống kê tồn kho có cùng kích cỡ. Phân phối hiển thị
 - Phiếu bán mới mặc định ngày hôm nay nếu nằm trong tháng đang mở. Khi nhập kỳ cũ, app ưu tiên ngày của phiếu bán vừa tạo trong cùng kỳ trên màn hình, rồi đến ngày bán gần nhất của phiếu đã xác nhận trong danh sách đang xem. Nếu chưa có ngày phù hợp, app dùng ngày đầu khoảng làm việc. Có thể sửa ngày trên phiếu trước khi lưu.
 - Ngày phiếu có thể chọn lùi về năm 2025 để tự nhập dữ liệu lịch sử; kỳ Xưởng đã chốt sẽ khóa phiếu thuộc khoảng ngày đó.
 - Phiếu mới lấy ngày hôm nay nếu nằm trong khoảng làm việc đang xem, kể cả ngày cuối khoảng. Khi xem tháng cũ, ngày mặc định là ngày đầu khoảng đang xem.
-- Khi chọn năm ở Tổng quan, danh sách và chi tiết chỉ mở phiếu nằm trong kỳ đã chọn dù chưa bấm Khóa năm. Form không cho chọn ngày trước ngày bắt đầu hoặc sau ngày kết thúc đã lưu; năm đã chốt không nhận phiếu mới.
+- Danh sách và chi tiết phiếu dùng kỳ đã chọn ở Tổng quan. Form không cho chọn ngày trước ngày bắt đầu hoặc sau ngày kết thúc đã lưu; năm đã chốt không nhận phiếu mới.
 - Khi chọn tháng ở Tổng quan, danh sách và form phiếu chỉ dùng ngày trong phần giao của tháng và kỳ năm. Chỉ tháng đã bấm **Mở tháng** mới cho tạo, sửa, xác nhận, hủy hoặc đảo phiếu; lần thu/trả nợ mới được ghi ở tháng đang mở.
 - Khi tạo phiếu nhập mới có đơn giá khác giá nhập chuẩn của loại, trước khi lưu phiếu sẽ hỏi có ghi mốc giá nhập mới từ ngày phiếu không; popup hiện giá cũ và ngày bắt đầu áp dụng, giá mới và ngày hiệu lực. Chọn “Chỉ lưu phiếu” thì giữ giá chuẩn hiện tại và chỉ lưu đơn giá thực tế trên phiếu. Một loại có nhiều đơn giá khác nhau trong cùng phiếu phải cập nhật giá chuẩn thủ công.
 - Đơn vị: Phân phối chỉ **tấn**; Xưởng nhập **tạ** hoặc **tấn**
 - Xác nhận → cập nhật tồn/giá vốn theo `(product, category)`; không sửa dòng sau xác nhận
 - Thanh toán (có **popup xác nhận** trước khi ghi) / đảo phiếu (reversal, mỗi phiếu đảo một lần)
 - Trang Nhập kho hiển thị doanh nghiệp còn nợ nhà cung cấp từ phiếu nhập trong kỳ đang xem, không phụ thuộc ô tìm kiếm hoặc bộ lọc trạng thái; phiếu nội bộ không tạo nợ.
-- Trang Nhập kho hiển thị thêm tồn sổ **hiện tại** theo từng loại nhôm của bên đang xem, độc lập với kỳ và bộ lọc danh sách phiếu; Phân phối dùng tấn, Xưởng dùng kg.
+- Trang Nhập kho hiển thị **tồn đầu kỳ chuyển sang** theo từng loại, lấy từ bản chốt liền trước. Chọn tháng khác trong cùng kỳ không đổi số tồn đầu kỳ. Nếu chưa có nguồn chốt, màn hình báo chưa có dữ liệu chuyển sang.
 - Ô tổng khối lượng đã giao trên Tồn kho hiện thêm kg theo từng loại: Phân phối tính tích lũy hiện tại, Xưởng theo kỳ kiểm kê đang chọn.
 - Khi chọn tháng ở Tổng quan, Tồn kho hiện thêm số kg giao trong tháng (phần giao với kỳ năm) theo từng loại. Tồn sổ hiện tại và số lũy kế/kiểm kê năm vẫn giữ nhãn riêng, không được hiểu là tồn cuối tháng lịch sử.
 - Xuất nội bộ Phân phối → Xưởng vẫn lưu phiếu bán và phiếu nhập cặp, trừ tồn Phân phối, cộng khối lượng đã giao; đơn giá gợi ý dùng giá nhập của loại nhôm, cho phép sửa theo giá vốn thực tế trên phiếu. Phiếu nội bộ không cộng doanh thu/lãi bán hàng ở Tổng quan và Báo cáo.
@@ -138,7 +140,7 @@ Khi kiểm kê Phân phối, người vận hành có thể khai số kg vụn n
 
 Xưởng: trang Tồn kho mặc định dùng năm làm việc đang chọn, có thể đổi năm để xem báo cáo kiểm kê; đồng thời hiển thị bảng tồn sổ hiện tại theo từng sản phẩm/loại nhôm (bao gồm hàng nhập nội bộ). Bảng tồn sổ không lọc theo năm; hàng giao khách không tự trừ tồn. Vụn đã bán, vụn chưa bán, tồn cuối kỳ và hao hụt lấy từ báo cáo/kiểm kê Xưởng theo năm được chọn.
 
-Kiểm kê Phân phối gửi ngày nghiệp vụ theo tháng đang chọn. Tháng quá khứ dùng cuối ngày cuối khoảng đang xem, tháng hiện tại dùng thời điểm hiện tại. Backend kiểm tra tháng mở trước khi tạo điều chỉnh kho.
+Kiểm kê Phân phối cho chọn trực tiếp **Ngày kiểm kê** ngay trong popup (mặc định theo ngày kết thúc dự kiến nếu đã đặt ở Chốt năm, ngược lại lấy ngày cuối tháng đang chọn hoặc hôm nay). Ô **Còn trong kho (kg)** và **Vụn nhôm** format dấu phẩy nghìn và chặn nhập vượt `tồn sổ − vụn nhôm` (không tạo tồn thừa). Backend cho phép kiểm kê trong cả tháng đang mở và tháng đã khóa (vẫn chặn tháng chưa mở, kỳ đã chốt và khi kho đã phát sinh biến động sau ngày kiểm kê).
 
 ## Tồn cuối chuyển sang đầu kỳ theo từng loại
 
@@ -154,4 +156,6 @@ Phiếu nhập/bán mới mặc định Ghi từ app. Chọn Ghi từ sổ để
 Khi chốt sổ tháng Phân phối qua màn Chốt sổ tháng, cùng số cân cập nhật tồn dùng để bán và được gom theo loại trong bản chốt. Số tồn dùng để bán được chuyển tiếp theo biến động kho.
 
 
-Nhập kho Xưởng có Lịch sử nhập nội bộ để tra cứu cả phiếu ngoài kỳ đang chọn. Màn chi tiết mở từ lịch sử chỉ xem.
+Nhập kho Xưởng có Lịch sử nhập nội bộ theo kỳ và tháng đang chọn ở Tổng quan. Màn chi tiết mở từ lịch sử chỉ xem.
+
+Danh sách phiếu Nhập kho và Bán hàng hiển thị chứng từ trong phần giao giữa tháng và kỳ đã chọn.

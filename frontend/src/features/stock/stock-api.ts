@@ -218,7 +218,7 @@ export async function addPayment(
     paidBy?: string;
     confirmLockedCarryoverMonth?: boolean;
   },
-  period?: { workingYear: number; workingMonth: string },
+  period?: { workingYear: number | null; workingMonth: string },
 ) {
   return (await api.post<Envelope<StockDocument>>(`/api/v1/stock-documents/${id}/payments`, input, { params: period })).data.data;
 }

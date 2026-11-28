@@ -9,6 +9,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +53,24 @@ public class YearEndBalanceService {
         requireWorkingDate(date, true, false);
     }
 
+    public void requireInventoryCountDate(LocalDateTime date) {
+        requireWorkingDate(date, true, false);
+    }
+
+    public void requireHolidayPlanningDate(LocalDate date) {
+        jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shops.currentId());
+        Period matching = periodAt(date);
+        Period selected = selectedWorkingPeriod();
+        if (matching == null || matching.closed()
+                || (selected != null && (!selected.started() || selected.closed() || selected.year() != matching.year()))
+                || (matching.plannedEnd() != null && date.isAfter(matching.plannedEnd()))) {
+            throw invalid("Ngày lễ phải thuộc kỳ làm việc chưa chốt");
+        }
+        if ("CLOSED".equals(monthStatus(YearMonth.from(date), true))) {
+            throw invalid("Tháng " + YearMonth.from(date) + " đã khóa");
+        }
+    }
+
     private void requireWorkingDate(LocalDateTime date, boolean allowLockedMonth, boolean correctingPaymentDate) {
         // Closing snapshots lock this same row before reading their business totals.
         jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR SHARE", Long.class, shops.currentId());
@@ -74,13 +93,8 @@ public class YearEndBalanceService {
                     throw invalid("Ngày phiếu phải thuộc tháng " + selectedMonth);
             }
         }
-        var latestStart = jdbc.query("""
-                SELECT year_number FROM year_period_starts
-                WHERE shop_id = ? AND period_from <= ? ORDER BY period_from DESC LIMIT 1
-                """, (rs, i) -> rs.getInt(1), shops.currentId(), date.toLocalDate())
-                .stream().findFirst().orElse(null);
-        if (latestStart != null) {
-            Period matching = period(latestStart);
+        Period matching = periodAt(date.toLocalDate());
+        if (matching != null) {
             if (matching.closed() || date.toLocalDate().isAfter(matching.periodTo()))
                 throw invalid("Ngày phiếu nằm ngoài kỳ đang làm việc hoặc kỳ đã chốt");
         } else {
@@ -96,6 +110,14 @@ public class YearEndBalanceService {
             throw invalid("Ngày phiếu không được trước " + selected.periodFrom());
         if (date.toLocalDate().isAfter(selected.periodTo()))
             throw invalid("Ngày phiếu không được sau " + selected.periodTo());
+    }
+
+    public Period periodAt(LocalDate date) {
+        return jdbc.query("""
+                SELECT year_number FROM year_period_starts
+                WHERE shop_id = ? AND period_from <= ? ORDER BY period_from DESC LIMIT 1
+                """, (rs, i) -> rs.getInt(1), shops.currentId(), date)
+                .stream().findFirst().map(this::period).orElse(null);
     }
 
     public String monthStatus(YearMonth month) {
@@ -124,9 +146,14 @@ public class YearEndBalanceService {
         String status = monthStatus(month);
         if ("CLOSED".equals(status)) throw invalid("Tháng đã khóa; không thể mở lại");
         if ("OPEN".equals(status)) return status;
-        Integer otherOpen = jdbc.queryForObject("SELECT COUNT(*) FROM shop_month_periods WHERE shop_id = ? AND closed_at IS NULL",
-                Integer.class, shops.currentId());
-        if (otherOpen != null && otherOpen > 0) throw invalid("Hãy khóa tháng đang mở trước khi mở tháng khác");
+        var otherOpen = jdbc.query("""
+                SELECT m.month_start FROM shop_month_periods m
+                WHERE m.shop_id = ? AND m.closed_at IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM year_end_balances y
+                                  WHERE y.shop_id = m.shop_id AND y.year_number = m.period_year)
+                ORDER BY m.month_start LIMIT 1
+                """, (rs, i) -> YearMonth.from(rs.getDate(1).toLocalDate()), shops.currentId());
+        if (!otherOpen.isEmpty()) throw invalid("Hãy khóa tháng " + otherOpen.get(0) + " trước khi mở tháng " + month);
         YearMonth firstMonth = YearMonth.from(selected.periodFrom());
         if (!month.equals(firstMonth)) {
             YearMonth prior = month.minusMonths(1);
@@ -195,6 +222,20 @@ public class YearEndBalanceService {
 
     public Period period(int year) {
         return period(year, ShopContext.code());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Period> listPeriods() {
+        long shopId = shops.currentId();
+        List<Integer> keys = new java.util.ArrayList<>(jdbc.query("""
+                SELECT year_number FROM year_period_starts WHERE shop_id = ?
+                UNION SELECT year_number FROM year_end_balances WHERE shop_id = ?
+                """, (rs, i) -> rs.getInt(1), shopId, shopId));
+        if (ShopContext.MANUFACTURING.equals(ShopContext.code())) {
+            keys.addAll(jdbc.query("SELECT year_number FROM factory_year_counts", (rs, i) -> rs.getInt(1)));
+        }
+        return keys.stream().distinct().map(this::period)
+                .sorted(java.util.Comparator.comparing(Period::periodFrom)).toList();
     }
 
     public Period period(int year, String shopCode) {
@@ -277,8 +318,8 @@ public class YearEndBalanceService {
 
     @Transactional
     public Period saveStart(int year, LocalDate from, String name) {
-        if (year < 2000 || year > 2100 || from == null || Math.abs(year - from.getYear()) > 1)
-            throw invalid("Tên năm hoặc ngày bắt đầu không hợp lệ");
+        if (year < 2000 || year > 2100 || from == null)
+            throw invalid("Mã kỳ hoặc ngày bắt đầu không hợp lệ");
         if (name == null || name.isBlank() || name.trim().length() > 100)
             throw invalid("Tên kỳ phải có từ 1 đến 100 ký tự");
         if (from.isAfter(LocalDate.now())) throw invalid("Không thể bắt đầu kỳ ở ngày tương lai");
@@ -379,6 +420,35 @@ public class YearEndBalanceService {
     }
 
     @Transactional
+    public Balance reopenYear(int year) {
+        long shopId = shops.currentId();
+        jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shopId);
+        Balance balance = get(year);
+        if (balance == null) throw invalid("Kỳ này chưa chốt");
+        Boolean dependent = jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM year_end_balances WHERE shop_id = ? AND period_to > ?)
+                    OR EXISTS (SELECT 1 FROM monthly_books WHERE shop_id = ? AND month_start > ?)
+                    OR EXISTS (SELECT 1 FROM distribution_period_closings WHERE shop_id = ? AND period_to > ?)
+                """, Boolean.class, shopId, balance.periodTo(), shopId,
+                balance.periodTo().withDayOfMonth(1).minusDays(1), shopId, balance.periodTo());
+        if (Boolean.TRUE.equals(dependent)) throw invalid("Đã có bản chốt tháng này hoặc kỳ sau; không thể mở lại kiểm kê năm");
+        if (shops.isDistribution()) {
+            Boolean laterStock = jdbc.queryForObject("""
+                    SELECT EXISTS (SELECT 1 FROM stock_movements m JOIN products p ON p.id = m.product_id
+                                   WHERE p.shop_id = ? AND m.movement_at >= ?)
+                    """, Boolean.class, shopId, balance.periodTo().plusDays(1).atStartOfDay());
+            if (Boolean.TRUE.equals(laterStock)) throw invalid("Kho đã phát sinh sau ngày chốt. Không thể dùng số cân hiện tại để sửa kiểm kê kỳ trước");
+            jdbc.update("DELETE FROM distribution_period_closings WHERE shop_id = ? AND period_from = ? AND period_to = ?",
+                    shopId, balance.periodFrom(), balance.periodTo());
+        } else {
+            jdbc.update("UPDATE factory_year_counts SET status = 'DRAFT', closed_at = NULL, closed_payroll_cost = NULL WHERE year_number = ? AND status = 'CLOSED'", year);
+        }
+        jdbc.update("DELETE FROM year_end_inventory_categories WHERE shop_id = ? AND year_number = ?", shopId, year);
+        jdbc.update("DELETE FROM year_end_balances WHERE shop_id = ? AND year_number = ?", shopId, year);
+        return balance;
+    }
+
+    @Transactional
     public void save(int year, LocalDate from, LocalDate to, BigDecimal inventoryKg, BigDecimal inventoryValue, BigDecimal profit) {
         jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shops.currentId());
         Integer existing = jdbc.queryForObject("SELECT COUNT(*) FROM year_end_balances WHERE shop_id = ? AND year_number = ?",
@@ -402,7 +472,6 @@ public class YearEndBalanceService {
                 .stream().findFirst().orElse(null);
         if (configured == null || !from.equals(configured[0]) || !to.equals(configured[1]))
             throw invalid("Hãy lưu ngày kết thúc kỳ trước khi chốt");
-        if (Math.abs(year - from.getYear()) > 1) throw invalid("Tên năm chốt không khớp khoảng ngày đã chọn");
         Integer overlapping = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM year_end_balances
                 WHERE shop_id = ? AND year_number <> ? AND period_from <= ? AND period_to >= ?
@@ -457,7 +526,6 @@ public class YearEndBalanceService {
     static void validateNamedPeriod(int year, LocalDate from, LocalDate to) {
         if (year < 2000 || year > 2100) throw invalid("Năm không hợp lệ");
         validatePeriod(from, to, null, null);
-        if (Math.abs(year - from.getYear()) > 1) throw invalid("Tên năm không khớp ngày đầu kỳ");
     }
 
     public static String nextPeriodStartMessage(LocalDate priorEnd) {

@@ -92,7 +92,7 @@ function shopHtml(book: AnnualBook) {
   const customerAnchor = (id: number) => `customer-${book.shopCode}-${id}`;
   return `<section class="shop-cover"><h1>${esc(book.shopName)}</h1><h2>Sổ tổng hợp ${esc(book.periodName)}</h2>
     <p>Kỳ từ ${day(book.periodFrom)} đến hết ngày ${day(book.periodTo)}</p>
-    <p>Trạng thái: <strong>${book.closed ? "Đã chốt năm" : "Chưa có bản chốt năm - số liệu tạm tính"}</strong></p>
+    <p>Trạng thái: <strong>${book.closed ? "Đã chốt kỳ" : "Chưa có bản chốt kỳ - số liệu tạm tính"}</strong></p>
     <div class="summary"><div>Nợ khách tại ngày chốt <b>${money(sum(book.customers.map((c) => c.closingDebt)))}</b></div>
       <div>Khách còn nợ đến lúc in <b>${money(sum(debtors.map(currentDebt)))}</b></div>
       <div>Phiếu chưa gắn khách còn nợ đến lúc in <b>${money(sum(book.sales.filter((s) => s.customerId == null).map(currentDebt)))}</b></div>
@@ -101,7 +101,7 @@ function shopHtml(book: AnnualBook) {
       <div>Còn nợ nhà cung cấp tại ngày chốt <b>${money(sum(externalPurchases.map((p) => Math.max(0, p.total - p.paidAsOf))))}</b></div>
       <div>Lãi đã chốt <b>${money(book.profit)}</b></div></div>
     <h3>Nội dung</h3><ol><li>Tổng hợp khách mua</li><li>Mỗi khách một mục chi tiết phiếu bán</li>
-      <li>Khách còn nợ đến lúc in</li><li>Sổ thu</li><li>Sổ chi</li><li>Phiếu nhập và nợ nhà cung cấp</li>${book.shopCode === "MANUFACTURING" ? "<li>Nhập nhôm nội bộ từ Phân phối</li><li>Công thợ theo tháng</li>" : "<li>Xuất nhôm nội bộ sang Xưởng</li>"}<li>Tồn kho cuối năm</li></ol>
+      <li>Khách còn nợ đến lúc in</li><li>Sổ thu</li><li>Sổ chi</li><li>Phiếu nhập và nợ nhà cung cấp</li>${book.shopCode === "MANUFACTURING" ? "<li>Nhập nhôm nội bộ từ Phân phối</li><li>Công thợ theo tháng</li>" : "<li>Xuất nhôm nội bộ sang Xưởng</li>"}<li>Tồn kho cuối kỳ</li></ol>
   </section>
   <section class="chapter"><h2>Tổng hợp khách mua · ${esc(book.shopName)}</h2>
     ${table(["Khách hàng", "Điện thoại", "Khối lượng đã lấy", "Tiền hàng trong sổ", "Đã trả đến lúc in", "Còn nợ hiện tại"],
@@ -126,7 +126,7 @@ function shopHtml(book: AnnualBook) {
       ].join("<br>");
       return `<section class="chapter customer-page" id="${customerAnchor(customer.id)}"><h2>Khách hàng: ${esc(customer.name)}</h2>
         <p>Điện thoại: ${esc(customer.phone || "—")} · Ghi chú: ${esc(customer.note || "—")}</p>
-        ${sales.length ? sales.map((sale) => saleBlock(book, sale)).join("") : "<p>Không có phiếu bán còn liên quan trong năm.</p>"}
+        ${sales.length ? sales.map((sale) => saleBlock(book, sale)).join("") : "<p>Không có phiếu bán còn liên quan trong kỳ.</p>"}
         <h4>Tổng kết khách hàng ${esc(customer.name)}</h4>
         ${table(["Tổng khối lượng nhôm", "Tổng tiền các phiếu", "Tổng tiền đã trả", "Tổng còn nợ"], [[
           weightSummary, money(sum(sales.map((sale) => sale.total))),
@@ -149,7 +149,7 @@ function shopHtml(book: AnnualBook) {
   </section>
   ${transactions(book, "receipts")}${transactions(book, "expenses")}
   <section class="chapter"><h2>Phiếu nhập và nợ nhà cung cấp · ${esc(book.shopName)}</h2>
-    <p>Gồm phiếu nhập trong năm, phiếu cũ còn nợ cuối năm và phiếu cũ có trả tiền trong năm. Tiền trả thực tế cũng nằm trong Sổ chi.</p>
+    <p>Gồm phiếu nhập trong kỳ, phiếu cũ còn nợ cuối kỳ và phiếu cũ có trả tiền trong kỳ. Tiền trả thực tế cũng nằm trong Sổ chi.</p>
     ${externalPurchases.map((purchase) => `<div class="invoice"><h3>${esc(purchase.code)} · ${esc(date(purchase.date))}</h3>
       <p>Nhà cung cấp: ${esc(purchase.supplier || "—")}${purchase.notes ? ` · Ghi chú: ${esc(purchase.notes)}` : ""}</p>
       ${table(["Sản phẩm", "Loại nhôm", "Số lượng", "Đơn giá", "Thành tiền"],
@@ -202,7 +202,7 @@ function shopHtml(book: AnnualBook) {
     </div>`).join("") || "<p>Không có phiếu xuất nội bộ trong kỳ.</p>"}
     <p class="grand">Tổng nhôm xuất nội bộ trong kỳ: ${qty(sum(book.transferItems.map((item) => item.quantityKg)))} kg · ${money(sum(book.transfersOut.map((transfer) => transfer.total)))}</p>
   </section>`}
-  <section class="chapter"><h2>Tồn kho cuối năm · ${esc(book.shopName)}</h2>
+  <section class="chapter"><h2>Tồn kho cuối kỳ · ${esc(book.shopName)}</h2>
     <p>Khối lượng theo mốc ${day(book.periodTo)}. Xưởng lấy số kiểm kê kỳ; Phân phối lấy biến động kho đến cuối kỳ.</p>
     ${table(["Sản phẩm / nhóm", "Loại nhôm", "Số lượng (kg)", "Giá trị kiểm kê"], book.stock.map((s) => [
       esc(s.product), esc(s.category), qty(s.quantityKg), money(s.value),
@@ -212,7 +212,7 @@ function shopHtml(book: AnnualBook) {
 }
 
 export function buildAnnualBookHtml(books: AnnualBook[]) {
-  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Sổ cuối năm ${books[0]?.year ?? ""}</title>
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Sổ cuối kỳ ${esc(books[0]?.periodName ?? "")}</title>
   <style>
     @page { size: A4; margin: 16mm 13mm 17mm; @bottom-center { content: counter(page); font-size: 9pt; color: #666; } }
     * { box-sizing: border-box; } body { font: 10pt Arial, sans-serif; color: #192533; line-height: 1.35; margin: 0; }

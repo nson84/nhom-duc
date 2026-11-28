@@ -1,7 +1,7 @@
-import { Alert, Button, Card, Col, DatePicker, Row, Segmented, Select, Space, Statistic, Tabs, Tag, message } from "antd";
+import { Alert, Button, Card, Col, Row, Segmented, Select, Space, Statistic, Tabs, Tag, message } from "antd";
 import { PagedTable, ResponsiveTable as Table } from "../../components/PagedTable";
 import dayjs, { type Dayjs } from "dayjs";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDocument, listDocuments } from "../stock/stock-api";
 import { toApiError } from "../../services/error-handler";
@@ -9,9 +9,9 @@ import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
 import { useSession } from "../auth/auth-store";
 import { getYearReport, type YearReport } from "../factory/factory-api";
-import { getYearEndBalance, getYearPeriod, type YearEndBalance, type YearPeriod } from "../dashboard/dashboard-api";
-import { useWorkingYear, workingYearStore } from "../dashboard/working-year";
-import { visiblePeriod } from "../dashboard/working-period";
+import { getDistributionYearReport, getYearPeriod, type DistributionYearReport, type YearPeriod } from "../dashboard/dashboard-api";
+import { useWorkingYear } from "../dashboard/working-year";
+import { useWorkingPeriodInfo, visiblePeriod } from "../dashboard/working-period";
 import { CarryoverDebtReport } from "./CarryoverDebtReport";
 import { SHOP_LABELS, useShop } from "../shop/shop-store";
 import { listCategories, listProducts, type Category, type Product } from "../products/products-api";
@@ -36,22 +36,49 @@ import {
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
 
-function DistributionProfitSummary({ year }: { year: number }) {
-  const [balance, setBalance] = useState<YearEndBalance | null>(null);
+function DistributionProfitSummary({ year, reportTo }: { year: number; reportTo: string }) {
+  const [report, setReport] = useState<DistributionYearReport | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void getYearEndBalance(year).then((value) => { if (active) setBalance(value); })
-      .catch(() => { if (active) setBalance(null); })
+    void getDistributionYearReport(year).then((value) => { if (active) setReport(value); })
+      .catch(() => { if (active) setReport(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [year]);
+  const money = (amount: number | null | undefined) => amount == null ? "—" : formatMoney(amount);
+  const atSeparateCutoff = report != null && report.periodTo !== reportTo;
+  const metrics: [string, string][] = report ? [
+    [atSeparateCutoff ? "Doanh thu đến mốc quyết toán" : "Doanh thu bán hàng (cả kỳ)", money(report.revenue)],
+    ["Đã thu từ phiếu bán trong kỳ", money(report.cashCollected)],
+    ["Còn phải thu từ phiếu bán trong kỳ", money(report.customerDebt)],
+    ["Tiền hàng đã nhập trong kỳ", money(report.purchaseValue)],
+    [report.endingKg != null ? `Giá trị tồn cuối kỳ (${qtyFormat.format(Number(report.endingKg))} kg)` : "Giá trị tồn kho cuối kỳ (sau kiểm kê)", money(report.endingValue)],
+    ["Giá vốn hàng bán & hao hụt", money(report.materialCost)],
+    [atSeparateCutoff ? "Chi phí hoạt động đến mốc quyết toán" : "Chi phí hoạt động (cả kỳ)", money(report.operatingExpenses)],
+    [report.status === "CLOSED" ? "Lãi kỳ đã chốt" : atSeparateCutoff ? "Lãi đến mốc quyết toán" : "Lãi cả kỳ (sau kiểm kê)", money(report.profit)],
+  ] : [];
   return <Card size="small" loading={loading} style={{ marginBottom: 16 }}>
-    {balance ? <>
-      <Statistic title={`Lãi năm ${year} đã chốt`} value={formatMoney(balance.profit)} />
-      <span>Kỳ {dayjs(balance.periodFrom).format("DD/MM/YYYY")} – {dayjs(balance.periodTo).format("DD/MM/YYYY")}; đã trừ giá vốn hàng bán, hao hụt kiểm kê và chi phí hoạt động.</span>
-    </> : <Alert type="info" showIcon message={`Năm ${year} chưa chốt — chưa có lãi năm chính xác`} description="Kiểm kê tồn thực tế và chốt kỳ ở Tổng quan. Lãi hóa đơn/tháng ở tab bên cạnh chỉ là giá tham khảo." />}
+    <Space wrap style={{ marginBottom: 12 }}>
+      <strong>{atSeparateCutoff ? "Quyết toán lợi nhuận theo mốc kiểm kê" : "Quyết toán lợi nhuận cả kỳ"}</strong>
+      {report && <Tag color={report.status === "CLOSED" ? "green" : report.status === "COUNTED" ? "blue" : "orange"}>
+        {report.status === "CLOSED" ? "Đã chốt kỳ" : report.status === "COUNTED" ? "Đã kiểm kê đủ — sẵn sàng chốt kỳ" : "Tạm tính theo tồn sổ (chưa kiểm kê đủ)"}
+      </Tag>}
+      {report && <span>Kỳ {dayjs(report.periodFrom).format("DD/MM/YYYY")} – {dayjs(report.periodTo).format("DD/MM/YYYY")}</span>}
+      <Link to="/ton-kho">Mở Tồn kho / Kiểm kê</Link>
+      <Link to="/chot-nam">Mở Chốt năm</Link>
+    </Space>
+    {report && report.status !== "CLOSED" && report.uncountedItems > 0 && (
+      <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+        message={`Còn ${report.uncountedItems} dòng sản phẩm/loại nhôm chưa kiểm kê hoặc có biến động sau kiểm kê`}
+        description="Số lãi bên dưới đang tạm tính theo tồn sổ hiện tại. Vào Tồn kho → Kiểm kê / Hao hụt để cân đủ thực tế, hoặc vào Chốt năm để chốt kỳ." />
+    )}
+    <div className="report-stat-grid">
+      {metrics.map(([label, value]) => (
+        <Card key={label} size="small"><Statistic title={label} value={value} /></Card>
+      ))}
+    </div>
   </Card>;
 }
 
@@ -80,13 +107,13 @@ function FactoryProfitSummary({ year }: { year: number }) {
     ["Chi phí nhôm", report.materialCost],
     ["Chi phí nhân viên", report.payrollCost],
     ["Chi phí khác", report.otherExpenses],
-    ["Lãi quản trị ước tính", report.estimatedProfit],
+    [report.countStatus === "CLOSED" ? "Lãi quản trị đã chốt" : "Lãi quản trị ước tính", report.estimatedProfit],
   ] : [];
 
   return (
     <>
       <Space wrap style={{ marginBottom: 16 }}>
-        <span>Báo cáo năm {year}</span>
+        <span>Báo cáo cả kỳ</span>
         {report && <Tag color={report.countStatus === "CLOSED" ? "green" : "orange"}>
           {report.countStatus === "CLOSED" ? "Đã chốt" : report.countStatus === "MISSING" ? "Chưa kiểm kê" : "Chưa chốt"}
         </Tag>}
@@ -95,14 +122,13 @@ function FactoryProfitSummary({ year }: { year: number }) {
       {error && <Alert type="error" showIcon message={error} />}
       {!report && !error && <Card loading />}
       {report?.estimatedProfit == null && report && <Alert type="info" showIcon style={{ marginBottom: 16 }}
-        message="Lợi nhuận sẽ hiển thị khi có số kiểm kê của năm." />}
-      <Row gutter={[16, 16]}>
+        message={report.countStatus === "MISSING" ? "Lợi nhuận sẽ hiển thị khi có số kiểm kê của kỳ."
+          : "Cần đối chiếu tồn đầu kỳ và số kiểm kê cuối kỳ trước khi tính lợi nhuận."} />}
+      <div className="report-stat-grid">
         {metrics.map(([label, value]) => (
-          <Col key={label} xs={24} sm={12} xl={6}>
-            <Card size="small"><Statistic title={label} value={money(value)} /></Card>
-          </Col>
+          <Card key={label} size="small"><Statistic title={label} value={money(value)} /></Card>
         ))}
-      </Row>
+      </div>
     </>
   );
 }
@@ -121,24 +147,28 @@ export function ReportsPage() {
   const [activeTab, setActiveTab] = useState<"profit" | "invoice-margins" | "price-variance" | "sales-by-product" | "inventory" | "shrinkage" | "payroll" | "carryover-debt">(
     "profit",
   );
-  const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().startOf("month"), dayjs()]);
   const [categoryId, setCategoryId] = useState<number | undefined>();
   const [productId, setProductId] = useState<number | undefined>();
   const year = workingYear.year;
-  const [period, setPeriod] = useState<YearPeriod | null>(null);
+  const periodInfo = useWorkingPeriodInfo(year);
+  const [fullPeriod, setFullPeriod] = useState<YearPeriod | null>(null);
+  const [periodMode, setPeriodMode] = useState<"year" | "month">("year");
+  const period = useMemo(() => {
+    if (!fullPeriod) return null;
+    return periodMode === "month" && workingYear.month ? visiblePeriod(fullPeriod, workingYear.month) : fullPeriod;
+  }, [fullPeriod, periodMode, workingYear.month]);
+  const range = useMemo<[Dayjs, Dayjs]>(() => period
+    ? [dayjs(period.periodFrom), dayjs(period.periodTo)]
+    : [dayjs().startOf("month"), dayjs()], [period]);
 
   useEffect(() => {
     let active = true;
-    setPeriod(null);
-    setProfit(null);
+    setFullPeriod(null);
     getYearPeriod(year).then((value) => {
-      if (!active) return;
-      const shown = visiblePeriod(value, workingYear.month);
-      setPeriod(shown);
-      if (shown) setRange([dayjs(shown.periodFrom), dayjs(shown.periodTo)]);
+      if (active) setFullPeriod(value);
     }).catch((error) => { if (active) message.error(toApiError(error).message); });
     return () => { active = false; };
-  }, [year, shop, workingYear.month]);
+  }, [year, shop]);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -202,8 +232,9 @@ export function ReportsPage() {
       .catch(() => undefined);
   }, [scope]);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     if (!period?.started) {
+      setLoading(false);
       setProfit(null);
       setInvoiceMargins([]);
       setMonthlyMargins([]);
@@ -214,36 +245,38 @@ export function ReportsPage() {
       setShrinkageRows([]);
       return;
     }
-    setLoading(true);
-    try {
-      const from = range[0].format("YYYY-MM-DD");
-      const to = range[1].format("YYYY-MM-DD");
-      const [pr, sp, inv, pv, pay, invoices, months] = await Promise.all([
-        getProfitReport(from, to, scope),
-        getSalesByProductReport({ from, to, productId, categoryId, scope }),
-        getInventoryReport({ from, to, categoryId, scope }),
-        getPriceVarianceReport({ from, to, categoryId, scope }),
-        canViewPayroll ? getPayrollReport(year, scope, from, to) : Promise.resolve([] as PayrollReportRow[]),
-        book === "shop" ? getInvoiceMargins(from, to) : Promise.resolve([] as InvoiceGrossMargin[]),
-        book === "shop" ? getMonthlyMargins(from, to) : Promise.resolve([]),
-      ]);
-      setProfit(pr);
-      setInvoiceMargins(invoices);
-      setMonthlyMargins(months);
-      setProductSales(sp);
-      setInventoryRows(inv);
-      setVarianceRows(pv);
-      setPayrollRows(pay);
-    } catch (error) {
-      message.error(toApiError(error).message);
-    } finally {
-      setLoading(false);
+    let active = true;
+    async function load() {
+      setLoading(true);
+      try {
+        const from = range[0].format("YYYY-MM-DD");
+        const to = range[1].format("YYYY-MM-DD");
+        const [pr, sp, inv, pv, pay, invoices, months] = await Promise.all([
+          getProfitReport(from, to, scope),
+          getSalesByProductReport({ from, to, productId, categoryId, scope }),
+          getInventoryReport({ from, to, categoryId, scope }),
+          getPriceVarianceReport({ from, to, categoryId, scope }),
+          canViewPayroll ? getPayrollReport(year, scope, from, to) : Promise.resolve([] as PayrollReportRow[]),
+          book === "shop" ? getInvoiceMargins(from, to) : Promise.resolve([] as InvoiceGrossMargin[]),
+          book === "shop" ? getMonthlyMargins(from, to) : Promise.resolve([]),
+        ]);
+        if (!active) return;
+        setProfit(pr);
+        setInvoiceMargins(invoices);
+        setMonthlyMargins(months);
+        setProductSales(sp);
+        setInventoryRows(inv);
+        setVarianceRows(pv);
+        setPayrollRows(pay);
+      } catch (error) {
+        if (active) message.error(toApiError(error).message);
+      } finally {
+        if (active) setLoading(false);
+      }
     }
-  }, [range, productId, categoryId, year, scope, book, canViewPayroll, period?.started]);
-
-  useEffect(() => {
     void load();
-  }, [load]);
+    return () => { active = false; };
+  }, [range, productId, categoryId, year, shop, scope, book, canViewPayroll, period?.started]);
 
   const invoiceGroups = Object.values(invoiceMargins.reduce<Record<string, { date: string; revenue: number; cost: number; profit: number; missing: boolean; count: number }>>((all, invoice) => {
     if (invoice.internal) return all;
@@ -261,6 +294,8 @@ export function ReportsPage() {
 
   const fromStr = range[0].format("YYYY-MM-DD");
   const toStr = range[1].format("YYYY-MM-DD");
+  const monthView = periodMode === "month" && !!workingYear.month;
+  const selectedProfit = profit?.from === fromStr && profit?.to === toStr ? profit : null;
 
   return (
     <Card
@@ -280,10 +315,19 @@ export function ReportsPage() {
               ]}
             />
           ) : null}
-          <DatePicker picker="year" aria-label="Năm xem báo cáo" allowClear={false} disabled={workingYear.locked}
-            value={dayjs(`${year}-01-01`)}
-            onChange={(value) => value && workingYearStore.set(shop, { year: value.year(), locked: false })} />
-          {period && <span>{period.periodName}: {period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${period.closed ? dayjs(period.periodTo).format("DD/MM/YYYY") : "đang làm việc"}` : "chưa bắt đầu"}</span>}
+          {workingYear.month && activeTab !== "carryover-debt" && (
+            <Segmented
+              aria-label="Phạm vi báo cáo"
+              value={periodMode}
+              onChange={(val) => setPeriodMode(val as "year" | "month")}
+              options={[
+                { label: "Cả kỳ (Từ đầu kỳ)", value: "year" },
+                { label: `Tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}`, value: "month" },
+              ]}
+            />
+          )}
+          {activeTab === "carryover-debt" ? <span>Công nợ theo cả kỳ</span>
+            : period && <span>{monthView ? `Tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")}` : periodInfo.name}: {period.started ? `${dayjs(period.periodFrom).format("DD/MM/YYYY")} – ${dayjs(period.periodTo).format("DD/MM/YYYY")}${period.closed ? " (đã chốt)" : ""}` : "chưa bắt đầu"}</span>}
           <Button
             type="primary"
             disabled={activeTab === "carryover-debt" || activeTab === "shrinkage" || activeTab === "invoice-margins" || ((shop === "MANUFACTURING" || book === "all") && activeTab === "profit")}
@@ -306,7 +350,9 @@ export function ReportsPage() {
       }
     >
       {period && !period.started && <Alert type="info" showIcon style={{ marginBottom: 16 }}
-        message="Kỳ này chưa có ngày bắt đầu" description={<Link to="/">Vào Tổng quan để lưu ngày bắt đầu trước khi xem Báo cáo theo năm</Link>} />}
+        message="Kỳ này chưa có ngày bắt đầu" description={<Link to="/">Vào Tổng quan để lưu ngày bắt đầu trước khi xem Báo cáo theo kỳ</Link>} />}
+      {monthView && fullPeriod?.started && !period && activeTab !== "carryover-debt" &&
+        <Alert type="info" showIcon style={{ marginBottom: 16 }} message="Tháng đã chọn nằm ngoài khoảng báo cáo của kỳ này." />}
       <Tabs
         activeKey={activeTab}
         onChange={(k) => setActiveTab(k as typeof activeTab)}
@@ -314,7 +360,7 @@ export function ReportsPage() {
           {
             key: "carryover-debt",
             label: "Công nợ chuyển kỳ",
-            children: period?.started ? <CarryoverDebtReport key={`${shop}-${year}`} year={year} /> : null,
+            children: fullPeriod?.started ? <CarryoverDebtReport key={`${shop}-${year}`} year={year} /> : null,
           },
           {
             key: "invoice-margins",
@@ -357,16 +403,29 @@ export function ReportsPage() {
           },
           {
             key: "profit",
-            label: shop === "DISTRIBUTION" ? "Doanh thu & Công nợ" : "Doanh thu & Lợi nhuận",
+            label: "Doanh thu & Lợi nhuận",
             children: (
               <>
                 {book === "all" ? (
-                  <Alert type="info" showIcon message="Báo cáo gộp theo năm không còn được sử dụng" />
+                  <Alert type="info" showIcon message="Báo cáo gộp theo kỳ không còn được sử dụng" />
                 ) : shop === "MANUFACTURING" ? (
-                  <FactoryProfitSummary year={year} />
+                  monthView ? <>
+                    <Alert type="info" showIcon style={{ marginBottom: 16 }}
+                      message="Số liệu phiếu bán theo tháng"
+                      description="Xem tab Lãi gộp hóa đơn để đối chiếu lãi tháng tạm tính. Lãi quyết toán Xưởng được tính ở chế độ Cả kỳ." />
+                    <div className="report-stat-grid">
+                      {([
+                        ["Doanh thu thành phẩm", selectedProfit?.revenue],
+                        ["Đã thu từ phiếu bán trong tháng", selectedProfit?.cashCollected],
+                        ["Còn phải thu từ phiếu bán trong tháng", selectedProfit?.uncollectedRevenue],
+                      ] as const).map(([label, value]) => <Card key={label} size="small">
+                        <Statistic title={label} value={value == null ? "—" : formatMoney(value)} />
+                      </Card>)}
+                    </div>
+                  </> : <FactoryProfitSummary year={year} />
                 ) : (
                 <>
-                <DistributionProfitSummary year={year} />
+                {!monthView && <DistributionProfitSummary year={year} reportTo={toStr} />}
                 <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                   <Col xs={24} md={8}>
                     <Card size="small">
@@ -576,8 +635,9 @@ export function ReportsPage() {
                     options={categories.map((c) => ({ value: c.id, label: c.name }))}
                   />
                   <span>
-                    Tổng giá trị tồn hiện tại:{" "}
-                    <b>{formatMoney(inventoryRows.reduce((s, r) => s + r.inventoryValue, 0))}</b>
+                    {shop === "DISTRIBUTION" ? "Tổng giá trị tồn cuối khoảng xem: " : "Tổng giá trị tồn hiện tại: "}
+                    <b>{inventoryRows.some(row => row.inventoryValue == null) ? "Chưa đủ dữ liệu giá nhập"
+                      : formatMoney(inventoryRows.reduce((sum, row) => sum + Number(row.inventoryValue), 0))}</b>
                   </span>
                 </Space>
                 <PagedTable<InventoryReportRow>
@@ -653,15 +713,6 @@ export function ReportsPage() {
                   label: "Tổng hợp tiền công",
                   children: (
                     <>
-                      <Space style={{ marginBottom: 16 }} wrap>
-                        <DatePicker
-                          picker="year"
-                          disabled={workingYear.locked}
-                          allowClear={false}
-                          value={dayjs(`${year}-01-01`)}
-                          onChange={(val) => val && workingYearStore.set(shop, { year: val.year(), locked: false })}
-                        />
-                      </Space>
                       <Table<PayrollReportRow>
                         rowKey="periodId"
                         loading={loading}

@@ -42,7 +42,7 @@ Khi sửa Java, Spring Boot DevTools tự khởi động lại backend sau khi c
 
 Ảnh sản phẩm lưu trong thư mục `image` ở gốc dự án khi chạy bằng `dev-backend.ps1`. Sao lưu thư mục này cùng database để giữ ảnh khi chuyển máy. Có thể đặt `ALUMINUM_IMAGE_DIR` để dùng thư mục khác.
 
-Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. Khi chạy bằng script dev, tài khoản mới `admin`, `phanphoi`, `xuong` dùng mật khẩu thử nghiệm `1234567` và phải đổi ngay. Bản đóng gói tạo mật khẩu ngẫu nhiên riêng cho từng tài khoản mới; đọc tệp `first-run-credentials-*.txt` trong `%APPDATA%\AluminumManager`, đăng nhập, đổi mật khẩu rồi xóa tệp. Nếu đã có tài khoản, backend giữ nguyên mật khẩu và trạng thái. Backup mới giữ hash của ba tài khoản trong archive mã hóa để phục hồi vẫn dùng mật khẩu cũ; backup cũ vẫn cần mật khẩu lần đầu. Form production không tự điền mật khẩu. Các biến cấu hình khác được khai báo trong `application.yml`:
+Backend mặc định lắng nghe `127.0.0.1:8080`. Flyway tự chạy migration lúc khởi động. Khi chạy bằng script dev, tài khoản mới `admin`, `phanphoi`, `xuong` dùng mật khẩu thử nghiệm `1234567` và phải đổi ngay. Bản đóng gói tạo mật khẩu ngẫu nhiên riêng cho từng tài khoản mới; đọc tệp `first-run-credentials-*.txt` trong `%APPDATA%\AluminumManager`, đăng nhập, đổi mật khẩu rồi xóa tệp. Nếu đã có tài khoản, backend giữ nguyên mật khẩu và trạng thái. Backup mới giữ hash của ba tài khoản trong archive mã hóa để phục hồi vẫn dùng mật khẩu cũ; backup cũ vẫn cần mật khẩu lần đầu. Form không tự điền mật khẩu khởi tạo. Bản web dùng trình quản lý mật khẩu của trình duyệt để tự điền sau khi mở lại nếu người dùng đã lưu. Các biến cấu hình khác được khai báo trong `application.yml`:
 
 - `ALUMINUM_JWT_SECRET` (ít nhất 32 byte)
 - `ALUMINUM_DB_USERNAME`
@@ -78,7 +78,7 @@ Lệnh đầu tạo thử rồi hoàn tác; lệnh sau ghi dữ liệu trong m�
 
 ### In sổ cuối năm
 
-Mở **Sổ cuối năm** bằng tài khoản Xưởng hoặc Phân phối, chọn năm và bấm **Tạo bản xem trước**. Mỗi tài khoản vận hành chỉ in sổ của mình; Admin không truy cập màn này. Bản in gồm từng khách và phiếu bán/thu tiền, nợ chi tiết, sổ thu, sổ chi, phiếu nhập/nợ nhà cung cấp, công thợ Xưởng và tồn kho. Bấm **In / Lưu thành PDF**, chọn máy in PDF trong hộp thoại, rồi in/photocopy bản PDF. Số liệu chưa chốt có nhãn tạm tính.
+Chọn kỳ ở **Tổng quan**, mở **Sổ cuối kỳ** bằng tài khoản Xưởng hoặc Phân phối rồi bấm **Tạo bản xem trước**. Mỗi tài khoản vận hành chỉ in sổ của mình. Bản in gồm từng khách và phiếu bán/thu tiền, nợ chi tiết, sổ thu, sổ chi, phiếu nhập/nợ nhà cung cấp, công thợ Xưởng và tồn kho. Bấm **In / Lưu thành PDF** và chọn máy in PDF. Số liệu chưa chốt có nhãn tạm tính.
 
 Khi chốt năm Xưởng, ứng dụng lưu bản số dư nhôm, nợ khách, nợ nhà cung cấp và lãi tại thời điểm chốt. Phân phối chọn tên năm, đặt ngày bắt đầu và ngày kết thúc trong **Kiểm kê & chốt sổ → Chốt năm**, kiểm kê rồi chốt tại đó để có bản số dư tương tự. Sau đó chỉ cần chọn tên năm trên Tổng quan, Báo cáo hoặc Thu chi: ứng dụng hiện ngày bắt đầu/kết thúc đã lưu và lọc đúng kỳ. Kỳ kế tiếp bắt đầu sau ngày chốt; Sổ cuối năm cũng lấy mốc này. Bản chốt dùng để đối chiếu; tồn kho và công nợ tiếp tục theo phiếu gốc sang năm sau. Thu hoặc trả nợ cũ chỉ thay đổi dòng tiền và công nợ, không tính lãi lần hai.
 
@@ -88,7 +88,7 @@ Nguyên liệu cuối năm được cân theo **từng loại nhôm**. Giá tr�
 
 ## Giá nhập thay đổi theo ngày
 Chuông nhắc kiểm tra giá bán lưu trong trình duyệt. Khi mở ứng dụng, các nhắc thuộc loại nhôm không còn trong database được gỡ tự động; nếu reset dữ liệu khi app đang mở, tải lại trang để đồng bộ.
-Giá nhập không còn là một ô bị ghi đè. Mỗi loại nhôm có một lịch sử giá theo khoảng hiệu lực: vào **Sản phẩm → Lịch sử giá nhập** để đặt giá mới kèm ngày hiệu lực (mặc định hôm nay, có thể đặt trước cho ngày mai).
+Vào **Sản phẩm → Loại nhôm → Sửa** để đổi giá nhập theo tấn và giá bán theo kg, tạ, tấn. Khi một trong bốn giá thay đổi, hệ thống lưu cả bộ giá theo ngày sửa. Mở **Lịch sử giá nhập** để xem các mốc và áp dụng lại bộ giá đã lưu đầy đủ.
 
 Khi lập phiếu nhập với đơn giá khác giá hiện tại, popup hiện giá cũ/mới và ngày bắt đầu áp dụng trước khi lưu. Có thể chỉ lưu phiếu hoặc đồng thời cập nhật giá chuẩn; lịch sử giữ cả mốc cũ nếu đổi nhiều lần trong cùng ngày.
 

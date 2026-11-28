@@ -73,7 +73,15 @@ public class StockDocumentService {
 	}
 
 	private void requireWorkingDate(LocalDateTime date) {
-		yearPeriods.requireWorkingDate(date);
+		requireWorkingDate(date, false);
+	}
+
+	private void requireWorkingDate(LocalDateTime date, boolean allowLockedMonth) {
+		if (allowLockedMonth) {
+			yearPeriods.requireInventoryCountDate(date);
+		} else {
+			yearPeriods.requireWorkingDate(date);
+		}
 	}
 
 	// ---------- Doc queries ----------
@@ -94,8 +102,9 @@ public class StockDocumentService {
 		YearEndBalanceService.Period working = internalHistory ? null : workingPeriod();
 		if (working != null) {
 			if (!working.started()) return List.of();
-			from = working.periodFrom();
-			to = working.periodTo();
+			if (from == null || from.isBefore(working.periodFrom())) from = working.periodFrom();
+			if (to == null || to.isAfter(working.periodTo())) to = working.periodTo();
+			if (from.isAfter(to)) return List.of();
 		}
 		if ("trash".equals(bucket)) {
 			purgeExpiredTrash();
@@ -319,7 +328,11 @@ public class StockDocumentService {
 
 	@Transactional
 	public DocumentDto createDraft(DocumentRequest request) {
-		requireWorkingDate(request.documentDate());
+		return createDraft(request, false);
+	}
+
+	private DocumentDto createDraft(DocumentRequest request, boolean allowLockedMonth) {
+		requireWorkingDate(request.documentDate(), allowLockedMonth);
 		assertYearNotClosed(request.documentDate());
 		requireSupported(request.documentType());
 		requirePurchaseReceivedBy(request);
@@ -513,8 +526,12 @@ public class StockDocumentService {
 
 	@Transactional
 	public DocumentDto confirm(long id) {
+		return confirm(id, false);
+	}
+
+	private DocumentDto confirm(long id, boolean allowLockedMonth) {
 		DocRow doc = lock(id);
-		requireWorkingDate(doc.date());
+		requireWorkingDate(doc.date(), allowLockedMonth);
 		assertYearNotClosed(doc.date());
 		StockConfirmationPolicy.requireDraft(doc.status());
 		if (!shops.isDistribution()) assertFactoryYearOpen(doc.date());
@@ -912,6 +929,7 @@ public class StockDocumentService {
 		boolean confirmedLockedMonth = Boolean.TRUE.equals(request.confirmLockedCarryoverMonth());
 		if (confirmedLockedMonth) {
 			var period = workingPeriod();
+			if (period == null) period = yearPeriods.periodAt(when.toLocalDate());
 			if (period == null || !period.started() || !doc.date().toLocalDate().isBefore(period.periodFrom())) {
 				throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 						"Chỉ xác nhận thanh toán tháng đã khóa cho phiếu nợ chuyển kỳ", null);
@@ -1071,7 +1089,17 @@ public class StockDocumentService {
 			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Chỉ Phân phối dùng kiểm kê hao hụt tồn kho", null);
 		}
 		Set<String> seen = new java.util.HashSet<>();
-		yearPeriods.requireWorkingDate(countDate);
+		yearPeriods.requireInventoryCountDate(countDate);
+		assertYearNotClosed(countDate);
+		Integer later = jdbc.queryForObject("""
+				SELECT COUNT(*) FROM stock_movements m JOIN products p ON p.id = m.product_id
+				WHERE p.shop_id = ? AND m.movement_at >= ?
+				""", Integer.class, shops.currentId(), Timestamp.valueOf(countDate.toLocalDate().plusDays(1).atStartOfDay()));
+		if (later != null && later > 0) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Kho đã có biến động sau ngày " + countDate.toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+					+ "; không thể dùng số cân hiện tại để kiểm kê lùi ngày", null);
+		}
 		List<String> codes = new ArrayList<>();
 		BigDecimal shortage = BigDecimal.ZERO;
 		BigDecimal surplus = BigDecimal.ZERO;
@@ -1085,13 +1113,17 @@ public class StockDocumentService {
 			if (valid == null || valid == 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 					"Sản phẩm hoặc loại nhôm không thuộc cửa hàng hiện tại", null);
 			Balance balance = lockBalance(item.productId(), item.categoryId());
+			BigDecimal preCountQty = preCountQuantity(item.productId(), item.categoryId(), balance.quantity());
 			BigDecimal counted = item.countedQuantityKg().setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
-			BigDecimal delta = counted.subtract(balance.quantity()).setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
+			BigDecimal deltaFromPreCount = counted.subtract(preCountQty).setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
+			if (deltaFromPreCount.signum() > 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+					"Khối lượng còn trong kho không được lớn hơn tồn sổ (" + preCountQty.stripTrailingZeros().toPlainString() + " kg)", null);
 			BigDecimal scrap = item.scrapKg() == null ? BigDecimal.ZERO : item.scrapKg().setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
-			BigDecimal shortageOfItem = delta.signum() < 0 ? delta.abs() : BigDecimal.ZERO;
+			BigDecimal shortageOfItem = deltaFromPreCount.abs();
 			if (scrap.compareTo(shortageOfItem) > 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR,
 					"Vụn nhôm không thể lớn hơn khối lượng thiếu so với tồn sổ", null);
 			BigDecimal pureLoss = shortageOfItem.subtract(scrap);
+			BigDecimal delta = counted.subtract(balance.quantity()).setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
 			if (delta.signum() == 0) {
 				jdbc.update("""
 						INSERT INTO distribution_inventory_count_evidence
@@ -1112,8 +1144,8 @@ public class StockDocumentService {
 					null, null, "Kiểm kê tồn kho Phân phối", BigDecimal.ZERO, null, null, null,
 					List.of(new ItemRequest(item.productId(), item.categoryId(), unitId, quantityTon,
 							BigDecimal.ZERO, BigDecimal.ZERO, "kg", null, null, null, null)), false);
-			DocumentDto draft = createDraft(request);
-			DocumentDto confirmed = confirm(draft.id());
+			DocumentDto draft = createDraft(request, true);
+			DocumentDto confirmed = confirm(draft.id(), true);
 			codes.add(confirmed.documentCode());
 			jdbc.update("""
 					INSERT INTO distribution_inventory_count_evidence
@@ -1127,6 +1159,29 @@ public class StockDocumentService {
 		if (!codes.isEmpty()) audit.record(CurrentAdmin.get().id(), "DISTRIBUTION_INVENTORY_COUNT", "stock_balances",
 				String.valueOf(shops.currentId()), "Điều chỉnh " + codes.size() + " dòng sau kiểm kê");
 		return new InventoryCountResult(codes.size(), shortage, surplus, codes);
+	}
+
+	private BigDecimal preCountQuantity(long productId, long categoryId, BigDecimal currentBalance) {
+		LocalDate lastClosed = jdbc.query("""
+				SELECT MAX(period_to) FROM (
+				    SELECT period_to FROM year_end_balances WHERE shop_id = ?
+				    UNION ALL
+				    SELECT period_to FROM distribution_period_closings WHERE shop_id = ?
+				) closed
+				""", (rs, i) -> rs.getDate(1) == null ? null : rs.getDate(1).toLocalDate(),
+				shops.currentId(), shops.currentId()).stream().findFirst().orElse(null);
+		BigDecimal netAdjustments = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(m.quantity_delta_base), 0)
+				FROM stock_movements m
+				JOIN stock_documents d ON d.id = m.document_id
+				WHERE d.shop_id = ? AND m.product_id = ? AND m.category_id = ?
+				  AND d.document_type IN ('ADJUSTMENT_IN', 'ADJUSTMENT_OUT')
+				  AND d.status = 'CONFIRMED'
+				  AND (? IS NULL OR m.movement_at >= ?)
+				""", BigDecimal.class, shops.currentId(), productId, categoryId,
+				lastClosed, lastClosed == null ? null : Timestamp.valueOf(lastClosed.plusDays(1).atStartOfDay()));
+		return currentBalance.subtract(netAdjustments == null ? BigDecimal.ZERO : netAdjustments)
+				.setScale(InventoryMath.QTY_SCALE, InventoryMath.ROUNDING);
 	}
 
 	@Transactional(readOnly = true)

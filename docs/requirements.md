@@ -6,6 +6,8 @@ Khách có thể thanh toán hết số nợ của nhiều hóa đơn trong mộ
 
 Tổng quan có chế độ theo tháng và từ ngày bắt đầu kỳ đến hôm nay hoặc tới ngày chốt với kỳ đã đóng. Bảng lãi gộp hóa đơn ở hai sổ nhóm theo ngày lập phiếu hoặc tháng, tính doanh thu bán ngoài trừ giá vốn vật tư trước các khoản chi hoạt động và tiền công.
 
+Thu chi và Báo cáo cho phép xem toàn bộ khoảng ngày của kỳ đang mở, kể cả khi kỳ kéo dài quá 400 ngày.
+
 Một máy Windows, hai sổ Xưởng và Phân phối; các vai trò Admin, Xưởng và Phân phối. Phần mềm quản lý sản phẩm, phiếu nhập/bán, khách mua, nhân sự xưởng, thu chi, báo cáo và sao lưu. Admin chỉ quản lý Sao lưu và Cài đặt; phân phối do chủ quản lý, không có nhân viên hay tiền công.
 
 Màn xác nhận mật khẩu sau lần đầu hoặc reset cho phép dùng lại mật khẩu hiện tại. Backend chỉ xóa cờ bắt buộc sau khi xác thực mật khẩu hiện tại thành công; nếu dùng cùng mật khẩu thì hash không đổi.
@@ -26,6 +28,7 @@ Danh mục sản phẩm ở hai sổ dùng tên, ảnh và trạng thái với m
 - Thùng rác chỉ nhận phiếu **đã hủy** hoặc phiếu **đã xác nhận và đã đảo**. Phiếu nháp phải **hủy nháp** trước; không chuyển thẳng từ nháp vào thùng rác. Phiếu đã hủy trong thùng rác giữ tối đa 90 ngày rồi xóa cứng (nếu không ràng buộc kho/thu); phiếu đã đảo chỉ ẩn danh sách, không xóa cứng.
 - Phân phối theo dõi tồn tổng theo số lượng, không tự tính giá vốn khi xuất từng phiếu. Xưởng tính chi phí nhôm năm bằng giá trị đầu năm + nhập trong năm - giá trị kiểm kê cuối năm.
 - Phân phối giữ lịch sử giá nhập chuẩn theo ngày và snapshot trên dòng phiếu để tra cứu giá nhập. Giá tham khảo không thay đổi giá thực tế của phiếu nhập. Phiếu bán xưởng có thể gắn dòng phiếu nhập làm giá nhôm tham chiếu; không dùng giá đó làm giá vốn hằng ngày.
+- Trong danh mục, nhập hoặc sửa giá nhập chuẩn theo tấn và giá bán kg, tạ, tấn ở form loại nhôm. Lịch sử lưu cả bốn mức khi tạo loại hoặc đổi giá. Có thể áp dụng lại bộ giá đã lưu đầy đủ kể từ hôm nay.
 - Nếu đơn giá thực tế trên phiếu nhập mới khác giá nhập chuẩn của loại, người dùng được chọn trước khi lưu phiếu có ghi giá chuẩn mới theo ngày phiếu hay chỉ lưu phiếu. Popup nêu giá cũ và ngày bắt đầu, giá mới và ngày hiệu lực. Lịch sử giữ cả mốc cũ khi đổi giá cùng ngày; mốc mới nhất trong ngày được dùng để tính theo ngày. Chấp nhận cập nhật tạo nhắc kiểm tra giá bán từng đơn vị ở chuông header; nhắc lưu tại trình duyệt của shop hiện tại.
 - Mỗi phiếu nhập là một đợt; phiếu bán xưởng ghi khối lượng thành phẩm thực giao và khách mua. Báo cáo năm cộng kg theo khách và toàn xưởng; phiếu bán xưởng mới không trừ tồn kho theo ngày.
 - Cuối năm cân nguyên liệu theo loại nhôm. Giá trị nguyên liệu được phân bổ vào các dòng nhập đã xác nhận, chưa đảo, theo thứ tự mới nhất trước; thiếu thì lấy tiếp dòng cũ. Nếu lịch sử nhập không đủ kg, hiện hệ thống báo lỗi và chưa có màn nhập lớp tồn đầu kỳ theo loại. Các nhóm phế liệu chưa bán, hàng đang làm, thành phẩm chưa bán lưu kg và giá trị riêng.
@@ -34,15 +37,17 @@ Danh mục sản phẩm ở hai sổ dùng tên, ảnh và trạng thái với m
 - Phân phối ghi nước, bánh cho đội giao hàng, bảo trì và chi phí nhỏ vào chi phí hoạt động trong Thu chi; không tạo nhân viên hay phiếu chi lương cho phân phối.
 - Form phiếu chi thủ công của cả Xưởng và Phân phối dùng năm lựa chọn: điện, ăn mỗi ngày, nước và bánh kẹo giữa giờ, vật tư máy móc, sửa chữa/thay thế/bảo dưỡng. Bốn khoản đầu thuộc chi phí hoạt động, khoản sửa chữa thuộc bảo trì; chi trả phiếu nhập vẫn ghi trên phiếu nhập để tránh trùng.
 - Doanh thu, tiền thực thu và chi phí hoạt động là ba số khác nhau. Tiền nhập hàng chưa bán không phải chi phí kỳ.
-- Kỳ chốt năm là khoảng ngày do từng cửa hàng chọn, có thể theo Tết âm lịch và đi qua 31/12. Năm trên màn hình là tên kỳ. Kỳ sau bắt đầu ngay sau ngày chốt kỳ trước. Tồn và công nợ chuyển tiếp theo chứng từ gốc; thu/trả nợ cũ sau ngày chốt không tính lãi lần hai. Tiền công tháng thuộc kỳ chứa ngày cuối tháng.
+- Kỳ quyết toán là khoảng ngày do từng cửa hàng chọn, có thể ngắn hơn năm hoặc đi qua 31/12. Tổng quan là nơi đổi kỳ làm việc. Các màn nghiệp vụ và bản in lấy kỳ đó theo ngày thực tế. Kỳ sau bắt đầu ngay sau ngày chốt kỳ trước. Tồn và công nợ chuyển tiếp theo chứng từ gốc. Thu hoặc trả nợ cũ sau ngày chốt không tính lãi lần hai. Tiền công tháng thuộc kỳ chứa ngày cuối tháng.
 - Tháng là kỳ làm việc chính nằm trong kỳ năm: chọn tháng và bấm Mở tháng trước khi ghi phiếu. Mọi màn nghiệp vụ theo ngày dùng phần giao của tháng và kỳ năm; ví dụ năm bắt đầu 18/02 thì tháng đầu tính từ 18/02. Khóa tháng khóa ghi/sửa chứng từ của tháng đó và chỉ sau đó mới mở tháng tiếp; Xưởng phải chốt kỳ công trước. Phiếu thanh toán nợ cũ ghi vào tháng nhận/trả thực tế đang mở. Có thể chốt năm khi tháng cuối vẫn mở. Cần xử lý phiếu kho nháp trong khoảng chốt.
 - Có thể mở lại tháng đã khóa trong kỳ chưa chốt để chỉnh chứng từ, kể cả khi tháng sau đang mở. Từ chối mở lại nếu có bản chốt sổ từ tháng đó trở đi. Sau khi chỉnh xong có thể khóa lại tháng đó.
+- Tháng cuối còn mở trong kỳ năm đã chốt không chặn mở tháng đầu kỳ mới. Tháng đang mở trong kỳ chưa chốt vẫn phải khóa trước khi mở tháng khác.
+- Có thể mở lại bản chốt năm Xưởng hoặc Phân phối để sửa kiểm kê và chốt lại. Ghi nhật ký số dư cũ. Từ chối khi đã có bản chốt phụ thuộc hoặc Phân phối có biến động kho sau ngày chốt.
 - Với nợ chuyển kỳ, ngày thực thu hoặc thực trả quyết định tháng ghi sổ. Chọn ngày ngay trên form, độc lập với tháng đang xem ở Tổng quan. Nếu tháng đã khóa trong kỳ năm còn mở, xác nhận một lần để ghi khoản thanh toán. Thao tác giữ trạng thái khóa và bản chốt kiểm kê, cập nhật Thu chi và công nợ, đồng thời ghi nhật ký.
 - Sổ Thu chi lọc và cộng tiền theo ngày nhận/trả thực tế. Khoản trả cho hóa đơn cũ không xuất hiện trong Sổ Thu chi của tháng lập hóa đơn; báo cáo công nợ vẫn gắn khoản trả với hóa đơn gốc.
 - Ngày thu hoặc trả trên phiếu bán và phiếu nhập phải từ ngày lập phiếu trở đi. Khoản cũ lệch ngày được đánh dấu để người dùng đối chiếu trước khi sửa.
 - Ngày thanh toán gợi ý là ngày lập phiếu hoặc ngày đầu khoảng làm việc đang mở nếu phiếu lập trước khoảng đó. Có thể đổi sang ngày thực thu hoặc trả.
 - Phiếu bán mới ưu tiên ngày hôm nay trong kỳ đang mở. Khi nhập kỳ cũ, ngày gợi ý lấy từ phiếu bán vừa tạo trong cùng kỳ hoặc phiếu bán đã xác nhận trong danh sách, nếu có.
-- Ngày bắt đầu và kết thúc kỳ chưa chốt được lưu bằng hai thao tác riêng cho từng sổ, từng tên năm. Sau khi lưu ngày bắt đầu, số liệu kỳ được tính từ ngày đó đến hiện tại. Ngày kết thúc dự kiến có thể đổi trước khi chốt và không giới hạn dữ liệu đang làm việc; chốt là bước xác nhận riêng sau kiểm kê. Tổng quan, Thu chi, Báo cáo, kiểm kê Xưởng và Sổ cuối năm dùng cùng khoảng kỳ; kỳ đã chốt không đổi ngày. Tên kỳ là chuỗi tùy ý, chẳng hạn “Kỳ 02/2026–02/2027”; số năm trong bộ chọn là khóa tra cứu.
+- Ngày bắt đầu và kết thúc kỳ chưa chốt được lưu bằng hai thao tác riêng cho từng sổ, từng tên năm. Sau khi lưu ngày bắt đầu, số liệu kỳ được tính từ ngày đó đến hiện tại. Ngày kết thúc dự kiến có thể đổi trước khi chốt và không giới hạn dữ liệu đang làm việc; chốt là bước xác nhận riêng sau kiểm kê. Tổng quan, Thu chi, Báo cáo, kiểm kê Xưởng và Sổ cuối năm dùng cùng khoảng kỳ; kỳ đã chốt không đổi ngày. Tên kỳ là chuỗi tùy ý, chẳng hạn “Kỳ 02/2026–02/2027”. Mã kỳ cũ được dùng để tra cứu nội bộ.
 - Tăng ca chỉ tính khi đã duyệt. Kỳ công đã chốt không đổi theo hồ sơ mới.
 - Đơn giá tăng ca theo từng bản ghi là tùy chọn; nếu bỏ trống, dùng mức cấu hình hiệu lực vào ngày công. Thành tiền bằng số giờ nhân đơn giá đã chọn và được lưu cùng bản ghi.
 - Tăng ca có hai cách tính: theo giờ (số giờ nhân đơn giá giờ) hoặc theo buổi (mỗi bản ghi đúng một buổi nhân đơn giá buổi). Mức giờ và mức buổi được cấu hình riêng theo lịch sử mức công của từng nhân viên. Kỳ lương cộng tiền tăng ca đã duyệt; tổng giờ chỉ gồm phần tính theo giờ.
@@ -94,7 +99,9 @@ Phục hồi tách biệt sinh verified-recovery.json sau khi kiểm tra số d�
 
 Phiếu mua/bán ghi ngày đầy đủ, có nguồn và mã do app tạo. Thanh toán sửa ngày được với cùng khoản tiền và có nhật ký, không nhập lý do. Chỉ sửa trong kỳ năm chưa chốt, kể cả tháng trước đã khóa. Chi phí giấy có thể ghi tổng tháng. Công thợ giấy đã trả đủ có thể nhập tổng từng người, ghi ứng và phần trả cuối tháng mà chỉ ghi một khoản chi. Báo cáo tháng trừ chi hoạt động và tiền công, lãi tạm tính giữ riêng với lãi chốt năm.
 
-Chốt sổ tháng là tùy chọn. Bỏ qua nếu chưa cân, không ghi số 0 thay chỗ trống. Chốt tháng Phân phối có số cân thật điều chỉnh tồn kho theo từng sản phẩm và loại nhôm, trừ cả chênh lệch và phân loại phần vụn thuộc số thiếu. Nếu đã điều chỉnh và số cân vẫn khớp thì không trừ lần nữa. Chốt năm dùng ngày kết thúc kỳ do người dùng chọn và kiểm kê tại mốc đó, không cần bản chốt tháng.
+Chốt sổ tháng là tùy chọn. Bỏ qua nếu chưa cân, không ghi số 0 thay chỗ trống. Chốt tháng Phân phối có số cân thật điều chỉnh tồn kho theo từng sản phẩm và loại nhôm, trừ cả chênh lệch và phân loại phần vụn thuộc số thiếu. Nếu đã điều chỉnh và số cân vẫn khớp thì không trừ lần nữa. Chốt năm dùng ngày kết thúc kỳ do người dùng chọn và kiểm kê tại mốc đó, không cần bản chốt tháng. Khóa tháng chỉ chặn lập/sửa/hủy/đảo chứng từ thường; kiểm kê tồn kho Phân phối (kể cả khi chốt sổ tháng hoặc chuẩn bị chốt năm) vẫn thực hiện được trong tháng đã khóa miễn kỳ năm chưa chốt và chưa có biến động kho sau ngày kiểm kê.
+
+Chốt sổ tháng Xưởng hiển thị riêng tồn đầu tháng, nhập và giao theo loại. Phiếu ngoài tháng hoặc ngoài kỳ đã chọn không được tính vào nhập/giao của tháng.
 
 
 Màn Chốt năm quản lý ngày kết thúc và xác nhận chốt kỳ. Tổng quan giữ Khóa tháng để sang tháng mới.
@@ -110,3 +117,7 @@ Bản desktop hỗ trợ bàn giao backend local do dev-backend.ps1 bật với 
 
 
 Phiếu chi tự lập ngoài công thợ được sửa trong tháng mở chưa chốt sổ. Giữ mã phiếu. Khoản thanh toán gắn phiếu nguồn và khoản công thợ tiếp tục chỉnh ở luồng gốc.
+
+Xưởng được tạo ngày lễ tương lai trong kỳ đang làm việc trước khi mở tháng. Ghi nhận thưởng vẫn cần mở tháng và kỳ công.
+
+Số liệu Phân phối theo tháng lấy giao của tháng và kỳ. Tồn kiểm kê tháng và giá trị tồn báo cáo đều theo ngày cuối khoảng xem. Báo cáo cả kỳ đang mở đến hiện tại, còn quyết toán có thể dùng mốc kiểm kê được ghi riêng.

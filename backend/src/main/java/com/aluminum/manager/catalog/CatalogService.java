@@ -245,7 +245,7 @@ public class CatalogService {
 				""", request.name().trim(), blankToNull(request.description()),
 				purchaseKg, sellKg, sellTa, sellTon, sellM2,
 				request.active() == null || request.active(), shops.currentId());
-		purchasePrices.record(id, purchaseKg, LocalDate.now(clock), "Giá nhập khi tạo loại nhôm");
+		purchasePrices.recordPriceSet(id, purchaseKg, "Giá khi tạo loại nhôm", sellKg, sellTa, sellTon);
 		audit.record(CurrentAdmin.get().id(), "CREATE_CATEGORY", "product_categories", String.valueOf(id), request.name());
 		return category(id);
 	}
@@ -253,7 +253,9 @@ public class CatalogService {
 	@Transactional
 	public CategoryDto updateCategory(long id, CategoryRequest request) {
 		NameValidation.requireNoLeadingDigit("Tên loại nhôm", request.name());
-		category(id);
+		var previous = category(id);
+		purchasePrices.completeCurrentPriceSet(id, previous.defaultSellingPrice(), previous.defaultSellingPriceTa(),
+				previous.defaultSellingPriceTon());
 		BigDecimal sellKg = orZero(request.defaultSellingPrice());
 		BigDecimal sellTa = request.defaultSellingPriceTa() != null
 				? request.defaultSellingPriceTa()
@@ -262,7 +264,8 @@ public class CatalogService {
 				? request.defaultSellingPriceTon()
 				: sellKg.multiply(BigDecimal.valueOf(1000));
 		BigDecimal sellM2 = orZero(request.defaultSellingPriceM2());
-		BigDecimal purchaseKg = orZero(request.referencePurchasePrice());
+		BigDecimal purchaseKg = request.referencePurchasePrice() == null
+				? previous.referencePurchasePrice() : request.referencePurchasePrice();
 		try {
 			jdbc.update("""
 					UPDATE product_categories
@@ -276,9 +279,11 @@ public class CatalogService {
 		} catch (DuplicateKeyException ex) {
 			throw duplicate("Tên loại nhôm đã tồn tại");
 		}
-		ResolvedPrice current = purchasePrices.current(id);
-		if (current == null || purchaseKg.compareTo(current.pricePerBase()) != 0) {
-			purchasePrices.record(id, purchaseKg, LocalDate.now(clock), "Sửa giá nhập loại nhôm");
+		if (purchaseKg.compareTo(previous.referencePurchasePrice()) != 0
+				|| sellKg.compareTo(orZero(previous.defaultSellingPrice())) != 0
+				|| sellTa.compareTo(orZero(previous.defaultSellingPriceTa())) != 0
+				|| sellTon.compareTo(orZero(previous.defaultSellingPriceTon())) != 0) {
+			purchasePrices.recordPriceSet(id, purchaseKg, "Sửa bộ giá loại nhôm", sellKg, sellTa, sellTon);
 		}
 		audit.record(CurrentAdmin.get().id(), "UPDATE_CATEGORY", "product_categories", String.valueOf(id), request.name());
 		return category(id);
@@ -488,8 +493,23 @@ public class CatalogService {
 		return purchasePrices.history(categoryId).stream()
 				.map(row -> new PurchasePriceDto(
 						row.id(), row.effectiveFrom(), row.effectiveTo(),
-						row.pricePerBase(), row.note(), row.open(), row.future()))
+						row.pricePerBase(), row.sellingPriceKg(), row.sellingPriceTa(), row.sellingPriceTon(),
+						row.note(), row.open(), row.future()))
 				.toList();
+	}
+
+	@Transactional
+	public List<PurchasePriceDto> applyPriceSet(long categoryId, long priceId) {
+		var current = category(categoryId);
+		var row = purchasePrices.history(categoryId).stream()
+				.filter(price -> price.id() == priceId).findFirst()
+				.orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "Không tìm thấy mốc giá của loại nhôm", null));
+		if (row.sellingPriceKg() == null || row.sellingPriceTa() == null || row.sellingPriceTon() == null) {
+			throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Mốc này chưa lưu đủ ba giá bán", null);
+		}
+		updateCategory(categoryId, new CategoryRequest(current.name(), current.description(), current.active(),
+				row.pricePerBase(), row.sellingPriceKg(), row.sellingPriceTa(), row.sellingPriceTon(), current.defaultSellingPriceM2()));
+		return purchasePriceHistory(categoryId);
 	}
 
 	@Transactional

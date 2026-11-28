@@ -1,13 +1,13 @@
 # Sổ cuối năm
 
-Màn hình mặc định chọn năm vừa kết thúc; có thể chọn năm khác trước khi tạo bản xem trước.
+Màn **Sổ cuối kỳ** in kỳ đang chọn ở Tổng quan. Đổi kỳ tại Tổng quan rồi tạo bản xem trước mới.
 Sổ lấy đúng khoảng ngày của kỳ đã chốt hoặc kiểm kê nháp; kỳ tiếp theo bắt đầu sau ngày chốt kỳ trước ở cả hai cửa hàng.
 Kỳ chưa lưu ngày bắt đầu chưa tạo được Sổ cuối năm; kỳ đang làm việc chưa lưu ngày kết thúc dùng ngày hiện tại cho bản xem trước.
 Trang bìa mỗi sổ in tên kỳ tùy ý đã lưu, ví dụ “Kỳ 02/2026–02/2027”.
 
 `/so-cuoi-nam` tạo bản xem trước khổ A4 và gọi lệnh in của trình duyệt. Người dùng chọn **Lưu thành PDF** để có một tệp đóng quyển. Xưởng và Phân phối chỉ xem sổ của mình; Admin không truy cập màn này.
 
-Năm in mặc định là năm làm việc đang chọn ở Tổng quan; Sổ cuối năm luôn là bản in toàn kỳ năm, không bị bộ lọc tháng dùng cho màn vận hành cắt mất dữ liệu.
+Bản in lấy toàn bộ kỳ làm việc, kể cả khi Tổng quan đang chọn một tháng trong kỳ.
 
 Mỗi sổ có trang bìa, tổng hợp khách, một mục bắt đầu trang mới cho từng khách với đầy đủ phiếu bán, dòng hàng, kg, các lần thanh toán và tổng kg/tiền/đã trả/còn nợ. Trang bìa không in danh sách khách dạng dòng. Sổ thu, sổ chi theo nhóm, phiếu nhập và nợ nhà cung cấp, công thợ Xưởng và tồn kho cuối năm in sau đó. Giao dịch thu/chi lấy theo ngày giao dịch trong năm. Nợ tại ngày chốt giữ nguyên mốc chốt; tình trạng đã trả/còn nợ trên từng phiếu và danh sách nợ hiện tại tính cả lần trả sau kỳ, có ghi chú khi hai mốc khác nhau. Phiếu cũ có thu/trả trong năm cũng được in. Phiếu chưa gắn khách hiện riêng.
 

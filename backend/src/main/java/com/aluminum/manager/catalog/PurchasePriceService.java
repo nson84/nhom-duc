@@ -41,6 +41,9 @@ public class PurchasePriceService {
 			LocalDate effectiveFrom,
 			LocalDate effectiveTo,
 			BigDecimal pricePerBase,
+			BigDecimal sellingPriceKg,
+			BigDecimal sellingPriceTa,
+			BigDecimal sellingPriceTon,
 			String note,
 			boolean open,
 			boolean future
@@ -56,18 +59,35 @@ public class PurchasePriceService {
 		ResolvedPrice current = resolve(categoryId, today);
 		Long currentId = current == null ? null : current.priceId();
 		return jdbc.query("""
-				SELECT id, effective_from, effective_to, price_per_base, note
-				FROM category_purchase_prices
-				WHERE category_id = ?
-				ORDER BY effective_from DESC, id DESC
+				SELECT p.id, p.effective_from, p.effective_to, p.price_per_base, p.note,
+				       COALESCE(p.selling_price_kg, CASE WHEN p.id = ? THEN c.default_selling_price END) AS selling_price_kg,
+				       COALESCE(p.selling_price_ta, CASE WHEN p.id = ? THEN c.default_selling_price_ta END) AS selling_price_ta,
+				       COALESCE(p.selling_price_ton, CASE WHEN p.id = ? THEN c.default_selling_price_ton END) AS selling_price_ton
+				FROM category_purchase_prices p
+				JOIN product_categories c ON c.id = p.category_id
+				WHERE p.category_id = ?
+				ORDER BY p.effective_from DESC, p.id DESC
 				""", (rs, i) -> {
 			long id = rs.getLong("id");
 			LocalDate from = rs.getDate("effective_from").toLocalDate();
 			LocalDate to = rs.getDate("effective_to") == null ? null : rs.getDate("effective_to").toLocalDate();
 			return new PriceRow(
-					id, from, to, rs.getBigDecimal("price_per_base"), rs.getString("note"),
+					id, from, to, rs.getBigDecimal("price_per_base"), rs.getBigDecimal("selling_price_kg"),
+					rs.getBigDecimal("selling_price_ta"), rs.getBigDecimal("selling_price_ton"), rs.getString("note"),
 					currentId != null && currentId == id, from.isAfter(today));
-		}, categoryId);
+		}, currentId, currentId, currentId, categoryId);
+	}
+
+	void completeCurrentPriceSet(long categoryId, BigDecimal sellingKg, BigDecimal sellingTa, BigDecimal sellingTon) {
+		var current = current(categoryId);
+		if (current == null) return;
+		jdbc.update("""
+				UPDATE category_purchase_prices
+				SET selling_price_kg = COALESCE(selling_price_kg, ?),
+				    selling_price_ta = COALESCE(selling_price_ta, ?),
+				    selling_price_ton = COALESCE(selling_price_ton, ?)
+				WHERE id = ? AND (selling_price_kg IS NULL OR selling_price_ta IS NULL OR selling_price_ton IS NULL)
+				""", sellingKg, sellingTa, sellingTon, current.priceId());
 	}
 
 	@Transactional(readOnly = true)
@@ -120,6 +140,20 @@ public class PurchasePriceService {
 
 	@Transactional
 	public ResolvedPrice record(long categoryId, BigDecimal pricePerBase, LocalDate effectiveFrom, String note) {
+		return record(categoryId, pricePerBase, effectiveFrom, note, false);
+	}
+
+	@Transactional
+	public void recordPriceSet(long categoryId, BigDecimal pricePerBase, String note,
+			BigDecimal sellingKg, BigDecimal sellingTa, BigDecimal sellingTon) {
+		var recorded = record(categoryId, pricePerBase, LocalDate.now(clock), note, true);
+		jdbc.update("""
+				UPDATE category_purchase_prices SET selling_price_kg = ?, selling_price_ta = ?, selling_price_ton = ?
+				WHERE id = ?
+				""", sellingKg, sellingTa, sellingTon, recorded.priceId());
+	}
+
+	private ResolvedPrice record(long categoryId, BigDecimal pricePerBase, LocalDate effectiveFrom, String note, boolean forceNew) {
 		BigDecimal price = requirePrice(pricePerBase);
 		LocalDate from = effectiveFrom == null ? LocalDate.now(clock) : effectiveFrom;
 
@@ -159,7 +193,7 @@ public class PurchasePriceService {
 		boolean sameDay = inEffectFrom.equals(from);
 
 		long priceId;
-		if (sameDay && !priceChanged) {
+		if (sameDay && !priceChanged && !forceNew) {
 			jdbc.update("UPDATE category_purchase_prices SET note = ? WHERE id = ?", blank(note), inEffectId);
 			priceId = inEffectId;
 		} else {

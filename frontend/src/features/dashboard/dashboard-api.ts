@@ -41,7 +41,35 @@ export type YearEndBalance = {
   closedAt: string;
 };
 
+export type DistributionYearReport = {
+  year: number;
+  status: "NOT_STARTED" | "CLOSED" | "COUNTED" | "ESTIMATED" | "MISSING_COUNT";
+  periodFrom: string;
+  periodTo: string;
+  uncountedItems: number;
+  revenue: number;
+  cashCollected: number;
+  customerDebt: number;
+  supplierDebt: number;
+  openingValue: number;
+  purchaseValue: number;
+  internalOutValue: number;
+  endingKg: number | null;
+  endingValue: number | null;
+  materialCost: number | null;
+  operatingExpenses: number;
+  profit: number | null;
+};
+
+export async function getDistributionYearReport(year: number): Promise<DistributionYearReport> {
+  return (await api.get<Envelope<DistributionYearReport>>("/api/v1/dashboard/distribution-year-report", { params: { year } })).data.data;
+}
+
 export type YearPeriod = { year: number; periodName: string; periodFrom: string; periodTo: string; closed: boolean; started: boolean; endSaved: boolean; plannedEnd: string | null };
+
+export async function listYearPeriods(): Promise<YearPeriod[]> {
+  return (await api.get<Envelope<YearPeriod[]>>("/api/v1/dashboard/year-periods")).data.data;
+}
 
 export async function getYearPeriod(year: number): Promise<YearPeriod> {
   return (await api.get<Envelope<YearPeriod>>("/api/v1/dashboard/year-period", { params: { year } })).data.data;
@@ -67,6 +95,10 @@ export async function closeMonth(year: number, month: string): Promise<boolean> 
 
 export async function reopenMonth(year: number, month: string): Promise<boolean> {
   return (await api.post<Envelope<boolean>>("/api/v1/dashboard/month-reopen", null, { params: { year, month } })).data.data;
+}
+
+export async function reopenYear(year: number): Promise<void> {
+  await api.post("/api/v1/dashboard/year-reopen", null, { params: { year } });
 }
 
 export async function saveYearPeriod(year: number, from: string, to: string): Promise<YearPeriod> {

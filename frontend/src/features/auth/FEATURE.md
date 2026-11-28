@@ -28,10 +28,10 @@ Tài liệu màn hình trong thư mục này; đọc trước khi sửa và cậ
 
 Đổi mật khẩu dùng `PUT /api/v1/auth/password`; đăng nhập dùng `POST /api/v1/auth/login`.
 
-Form chỉ tự điền `1234567` khi Vite chạy ở chế độ dev. Bản production để trống mật khẩu; người cài mới đọc tệp mật khẩu lần đầu trong `%APPDATA%\AluminumManager`, đăng nhập và đổi mật khẩu. Backend không đặt lại mật khẩu khi khởi động; xem [tài liệu auth backend](../../../../backend/src/main/java/com/aluminum/manager/auth/FEATURE.md).
+Form không tự điền mật khẩu khởi tạo trong cả dev và production; người cài mới đọc tệp mật khẩu lần đầu trong `%APPDATA%\AluminumManager`, đăng nhập và đổi mật khẩu. Backend không đặt lại mật khẩu khi khởi động; xem [tài liệu auth backend](../../../../backend/src/main/java/com/aluminum/manager/auth/FEATURE.md).
 
 Giao diện đăng nhập dùng ảnh nền phủ tối, điểm nhấn champagne, nhãn tài khoản/mật khẩu, chuyển động mở trang và ánh sáng nền nhẹ. Hover/focus và trạng thái đang gửi được hiển thị; lỗi có role alert. Tắt animation khi prefers-reduced-motion. Màn nhỏ cuộn tự nhiên, không cố định chiều cao form. Không thay API hay quy tắc tài khoản.
 
-Sau đăng nhập thành công, ghi nhớ tài khoản gần nhất trong localStorage. Trên desktop Windows, mật khẩu đã đăng nhập thành công được lưu riêng theo tài khoản trong Windows Credential Manager để tự điền khi chọn tài khoản ở lần mở sau; đổi mật khẩu thành công cập nhật mục đã lưu. Bản web chỉ giữ mật khẩu trong RAM của tab. Không lưu mật khẩu rõ vào localStorage/sessionStorage hoặc backup/R2; backend lưu hash trong bản backup mã hóa. Fallback 1234567 vẫn chỉ ở dev. Hồi quy: tests/login-memory.test.mjs.
+Sau đăng nhập thành công, ghi nhớ tài khoản gần nhất trong localStorage. Trên desktop Windows, mật khẩu đã đăng nhập thành công được lưu riêng theo tài khoản trong Windows Credential Manager để tự điền khi chọn tài khoản ở lần mở sau; đổi mật khẩu thành công cập nhật mục đã lưu. Bản web chỉ giữ mật khẩu trong RAM của tab và đề nghị trình quản lý mật khẩu lưu thông tin sau đăng nhập thành công nếu trình duyệt hỗ trợ. Chấp nhận lưu hoặc cập nhật để tự điền khi mở lại. Không lưu mật khẩu rõ vào localStorage/sessionStorage hoặc backup/R2; backend lưu hash trong bản backup mã hóa. Hồi quy: tests/login-memory.test.mjs.
 
 Ghi nhớ tài khoản cũng lấy từ phiên đang tồn tại khi khởi động, cập nhật phiên và trước khi clear/logout; áp dụng cả phiên được tạo trước bản sửa giao diện. Không cần đăng nhập lại để chuyển phiên cũ sang cơ chế nhớ tài khoản.

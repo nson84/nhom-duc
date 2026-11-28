@@ -4,6 +4,8 @@
 
 ## Chức năng hiện có
 
+Khi xác nhận thanh toán nợ cũ trong tháng đã khóa mà yêu cầu không gửi năm làm việc, xác định kỳ theo ngày thanh toán và kiểm tra phiếu gốc lập trước kỳ đó.
+
 `POST /stock-documents/payments/batch` thu hết số còn nợ của các phiếu bán ngoài đã chọn của một khách trong shop đăng nhập. Kiểm tra số dư sau khi khóa phiếu, lưu cả đợt trong một transaction, và dùng khóa đợt trên từng phiếu để gửi lại an toàn. Ngày nhận tiền phải thuộc tháng mở của kỳ đang làm việc.
 
 `StockDocumentService` quản lý nháp/xác nhận/đảo/thu chi, theo dõi tồn Phân phối theo số lượng và chuyển nội bộ. Phiếu bán xưởng không trừ tồn; có giá nhập tham chiếu riêng, không phải giá vốn hằng ngày.
@@ -33,7 +35,7 @@ API tồn kho còn trả tổng tiền phiếu nhập đã xác nhận, chưa đ
 
 [stock](../../../../../../../../frontend/src/features/stock/FEATURE.md)
 
-Kiểm kê Phân phối gửi ngày nghiệp vụ theo tháng đang chọn. Tháng quá khứ dùng cuối ngày cuối khoảng đang xem, tháng hiện tại dùng thời điểm hiện tại. Backend kiểm tra tháng mở trước khi tạo điều chỉnh kho.
+Kiểm kê Phân phối nhận ngày kiểm kê từ popup (mặc định theo ngày kết thúc dự kiến hoặc tháng đang chọn). Khối lượng còn trong kho không được lớn hơn `tồn sổ − vụn nhôm` (chỉ điều chỉnh thiếu, không tạo tồn thừa). Backend cho phép kiểm kê trong cả tháng đang mở và tháng đã khóa (nhưng chặn tháng chưa mở, kỳ đã chốt và trường hợp kho đã có biến động sau ngày kiểm kê); các phiếu nhập/bán/sửa/đảo thông thường vẫn bị khóa tháng chặn.
 
 Rà soát 19/11: sửa phiếu nhập Phân phối sau khi đã bán một phần cho phép tổng nhập mới hợp lệ; dựng lại phiếu rồi kiểm tra tồn cuối trong cùng transaction, rollback nếu thiếu hàng. Test MySQL bảo vệ số đã thu, hạn sửa gốc, hai request thu đồng thời và đảo cặp nội bộ. Xem docs/audit-followup-20261119.md.
 
@@ -53,3 +55,5 @@ Bộ lọc internal-history chỉ truy vấn phiếu nhập nội bộ đã xác
 # Thanh toán nợ chuyển kỳ qua khóa tháng
 
 `StockDocumentService.addPayment` nhận xác nhận riêng cho phiếu gốc trước ngày đầu kỳ đang chọn. Client cũ có thể bỏ trường xác nhận và giữ quy tắc ghi trong tháng mở. Khoản thu hoặc trả vẫn kiểm tra quyền cửa hàng, số còn nợ và ngày thanh toán; nhật ký ghi nhận xác nhận qua khóa tháng.
+
+Danh sách chứng từ thường lấy giao giữa ngày lọc và kỳ đã chọn, kể cả chứng từ điều chỉnh dùng trong báo cáo hao hụt.

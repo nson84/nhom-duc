@@ -204,25 +204,69 @@ public class FactoryService {
 		requireFactoryYear(year);
 		List<YearCountDto> rows = jdbc.query("SELECT * FROM factory_year_counts WHERE year_number = ?",
 				(rs, i) -> countDto(rs), year);
-		if (!rows.isEmpty()) return rows.get(0);
+		if (!rows.isEmpty()) {
+			var saved = rows.get(0);
+			var opening = previousClosing(saved.periodFrom());
+			if (opening == null) return saved;
+			return new YearCountDto(saved.year(), saved.periodFrom(), saved.periodTo(), opening.kg(), opening.value(),
+					saved.rawKg(), saved.rawValue(), saved.scrapKg(), saved.scrapValue(), saved.workInProgressKg(),
+					saved.workInProgressValue(), saved.finishedKg(), saved.finishedValue(), saved.status(), saved.notes(), saved.closedAt());
+		}
 		YearCountDto prior = priorCount(year);
 		var period = yearEndBalances.period(year);
 		if (!period.started()) throw invalid("Hãy lưu ngày bắt đầu kỳ trên Tổng quan trước khi quyết toán Xưởng");
+		var opening = previousClosing(period.periodFrom());
 		return new YearCountDto(year, period.periodFrom(),
 				period.plannedEnd() != null ? period.plannedEnd() : period.periodTo(),
-				prior == null ? ZERO : closingKg(prior), prior == null ? ZERO : closingValue(prior),
+				opening != null ? opening.kg() : prior == null ? ZERO : closingKg(prior),
+				opening != null ? opening.value() : prior == null ? ZERO : closingValue(prior),
 				ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, "MISSING", null, null);
+	}
+
+	private record OpeningBalance(BigDecimal kg, BigDecimal value) {}
+
+	private OpeningBalance previousClosing(LocalDate start) {
+		return jdbc.query("""
+				SELECT inventory_kg, inventory_value FROM year_end_balances
+				WHERE shop_id = ? AND period_to = ? ORDER BY year_number DESC LIMIT 1
+				""", (rs, i) -> new OpeningBalance(rs.getBigDecimal(1), rs.getBigDecimal(2)),
+				shops.currentId(), start.minusDays(1)).stream().findFirst().orElse(null);
 	}
 
 	@Transactional(readOnly = true)
 	public List<RawCountDto> rawCounts(int year) {
 		requireFactoryYear(year);
+		YearCountDto period = yearCount(year);
+		Timestamp start = Timestamp.valueOf(period.periodFrom().atStartOfDay());
+		Timestamp cutoff = Timestamp.valueOf(period.periodTo().plusDays(1).atStartOfDay());
 		return jdbc.query("""
-				SELECT r.category_id, c.name, r.quantity_kg, r.value_amount
-				FROM factory_raw_counts r JOIN product_categories c ON c.id = r.category_id
-				WHERE r.year_number = ? ORDER BY c.name
+				SELECT c.id, c.name, r.quantity_kg, r.value_amount,
+				       COALESCE(b.raw_kg, o.quantity_kg, 0) AS opening_kg,
+				       COALESCE((SELECT SUM(i.quantity_base) FROM stock_document_items i
+				           JOIN stock_documents d ON d.id = i.document_id
+				           WHERE d.shop_id = c.shop_id AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
+				             AND NOT EXISTS (SELECT 1 FROM stock_documents rev WHERE rev.reversal_of_document_id = d.id)
+				             AND i.category_id = c.id AND d.document_date >= ? AND d.document_date < ?), 0) AS purchased_kg,
+				       COALESCE((SELECT SUM(i.quantity_base) FROM stock_document_items i
+				           JOIN stock_documents d ON d.id = i.document_id
+				           WHERE d.shop_id = c.shop_id AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
+				             AND NOT EXISTS (SELECT 1 FROM stock_documents rev WHERE rev.reversal_of_document_id = d.id)
+				             AND d.is_internal = 0 AND i.category_id = c.id AND d.document_date >= ? AND d.document_date < ?
+				             AND COALESCE(i.billing_unit, 'kg') <> 'm2'), 0) AS delivered_kg
+				FROM product_categories c
+				LEFT JOIN factory_raw_counts r ON r.category_id = c.id AND r.year_number = ?
+				LEFT JOIN year_end_inventory_categories b ON b.shop_id = c.shop_id AND b.category_id = c.id AND b.year_number = (
+				    SELECT y.year_number FROM year_end_balances y WHERE y.shop_id = c.shop_id AND y.period_to = ?
+				    ORDER BY y.year_number DESC LIMIT 1
+				)
+				LEFT JOIN factory_raw_counts o ON o.category_id = c.id AND o.year_number = (
+				    SELECT p.year_number FROM factory_year_counts p WHERE p.status = 'CLOSED' AND p.period_to = ?
+				    ORDER BY p.year_number DESC LIMIT 1
+				)
+				WHERE c.shop_id = ?
+				ORDER BY c.name
 				""", (rs, i) -> new RawCountDto(rs.getLong(1), rs.getString(2),
-				rs.getBigDecimal(3), rs.getBigDecimal(4), jdbc.query("""
+				rs.getBigDecimal(3), rs.getBigDecimal(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getBigDecimal(7), jdbc.query("""
 					SELECT l.purchase_item_id, d.document_code, d.document_date,
 					       l.quantity_kg, l.unit_cost_per_kg, l.value_amount
 					FROM factory_raw_count_layers l
@@ -232,7 +276,8 @@ public class FactoryService {
 					ORDER BY d.document_date DESC, i.id DESC
 					""", (lr, j) -> new RawLayerDto(lr.getLong(1), lr.getString(2),
 					lr.getTimestamp(3).toLocalDateTime(), lr.getBigDecimal(4),
-					lr.getBigDecimal(5), lr.getBigDecimal(6)), year, rs.getLong(1))), year);
+					lr.getBigDecimal(5), lr.getBigDecimal(6)), year, rs.getLong(1))),
+				start, cutoff, start, cutoff, year, period.periodFrom().minusDays(1), period.periodFrom().minusDays(1), shops.currentId());
 	}
 
 	@Transactional(readOnly = true)
@@ -319,13 +364,14 @@ public class FactoryService {
 		requireFactoryYear(year);
 		YearCountDto current = yearCount(year);
 		if ("CLOSED".equals(current.status())) throw invalid("Năm đã chốt, không sửa kiểm kê");
+		var flows = rawCounts(year);
 		HashSet<Long> seen = new HashSet<>();
 		List<RawCountDto> calculated = new ArrayList<>();
 		for (var input : request.items()) {
 			if (!seen.add(input.categoryId())) throw invalid("Một loại nhôm chỉ được kiểm kê một lần");
-			String name = jdbc.query("SELECT name FROM product_categories WHERE id = ? AND shop_id = ?",
-					(rs, i) -> rs.getString(1), input.categoryId(), shops.currentId())
-					.stream().findFirst().orElseThrow(() -> invalid("Loại nhôm không thuộc xưởng"));
+			var flow = flows.stream().filter(row -> row.categoryId() == input.categoryId())
+					.findFirst().orElseThrow(() -> invalid("Loại nhôm không thuộc xưởng"));
+			String name = flow.categoryName();
 			List<RawLayerDto> purchases = jdbc.query("""
 					SELECT i.id, d.document_code, d.document_date, i.quantity_base,
 					       i.line_total / i.quantity_base AS unit_cost, i.line_total
@@ -338,13 +384,18 @@ public class FactoryService {
 					rs.getTimestamp(3).toLocalDateTime(), rs.getBigDecimal(4),
 					rs.getBigDecimal(5), rs.getBigDecimal(6)), shops.currentId(), input.categoryId(), periodEnd(year));
 			List<RawLayerDto> layers;
+			BigDecimal maxCategoryKg = flow.openingKg().add(flow.purchasedKg()).subtract(flow.deliveredKg()).max(ZERO);
+			if (input.quantityKg().compareTo(maxCategoryKg) > 0) {
+				throw invalid("Số kg còn trong kho của " + name + " không được lớn hơn tồn đầu kỳ cộng nhập trừ giao ("
+						+ maxCategoryKg.stripTrailingZeros().toPlainString() + " kg)");
+			}
 			try {
 				layers = FactoryLayerAllocator.allocate(input.quantityKg(), purchases);
 			} catch (IllegalArgumentException ex) {
 				throw invalid("Không đủ phiếu nhập cho " + name + ": " + ex.getMessage());
 			}
 			BigDecimal value = layers.stream().map(RawLayerDto::valueAmount).reduce(ZERO, BigDecimal::add);
-			calculated.add(new RawCountDto(input.categoryId(), name, input.quantityKg(), value, layers));
+			calculated.add(new RawCountDto(input.categoryId(), name, input.quantityKg(), value, flow.openingKg(), flow.purchasedKg(), flow.deliveredKg(), layers));
 		}
 		jdbc.update("DELETE FROM factory_raw_counts WHERE year_number = ?", year);
 		for (RawCountDto row : calculated) {
@@ -378,13 +429,12 @@ public class FactoryService {
 		LocalDate periodTo = request.periodTo() == null ? existing.periodTo() : request.periodTo();
 		if (periodFrom.isAfter(periodTo) || periodFrom.plusDays(400).isBefore(periodTo))
 			throw invalid("Khoảng ngày chốt năm không hợp lệ");
-		if (Math.abs(year - periodFrom.getYear()) > 1)
-			throw invalid("Tên năm chốt không khớp ngày đầu kỳ");
 		if (prior != null && !periodFrom.equals(prior.periodTo().plusDays(1)))
 			throw invalid(YearEndBalanceService.nextPeriodStartMessage(prior.periodTo()));
 		yearEndBalances.saveDraftPeriod(year, periodFrom, periodTo);
-		BigDecimal openingKg = prior == null ? request.openingKg() : closingKg(prior);
-		BigDecimal openingValue = prior == null ? request.openingValue() : closingValue(prior);
+		var opening = previousClosing(periodFrom);
+		BigDecimal openingKg = opening != null ? opening.kg() : prior == null ? request.openingKg() : closingKg(prior);
+		BigDecimal openingValue = opening != null ? opening.value() : prior == null ? request.openingValue() : closingValue(prior);
 		Integer rawRows = jdbc.queryForObject("SELECT COUNT(*) FROM factory_raw_counts WHERE year_number = ?", Integer.class, year);
 		BigDecimal rawKg = rawRows != null && rawRows > 0
 				? scalar("SELECT COALESCE(SUM(quantity_kg), 0) FROM factory_raw_counts WHERE year_number = ?", year)
@@ -418,8 +468,15 @@ public class FactoryService {
 		if (close) jdbc.queryForObject("SELECT id FROM shops WHERE id = ? FOR UPDATE", Long.class, shops.currentId());
 		saveYearCount(year, request.count());
 		saveRawCounts(year, new RawCountRequest(request.items()));
-		saveYearCount(year, request.count());
-		return close ? closeYear(year) : yearCount(year);
+		YearCountDto savedCount = saveYearCount(year, request.count());
+		YearReportDto report = yearReport(year);
+		BigDecimal totalAvailableNet = report.initialDiscrepancyKg().subtract(report.scrapSoldKg());
+		BigDecimal totalCounted = savedCount.rawKg().add(savedCount.scrapKg() == null ? ZERO : savedCount.scrapKg());
+		if (totalCounted.compareTo(totalAvailableNet) > 0) {
+			throw invalid("Tổng nguyên liệu còn trong kho và phế liệu không được lớn hơn lượng có thể còn ("
+					+ totalAvailableNet.stripTrailingZeros().toPlainString() + " kg)");
+		}
+		return close ? closeYear(year) : savedCount;
 	}
 
 	@Transactional
@@ -428,15 +485,16 @@ public class FactoryService {
 		YearCountDto count = yearCount(year);
 		if (count.periodTo().isAfter(LocalDate.now(clock))) throw invalid("Không thể chốt ngày tương lai");
 		if ("MISSING".equals(count.status())) throw invalid("Lưu kiểm kê trước khi chốt năm");
-		if (count.rawKg().signum() > 0 && rawCounts(year).isEmpty())
-			throw invalid("Kiểm kê nguyên liệu phải theo từng loại nhôm");
 		if ("CLOSED".equals(count.status())) throw invalid("Năm đã chốt");
 		YearCountDto prior = priorCount(year);
 		if (prior != null && !"CLOSED".equals(prior.status())) {
 			throw invalid("Cần chốt năm trước trước khi chốt năm này");
 		}
 		List<FactoryDtos.RawCountInput> rawInputs = rawCounts(year).stream()
+				.filter(r -> r.quantityKg() != null)
 				.map(r -> new FactoryDtos.RawCountInput(r.categoryId(), r.quantityKg())).toList();
+		if (count.rawKg().signum() > 0 && rawInputs.isEmpty())
+			throw invalid("Kiểm kê nguyên liệu phải theo từng loại nhôm");
 		if (!rawInputs.isEmpty()) {
 			saveRawCounts(year, new RawCountRequest(rawInputs));
 			count = yearCount(year);
@@ -470,19 +528,21 @@ public class FactoryService {
 	@Transactional(readOnly = true)
 	public YearReportDto yearReport(int year) {
 		YearCountDto count = yearCount(year);
+		Timestamp stockFrom = Timestamp.valueOf(count.periodFrom().atStartOfDay());
+		Timestamp stockTo = Timestamp.valueOf(count.periodTo().plusDays(1).atStartOfDay());
 		BigDecimal purchasedKg = scalar("""
 				SELECT COALESCE(SUM(i.quantity_base), 0) FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
 				WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
 				  AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id)
 				  AND d.document_date >= ? AND d.document_date < ?
-				""", shops.currentId(), periodStart(year), periodEnd(year));
+				""", shops.currentId(), stockFrom, stockTo);
 		BigDecimal purchaseValue = scalar("""
 				SELECT COALESCE(SUM(d.total_amount), 0) FROM stock_documents d
 				WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
 				  AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id)
 				  AND d.document_date >= ? AND d.document_date < ?
-				""", shops.currentId(), periodStart(year), periodEnd(year));
+				""", shops.currentId(), stockFrom, stockTo);
 		BigDecimal finishedSoldKg = scalar("""
 				SELECT COALESCE(SUM(i.quantity_base), 0) FROM stock_document_items i
 				JOIN stock_documents d ON d.id = i.document_id
@@ -490,13 +550,13 @@ public class FactoryService {
 				  AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id)
 				  AND d.is_internal = 0 AND d.document_date >= ? AND d.document_date < ?
 				  AND COALESCE(i.billing_unit, 'kg') <> 'm2'
-				""", shops.currentId(), periodStart(year), periodEnd(year));
+				""", shops.currentId(), stockFrom, stockTo);
 		BigDecimal finishedRevenue = scalar("""
 				SELECT COALESCE(SUM(d.total_amount), 0) FROM stock_documents d
 				WHERE d.shop_id = ? AND d.document_type = 'SALE' AND d.status = 'CONFIRMED'
 				  AND NOT EXISTS (SELECT 1 FROM stock_documents r WHERE r.reversal_of_document_id = d.id)
 				  AND d.is_internal = 0 AND d.document_date >= ? AND d.document_date < ?
-				""", shops.currentId(), periodStart(year), periodEnd(year));
+				""", shops.currentId(), stockFrom, stockTo);
 		BigDecimal scrapSoldKg = scalar("""
 				SELECT COALESCE(SUM(quantity_kg), 0) FROM factory_scrap_sales
 				WHERE shop_id = ? AND status = 'CONFIRMED' AND sale_date >= ? AND sale_date < ?
@@ -550,10 +610,12 @@ public class FactoryService {
 		BigDecimal closingValue = hasCount ? closingValue(count) : null;
 		BigDecimal loss = hasCount ? FactoryMath.estimatedLoss(count.openingKg(), purchasedKg,
 				finishedSoldKg, scrapSoldKg, closingKg) : null;
-		BigDecimal materialCost = hasCount ? FactoryMath.materialCost(count.openingValue(),
+		BigDecimal materialCost = hasCount && loss.signum() >= 0 ? FactoryMath.materialCost(count.openingValue(),
 				purchaseValue, closingValue) : null;
-		BigDecimal profit = hasCount ? FactoryMath.profit(finishedRevenue, scrapRevenue,
-				materialCost, expenses.add(payrollCost)) : null;
+		var closedBalance = "CLOSED".equals(count.status()) ? yearEndBalances.get(year) : null;
+		BigDecimal profit = closedBalance != null ? closedBalance.profit()
+				: materialCost != null ? FactoryMath.profit(finishedRevenue, scrapRevenue,
+						materialCost, expenses.add(payrollCost)) : null;
 		return new YearReportDto(year, count.status(), count.openingKg(), purchasedKg,
 				finishedSoldKg, scrapSoldKg, closingKg, initial, loss,
 				count.openingValue(), purchaseValue, closingValue, materialCost,
@@ -686,9 +748,30 @@ public class FactoryService {
 				WHERE shop_id = ? AND customer_id IS NULL AND document_type = 'SALE'
 				  AND status = 'CONFIRMED' AND is_internal = 0 AND document_date < ?
 				""", shops.currentId(), toTs);
+		var supplier = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(CASE WHEN d.document_date < ? THEN d.total_amount ELSE 0 END), 0)
+				           - COALESCE(SUM(p.paid_before), 0) AS opening_debt,
+				       COALESCE(SUM(CASE WHEN d.document_date >= ? THEN d.total_amount ELSE 0 END), 0) AS purchases,
+				       COALESCE(SUM(p.paid_in_period), 0) AS payments,
+				       COALESCE(SUM(d.total_amount), 0) - COALESCE(SUM(p.paid_total), 0) AS closing_debt
+				FROM stock_documents d
+				LEFT JOIN (
+				    SELECT reference_id, SUM(CASE WHEN transaction_date < ? THEN amount ELSE 0 END) AS paid_before,
+				           SUM(CASE WHEN transaction_date >= ? THEN amount ELSE 0 END) AS paid_in_period,
+				           SUM(amount) AS paid_total
+				    FROM financial_transactions
+				    WHERE shop_id = ? AND reference_type = 'STOCK_DOCUMENT' AND category = 'PURCHASE_PAYMENT'
+				      AND status = 'CONFIRMED' AND transaction_date < ?
+				    GROUP BY reference_id
+				) p ON p.reference_id = d.id
+				WHERE d.shop_id = ? AND d.document_type = 'PURCHASE' AND d.status = 'CONFIRMED'
+				  AND d.is_internal = 0 AND d.document_date < ?
+				""", (rs, i) -> new FactoryDtos.SupplierSettlement(rs.getBigDecimal("opening_debt"),
+				rs.getBigDecimal("purchases"), rs.getBigDecimal("payments"), rs.getBigDecimal("closing_debt")),
+				fromTs, fromTs, fromTs, fromTs, shops.currentId(), toTs, shops.currentId(), toTs);
 		return new SettlementReportDto(year, month, from, to, totalOpening, totalSales,
 				totalReceipts, totalClosing, unlinkedCount == null ? 0 : unlinkedCount,
-				unlinkedValue, rows);
+				unlinkedValue, rows, supplier);
 	}
 
 	private BigDecimal customerSalesBefore(long customerId, Timestamp cutoff) {

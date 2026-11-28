@@ -61,6 +61,11 @@ public class CatalogController {
 		return ApiResponse.ok(service.purchasePriceHistory(id), null);
 	}
 
+	@PostMapping("/categories/{id}/purchase-prices/{priceId}/apply")
+	public ApiResponse<List<PurchasePriceDto>> applyCategoryPriceSet(@PathVariable long id, @PathVariable long priceId) {
+		return ApiResponse.ok(service.applyPriceSet(id, priceId), "Đã áp dụng bộ giá");
+	}
+
 	@PostMapping("/categories/{id}/purchase-prices")
 	public ApiResponse<List<PurchasePriceDto>> recordCategoryPurchasePrice(
 			@PathVariable long id, @Valid @RequestBody PurchasePriceRequest request) {

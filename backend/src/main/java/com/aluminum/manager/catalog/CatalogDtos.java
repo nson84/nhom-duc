@@ -82,6 +82,9 @@ public final class CatalogDtos {
 			LocalDate effectiveFrom,
 			LocalDate effectiveTo,
 			BigDecimal pricePerBase,
+			BigDecimal sellingPriceKg,
+			BigDecimal sellingPriceTa,
+			BigDecimal sellingPriceTon,
 			String note,
 			boolean open,
 			boolean future

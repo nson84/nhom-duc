@@ -4,11 +4,17 @@
 
 ## Chức năng hiện có
 
-`requireConfirmedCarryoverPaymentDate` cho phép khoản thanh toán nợ chuyển kỳ được xác nhận riêng trong tháng đã khóa, vẫn kiểm tra tháng đang chọn và kỳ năm chưa chốt.
+`GET /api/v1/dashboard/year-periods` trả các kỳ đã lưu của sổ đăng nhập theo ngày bắt đầu, gồm kỳ cũ đã chốt. Khóa `year` giữ nguyên để tra cứu dữ liệu cũ và không cần khớp năm dương lịch của ngày đầu kỳ.
+
+Thanh toán nợ cũ trên màn Công nợ có thể xác định kỳ từ ngày thực tế nếu yêu cầu không gửi năm làm việc. Các kiểm tra tháng và kỳ đã chốt vẫn áp dụng.
+
+`requireConfirmedCarryoverPaymentDate` cho phép khoản thanh toán nợ chuyển kỳ được xác nhận riêng trong tháng đã khóa, vẫn kiểm tra tháng đang chọn và kỳ năm chưa chốt. `requireInventoryCountDate` cho phép kiểm kê tồn kho và chốt sổ tháng Phân phối ghi điều chỉnh trong cả tháng đang mở lẫn tháng đã khóa, miễn kỳ năm chưa chốt và tháng đã từng mở; phiếu nghiệp vụ thông thường vẫn bị chặn ở tháng đã khóa.
 
 `POST /api/v1/dashboard/month-reopen` mở lại tháng đã khóa của sổ hiện tại trong kỳ năm chưa chốt, kể cả khi tháng sau đang mở. API từ chối khi có bản chốt tháng, năm hoặc Phân phối từ tháng đó trở đi. Các quy tắc riêng về sửa phiếu và mở lại kỳ lương tiếp tục được kiểm tra ở luồng nghiệp vụ.
 
-`DashboardService` tổng hợp doanh thu, tiền thu, chi phí, kho và biểu đồ; phân phối không tính tiền công. Xưởng sử dụng quyết toán năm cho lãi.
+Khi mở tháng, tháng còn trạng thái mở thuộc kỳ năm đã chốt không chặn kỳ mới. Nếu một tháng của kỳ chưa chốt còn mở, thông báo ghi rõ tháng cần khóa.
+
+`DashboardService` tổng hợp doanh thu, tiền thu, chi phí, kho và biểu đồ; phân phối không tính tiền công. Xưởng sử dụng quyết toán năm cho lãi. `GET /api/v1/dashboard/distribution-year-report?year=...` tổng hợp báo cáo quyết toán cả năm cho Phân phối (doanh thu, thực thu, công nợ, tồn đầu/cuối, giá vốn & hao hụt, chi phí hoạt động và lãi cả năm) cả trước và sau khi bấm Chốt năm.
 
 `summary.purchaseKg` cộng kg từ phiếu nhập đã xác nhận trong đúng cửa hàng và khoảng ngày yêu cầu, gồm các phiếu nhập nội bộ.
 
@@ -35,6 +41,8 @@ Bản chụp lưu ngày bắt đầu/kết thúc kỳ do cửa hàng chọn. N�
 Phân phối chỉ được chốt kỳ khi đã cân đủ từng SP/loại có biến động kho và lần cân mới nhất còn khớp tồn. Kiểm tra `distribution_inventory_count_evidence`: số cân, ngày cân, cả thời điểm tạo lẫn ngày nghiệp vụ của biến động sau kiểm kê, và các biến động sau ngày chốt. Không dùng tồn hiện tại để giả làm tồn quá khứ khi đã có giao dịch sau ngày chốt. Cần đối chiếu riêng dữ liệu lịch sử trước khi chốt.
 
 Chốt sổ tháng tùy chọn tại /chot-so-thang độc lập với Khóa tháng. Bản chụp gồm kiểm kê nguyên liệu/vụn, tồn đầu/cuối, doanh thu ngoài, nhập, chuyển nội bộ ra, chi hoạt động và tiền công theo tháng để tính lãi quản trị tháng. Snapshot đã lưu không đổi theo giao dịch mới; muốn ngăn ghi thêm phải Khóa tháng. Chưa có thao tác ghi đè/mở lại snapshot. Popup ngày cuối tháng theo ngày máy, rộng 60vw; trạng thái nhắc lưu theo cửa hàng/tháng.
+
+Xưởng tính kg nhập/giao theo từng loại trong phần tháng thuộc kỳ đã chọn. Tồn đầu tháng lấy từ bản chốt liền trước nếu có. Nếu cách quãng, cộng phát sinh đến đầu tháng từ bản kiểm kê gần nhất trong kỳ hoặc từ tồn đầu kỳ. Cùng số liệu được dùng để kiểm tra giới hạn số cân.
 
 ## Cập nhật rà soát 19/11/2026
 
@@ -63,10 +71,15 @@ Nếu nhập ngày đầu kỳ không sát kỳ trước, thông báo trả rõ 
 
 Sửa riêng ngày thanh toán cho phép ngày trong tháng đã mở hoặc đã khóa của kỳ năm còn mở. Thao tác giữ khóa kiểm tra kỳ, không mở lại tháng và không sửa ngày lập phiếu.
 
-POST /api/v1/dashboard/monthly-book/reconcile dùng cho Phân phối, nhận số cân theo cặp sản phẩm và loại nhôm. Tháng phải còn mở và kho không có biến động sau ngày cuối tháng. Dùng cùng giao dịch để điều chỉnh kho rồi lưu bản chốt. Kiểm kê còn hiệu lực và khớp số cân giữ nguyên chứng cứ hao hụt, không tạo điều chỉnh lần nữa. API bản chốt cũ vẫn lưu snapshot riêng. Chốt năm không yêu cầu bản chốt tháng.
+POST /api/v1/dashboard/monthly-book/reconcile dùng cho Phân phối, nhận số cân theo cặp sản phẩm và loại nhôm. Tháng đã mở hoặc đã khóa trong kỳ năm chưa chốt đều dùng được miễn kho không có biến động sau ngày cuối tháng. Dùng cùng giao dịch để điều chỉnh kho rồi lưu bản chốt. Kiểm kê còn hiệu lực và khớp số cân giữ nguyên chứng cứ hao hụt, không tạo điều chỉnh lần nữa. API bản chốt cũ vẫn lưu snapshot riêng. Chốt năm không yêu cầu bản chốt tháng.
 
 
 DELETE /api/v1/dashboard/year-period xóa mốc đầu và cuối dự kiến của kỳ chưa sử dụng thuộc sổ hiện tại. Kiểm tra ngày đầu đã xác nhận, tháng, chứng từ, thu chi và kiểm kê trước khi xóa. Kỳ đã chốt bị từ chối.
 
 
 Ngày bắt đầu bị khóa sau khi đã mở tháng. Ngày kết thúc dự kiến có thể đổi trước chốt nếu không loại tháng đã mở hoặc chứng từ, thu chi đã ghi trong kỳ.
+`POST /api/v1/dashboard/year-reopen` mở lại bản chốt năm của sổ hiện tại để sửa kiểm kê. Giữ dữ liệu kiểm kê và chứng từ, ghi nhật ký số dư trước khi mở lại. Từ chối khi đã chốt sổ tháng chứa ngày chốt năm, đã có bản chốt kỳ sau, hoặc kho Phân phối đã có biến động sau ngày chốt. Tổng quan đọc được kỳ đang mở dài hơn 400 ngày.
+
+Kiểm tra ngày đặt lịch lễ tương lai cho phép tháng chưa mở trong kỳ đang làm việc và kiểm tra ngày kết thúc dự kiến nếu có.
+
+Bản xem trước Chốt sổ tháng Phân phối trả stockAtClose theo cặp sản phẩm–loại tại mốc cuối tháng và reconciliationBlock khi không đủ điều kiện điều chỉnh.

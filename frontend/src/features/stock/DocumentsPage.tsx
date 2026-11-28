@@ -1,3 +1,4 @@
+import { OpeningInventory } from "./OpeningInventory";
 import { PaymentDateEditor } from "./PaymentDateEditor";
 import {
   CheckOutlined,
@@ -42,7 +43,6 @@ import {
 } from "../../utils/vnd-input";
 import {
   KG_PER_TON,
-  kgToTon,
   kgUnit,
   purchaseUnit,
   suggestPurchasePricePerUnit,
@@ -55,7 +55,7 @@ import {
 import { useCanWrite, useSession } from "../auth/auth-store";
 import { useShop } from "../shop/shop-store";
 import { useWorkingYear } from "../dashboard/working-year";
-import { visiblePeriod } from "../dashboard/working-period";
+import { useWorkingPeriodInfo, visiblePeriod } from "../dashboard/working-period";
 import { getMonthStatus, getSummary, getYearPeriod, type MonthStatus, type YearPeriod } from "../dashboard/dashboard-api";
 import { CustomerFormModal } from "../customers/CustomersPage";
 import { CustomerSuggestSearch } from "../customers/CustomerSuggestSearch";
@@ -70,7 +70,6 @@ import {
   documentAction,
   editConfirmedDocument,
   getDocument,
-  listBalances,
   listDocuments,
   restoreDocument,
   reverseDocument,
@@ -80,7 +79,6 @@ import {
   type DocumentInput,
   type DocumentSummary,
   type StockDocument,
-  type StockBalance,
 } from "./stock-api";
 
 type Kind = "PURCHASE" | "SALE";
@@ -156,6 +154,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   const text = copy[kind];
   const shop = useShop();
   const workingYear = useWorkingYear(shop);
+  const periodInfo = useWorkingPeriodInfo(workingYear.year);
   const [workingPeriod, setWorkingPeriod] = useState<YearPeriod | null>(null);
   const [monthStatus, setMonthStatus] = useState<MonthStatus>("NOT_OPEN");
   const session = useSession();
@@ -163,7 +162,6 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   const parkedKey = `${draftKey}:parked`;
   const [rows, setRows] = useState<DocumentSummary[]>([]);
   const [supplierDebt, setSupplierDebt] = useState<number | null>(null);
-  const [stockBalances, setStockBalances] = useState<StockBalance[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [listFilter, setListFilter] = useState<DocumentListFilter>("all");
@@ -180,7 +178,6 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
     setWorkingPeriod(null);
     setRows([]);
     setSupplierDebt(null);
-    setStockBalances([]);
     void getYearPeriod(workingYear.year).then((value) => {
       if (active) setWorkingPeriod(visiblePeriod(value, workingYear.month));
     }).catch((error) => { if (active) message.error(toApiError(error).message); });
@@ -196,43 +193,27 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
   }, [shop, workingYear.month]);
 
   const load = useCallback(async () => {
-    const history = listFilter === "internal-history";
-    if (!workingPeriod && !history) return;
-    if (!history && !workingPeriod?.started) { setRows([]); setSupplierDebt(null); return; }
+    if (!workingPeriod?.started) { setRows([]); setSupplierDebt(null); return; }
     setLoading(true);
     try {
-      const [documents, dashboard, balances] = await Promise.all([
+      const [documents, dashboard] = await Promise.all([
         listDocuments({
           type: kind,
           filter: listFilter,
           q: query || undefined,
-          from: history ? undefined : workingPeriod?.periodFrom,
-          to: history ? undefined : workingPeriod?.periodTo,
+          from: workingPeriod.periodFrom,
+          to: workingPeriod.periodTo,
         }),
         kind === "PURCHASE" && workingPeriod?.started ? getSummary(workingPeriod.periodFrom, workingPeriod.periodTo) : Promise.resolve(null),
-        kind === "PURCHASE" ? listBalances({ onlyInStock: false }) : Promise.resolve([]),
       ]);
       setRows(documents);
       setSupplierDebt(dashboard?.supplierDebt ?? null);
-      setStockBalances(balances);
     } catch (error) {
       message.error(toApiError(error).message);
     } finally {
       setLoading(false);
     }
   }, [kind, listFilter, query, workingYear.year, workingPeriod]);
-
-  const stockByCategory = useMemo(() => {
-    const totals = new Map<number, { name: string; kg: number }>();
-    for (const balance of stockBalances) {
-      const current = totals.get(balance.categoryId);
-      totals.set(balance.categoryId, {
-        name: balance.categoryName,
-        kg: (current?.kg ?? 0) + Number(balance.quantityBase || 0),
-      });
-    }
-    return [...totals.values()].sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  }, [stockBalances]);
 
   useEffect(() => {
     void load();
@@ -312,7 +293,7 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
         ) : (
           <LiveSearch value={query} onChange={setQuery} placeholder="Tìm số phiếu hoặc tên nhà cung cấp" style={{ width: 400 }} suggestions={rows.flatMap((r) => [r.documentCode, r.counterpartyName ?? ""])} />
         )}
-        {workingPeriod ? <Tag color="blue">Năm {workingYear.year}: {dayjs(workingPeriod.periodFrom).format("DD/MM/YYYY")} – {dayjs(workingPeriod.periodTo).format("DD/MM/YYYY")}</Tag> : null}
+        {workingPeriod ? <Tag color="blue">{periodInfo.name}: {dayjs(workingPeriod.periodFrom).format("DD/MM/YYYY")} – {dayjs(workingPeriod.periodTo).format("DD/MM/YYYY")}</Tag> : null}
         <Select
           style={{ width: 220 }}
           value={listFilter}
@@ -323,27 +304,16 @@ export function DocumentsPage({ kind }: { kind: Kind }) {
         />
       </Space>
       {kind === "PURCHASE" && shop === "MANUFACTURING" && <Alert type="info" showIcon style={{ marginBottom: 16 }}
-        message={listFilter === "internal-history" ? "Đang xem phiếu nhập nội bộ theo ngày chuyển của Phân phối, gồm các phiếu ngoài kỳ đang chọn."
-          : "Phiếu chuyển từ Phân phối giữ ngày chuyển gốc. Phiếu ngoài kỳ đang chọn có thể xem trong lịch sử nhập nội bộ."}
+        message={listFilter === "internal-history" ? "Đang xem phiếu nhập nội bộ trong khoảng ngày đã chọn ở Tổng quan."
+          : "Phiếu chuyển từ Phân phối giữ ngày chuyển gốc. Để xem phiếu thuộc kỳ khác, đổi kỳ ở Tổng quan."}
         action={listFilter !== "internal-history" ? <Button onClick={() => setListFilter("internal-history")}>Xem lịch sử nhập nội bộ</Button> : undefined} />}
-      {workingPeriod && !workingPeriod.started ? <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={`Năm ${workingYear.year} chưa lưu ngày bắt đầu. Hãy mở Tổng quan để bắt đầu kỳ.`} /> : null}
+      {workingPeriod && !workingPeriod.started ? <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="Kỳ chưa lưu ngày bắt đầu. Hãy mở Tổng quan để bắt đầu kỳ." /> : null}
       {monthStatus !== "OPEN" && <Alert type="info" showIcon style={{ marginBottom: 16 }}
         message={monthStatus === "CLOSED" ? `Tháng ${workingYear.month} đã khóa; chỉ xem chứng từ.` : "Tháng chưa mở. Vào Tổng quan, chọn tháng rồi bấm Mở tháng để lập phiếu."} />}
       {kind === "PURCHASE" && workingPeriod?.started && <Card size="small" style={{ marginBottom: 16 }}>
         <Statistic title="Doanh nghiệp còn nợ nhà cung cấp từ phiếu nhập trong kỳ" value={formatMoney(supplierDebt ?? 0)} />
       </Card>}
-      {kind === "PURCHASE" && workingPeriod?.started && <Card size="small" title="Tồn kho hiện tại theo loại nhôm" style={{ marginBottom: 16 }}>
-        {stockByCategory.length ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-            {stockByCategory.map((item) => (
-              <div key={item.name} style={{ padding: "8px 16px", textAlign: "center" }}>
-                <Statistic title={item.name}
-                  value={`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(shop === "DISTRIBUTION" ? kgToTon(item.kg) : item.kg)} ${shop === "DISTRIBUTION" ? "tấn" : "kg"}`} />
-              </div>
-            ))}
-          </div>
-        ) : <span>Chưa có tồn kho.</span>}
-      </Card>}
+      {kind === "PURCHASE" && workingPeriod?.started && <OpeningInventory year={workingYear.year} />}
       <PagedTable<DocumentSummary>
         rowKey="id"
         loading={loading}
@@ -2195,8 +2165,8 @@ export function PaymentModal({
   }) => Promise<void>;
 }) {
   const workingYear = useWorkingYear(useShop());
-  const paymentYear = carryoverYear ?? workingYear.year;
-  const paymentMonth = carryoverYear == null ? workingYear.month : undefined;
+  const paymentYear = workingYear.year;
+  const paymentMonth = workingYear.month;
   const [form] = Form.useForm<{ amount: number; paymentMethod: string; paymentDate: Dayjs; note?: string; collectedBy?: string; paidBy?: string }>();
   const [paymentPeriod, setPaymentPeriod] = useState<YearPeriod | null>(null);
   const [checkingPayment, setCheckingPayment] = useState(false);
@@ -2205,6 +2175,7 @@ export function PaymentModal({
   const periodStart = paymentPeriod?.started ? dayjs(paymentPeriod.periodFrom) : null;
   const minPaymentDay = periodStart?.isAfter(documentDay, "day") ? periodStart : documentDay;
   useEffect(() => {
+    if (carryoverYear != null) return;
     let active = true;
     getYearPeriod(paymentYear).then((value) => {
       if (!active) return;
@@ -2213,12 +2184,7 @@ export function PaymentModal({
       if (shown?.started && !form.isFieldTouched("paymentDate")) {
         const start = dayjs(shown.periodFrom);
         const docDay = dayjs(documentDate);
-        if (carryoverYear != null) {
-          const today = dayjs();
-          if (!shown.closed && !today.isBefore(start, "day") && !today.isAfter(shown.periodTo, "day")) {
-            form.setFieldValue("paymentDate", today);
-          }
-        } else if (start.isAfter(docDay, "day")) {
+        if (start.isAfter(docDay, "day")) {
           form.setFieldValue("paymentDate", start);
         }
       }
@@ -2333,13 +2299,12 @@ export function PaymentModal({
         <Form.Item
           name="paymentDate"
           label={carryoverYear != null ? (kind === "SALE" ? "Ngày thực thu" : "Ngày thực trả") : "Thời gian thanh toán"}
+          extra={carryoverYear != null ? "Chọn ngày thanh toán thực tế. Ngày có thể thuộc kỳ khác với kỳ đang xem." : undefined}
           rules={[{ required: true, message: "Chọn thời gian thanh toán" }, {
             validator: async (_, value: Dayjs | null) => {
               if (!value) return;
-              if (carryoverYear != null && (!paymentPeriod?.started || paymentPeriod.closed)) {
-                throw new Error("Chỉ ghi thanh toán trong kỳ năm đang làm việc");
-              }
               if (value.isBefore(documentDay, "day")) throw new Error("Ngày thanh toán không được trước ngày lập phiếu");
+              if (carryoverYear != null && value.isAfter(dayjs(), "day")) throw new Error("Ngày thực thu hoặc trả không được ở tương lai");
               if (paymentPeriod?.started && (value.isBefore(paymentPeriod.periodFrom, "day") || value.isAfter(paymentPeriod.periodTo, "day"))) {
                 throw new Error("Ngày thanh toán phải nằm trong tháng/kỳ đang chọn");
               }
@@ -2348,7 +2313,7 @@ export function PaymentModal({
         >
           <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }}
             minDate={minPaymentDay}
-            maxDate={paymentPeriod?.started ? dayjs(paymentPeriod.periodTo) : undefined} />
+            maxDate={carryoverYear != null ? dayjs() : paymentPeriod?.started ? dayjs(paymentPeriod.periodTo) : undefined} />
         </Form.Item>
         <Form.Item
           name="amount"

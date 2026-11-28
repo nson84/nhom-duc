@@ -28,6 +28,8 @@ erDiagram
 
 V23 bỏ khóa duy nhất `(category_id, effective_from)` của `category_purchase_prices` để giữ các lần đổi giá khác nhau trong cùng ngày; truy vấn giá theo ngày chọn mốc có ID mới nhất.
 
+V48 thêm ba cột giá bán kg, tạ và tấn có thể để trống cho các mốc lịch sử. Dòng tạo từ form loại nhôm lưu cả ba mức theo lần thay đổi; dữ liệu lịch sử cũ giữ nguyên.
+
 V20 tạo phiếu và thanh toán phế liệu, kiểm kê tổng theo năm. V21 thêm mã chống ghi trùng phế liệu. V22 thêm giá nhập tham chiếu cho dòng bán xưởng và bảng `factory_raw_counts`, `factory_raw_count_layers` lưu số kg theo loại cùng phân bổ vào các dòng nhập. Nếu lịch sử phiếu nhập không đủ kg, chức năng hiện báo lỗi; chưa có bảng nhập lớp tồn đầu kỳ theo loại riêng.
 
 V24 lưu mức thưởng trên ngày lễ, trạng thái nhận theo từng nhân viên và khoản thưởng lễ đã cộng trong bảng lương.

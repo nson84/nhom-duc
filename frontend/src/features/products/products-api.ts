@@ -28,7 +28,7 @@ export type CategoryInput = {
   description?: string;
   active: boolean;
   /** đ/kg */
-  referencePurchasePrice: number;
+  referencePurchasePrice?: number;
   /** đ/kg */
   defaultSellingPrice: number;
   defaultSellingPriceTa: number;
@@ -69,6 +69,9 @@ export type PurchasePrice = {
   effectiveFrom: string;
   effectiveTo: string | null;
   pricePerBase: number;
+  sellingPriceKg: number | null;
+  sellingPriceTa: number | null;
+  sellingPriceTon: number | null;
   note: string | null;
   /** True khi đây là mốc đang áp dụng hôm nay. */
   open: boolean;
@@ -130,6 +133,10 @@ export async function saveUnit(productId: number, unitId: number | undefined, in
 
 export async function listPurchasePrices(categoryId: number): Promise<PurchasePrice[]> {
   return (await api.get<Envelope<PurchasePrice[]>>(`/api/v1/categories/${categoryId}/purchase-prices`)).data.data;
+}
+
+export async function applyCategoryPriceSet(categoryId: number, priceId: number): Promise<PurchasePrice[]> {
+  return (await api.post<Envelope<PurchasePrice[]>>(`/api/v1/categories/${categoryId}/purchase-prices/${priceId}/apply`)).data.data;
 }
 
 /** Ghi một mốc giá nhập mới (đ/kg). Bỏ trống ngày hiệu lực thì hiệu lực từ hôm nay. */

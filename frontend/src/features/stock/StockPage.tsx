@@ -1,25 +1,37 @@
-import { Alert, Card, DatePicker, InputNumber, Modal, Space, Statistic, Tag, message } from "antd";
+import { Alert, Card, DatePicker, InputNumber, Modal, Space, Statistic, Tag, Typography, message } from "antd";
 import { PagedTable } from "../../components/PagedTable";
 import { LiveSearch } from "../../components/LiveSearch";
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { AuditOutlined } from "@ant-design/icons";
 import { toApiError } from "../../services/error-handler";
 import { formatMoney } from "../../utils/money";
 import { costPerKgToTon, kgToTon } from "../products/product-stock-unit";
 import { useShop } from "../shop/shop-store";
-import { getDeliveredByCategory, listBalances, listMovements, saveInventoryCount, type Movement, type StockBalance } from "./stock-api";
+import { listBalances, listMovements, saveInventoryCount, type Movement, type StockBalance } from "./stock-api";
 import { AppActionButton } from "../../components/AppButtons";
 import { useCanWrite } from "../auth/auth-store";
 import { getYearCount, getYearReport, type YearCount, type YearReport } from "../factory/factory-api";
 import { Link } from "react-router-dom";
 import { useWorkingYear } from "../dashboard/working-year";
 import { OpeningInventory } from "./OpeningInventory";
-import { getYearPeriod } from "../dashboard/dashboard-api";
+import { getSummary, getYearPeriod, type DashboardSummary, type YearPeriod } from "../dashboard/dashboard-api";
+import { YearEndBalanceCard } from "../dashboard/YearEndBalanceCard";
 import { visiblePeriod } from "../dashboard/working-period";
 import { DeliveredByCategory } from "./DeliveredByCategory";
 
 const qtyFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 });
+
+function formatCountKg(value: number | string | undefined): string {
+  if (value === undefined || value === null || value === "") return "";
+  const [whole, fraction] = String(value).replace(/,/g, "").split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+}
+
+function roundKg(value: number): number {
+  return Math.max(0, Math.round(value * 1000) / 1000);
+}
 
 export function StockPage() {
   const shop = useShop();
@@ -28,9 +40,10 @@ export function StockPage() {
   const asTon = shop === "DISTRIBUTION";
   const [rows, setRows] = useState<StockBalance[]>([]);
   const [allBalances, setAllBalances] = useState<StockBalance[]>([]);
-  const [monthDeliveredKg, setMonthDeliveredKg] = useState<number | null>(null);
+  const [stockPeriod, setStockPeriod] = useState<YearPeriod | null>(null);
+  const [stockFlow, setStockFlow] = useState<DashboardSummary | null>(null);
   const [monthRange, setMonthRange] = useState<[string, string] | null>(null);
-  const [factoryYear, setFactoryYear] = useState(workingYear.year);
+  const factoryYear = workingYear.year;
   const [factoryReport, setFactoryReport] = useState<YearReport | null>(null);
   const [factoryCount, setFactoryCount] = useState<YearCount | null>(null);
   const [query, setQuery] = useState("");
@@ -39,23 +52,32 @@ export function StockPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [countOpen, setCountOpen] = useState(false);
   const [countSaving, setCountSaving] = useState(false);
+  const [countPeriod, setCountPeriod] = useState<YearPeriod | null>(null);
+  const [countDate, setCountDate] = useState<Dayjs | null>(null);
   const [countBalances, setCountBalances] = useState<StockBalance[]>([]);
   const [countedKg, setCountedKg] = useState<Record<string, number | null>>({});
   const [scrapKg, setScrapKg] = useState<Record<string, number | null>>({});
+  const [clampTick, setClampTick] = useState(0);
 
-  useEffect(() => setFactoryYear(workingYear.year), [workingYear.year]);
 
   useEffect(() => {
-    if (!workingYear.month) { setMonthRange(null); setMonthDeliveredKg(null); return; }
     let active = true;
+    setStockPeriod(null);
+    setStockFlow(null);
+    setMonthRange(null);
     getYearPeriod(workingYear.year).then(async (period) => {
+      if (!active) return;
+      setStockPeriod(period);
       const shown = visiblePeriod(period, workingYear.month);
       if (!shown?.started) return;
-      const rows = await getDeliveredByCategory({ from: shown.periodFrom, to: shown.periodTo });
-      if (active) { setMonthRange([shown.periodFrom, shown.periodTo]); setMonthDeliveredKg(rows.reduce((sum, row) => sum + Number(row.quantityKg), 0)); }
-    }).catch(() => { if (active) { setMonthRange(null); setMonthDeliveredKg(null); } });
+      setMonthRange([shown.periodFrom, shown.periodTo]);
+      if (asTon) {
+        const flow = await getSummary(shown.periodFrom, shown.periodTo);
+        if (active) setStockFlow(flow);
+      }
+    }).catch(error => { if (active) message.error(toApiError(error).message); });
     return () => { active = false; };
-  }, [shop, workingYear.year, workingYear.month]);
+  }, [shop, workingYear.year, workingYear.month, asTon]);
 
   useEffect(() => {
     setLoading(true);
@@ -70,9 +92,14 @@ export function StockPage() {
   }, [shop]);
 
   useEffect(() => {
-    if (asTon) { setFactoryReport(null); setFactoryCount(null); return; }
-    getYearReport(factoryYear).then(setFactoryReport).catch(() => setFactoryReport(null));
-    getYearCount(factoryYear).then(setFactoryCount).catch(() => setFactoryCount(null));
+    setFactoryReport(null);
+    setFactoryCount(null);
+    if (asTon) return;
+    let active = true;
+    Promise.all([getYearReport(factoryYear), getYearCount(factoryYear)]).then(([report, count]) => {
+      if (active) { setFactoryReport(report); setFactoryCount(count); }
+    }).catch((error) => { if (active) message.error(toApiError(error).message); });
+    return () => { active = false; };
   }, [asTon, factoryYear]);
 
   useEffect(() => {
@@ -86,10 +113,19 @@ export function StockPage() {
   const countRows = useMemo(() => countBalances.map((row) => {
     const key = `${row.productId}-${row.categoryId}`;
     const actualKg = countedKg[key] ?? null;
-    return { ...row, key, actualKg, scrapKg: scrapKg[key] ?? 0 };
+    const preCountKg = roundKg(Number(row.quantityBase || 0) + Number(row.latestCountScrapKg || 0) + Number(row.latestCountLossKg || 0));
+    return { ...row, key, actualKg, scrapKg: scrapKg[key] ?? 0, preCountKg };
   }), [countBalances, countedKg, scrapKg]);
 
   async function saveCount() {
+    for (const row of countRows) {
+      if (row.actualKg == null) continue;
+      const maxActual = roundKg(row.preCountKg - row.scrapKg);
+      if (row.actualKg > maxActual) {
+        message.error(`${row.categoryName} (${row.productName}): còn trong kho tối đa là ${formatCountKg(maxActual)} kg (tồn sổ − vụn nhôm).`);
+        return;
+      }
+    }
     const items = countRows.flatMap((row) => row.actualKg == null ? [] : [{
       productId: row.productId,
       categoryId: row.categoryId,
@@ -100,13 +136,15 @@ export function StockPage() {
       message.warning("Nhập số kg cân thực tế cho ít nhất một dòng.");
       return;
     }
+    if (!countDate) {
+      message.warning("Chọn ngày kiểm kê.");
+      return;
+    }
     setCountSaving(true);
     try {
-      if (!monthRange) throw new Error("Hãy chọn và mở tháng làm việc ở Tổng quan trước khi kiểm kê.");
       const now = dayjs();
-      const countDate = now.isAfter(dayjs(monthRange[1]).endOf("day"))
-        ? dayjs(monthRange[1]).endOf("day") : now;
-      await saveInventoryCount(items, countDate.format("YYYY-MM-DDTHH:mm:ss"));
+      const countTimestamp = countDate.isSame(now, "day") ? now : countDate.endOf("day");
+      await saveInventoryCount(items, countTimestamp.format("YYYY-MM-DDTHH:mm:ss"));
       message.success("Đã lưu số cân kiểm kê.");
       setCountOpen(false);
       setCountedKg({});
@@ -123,17 +161,26 @@ export function StockPage() {
 
   const total = allBalances.reduce((acc, row) => ({
     quantity: acc.quantity + Number(row.quantityBase || 0),
-    purchasedValue: acc.purchasedValue + Number(row.purchasedValue || 0),
-    purchased: acc.purchased + Number(row.purchasedKg || 0),
-    delivered: acc.delivered + Number(row.deliveredKg || 0),
     scrap: acc.scrap + Number(row.latestCountScrapKg || 0),
     loss: acc.loss + Number(row.latestCountLossKg || 0),
-  }), { quantity: 0, purchasedValue: 0, purchased: 0, delivered: 0, scrap: 0, loss: 0 });
+  }), { quantity: 0, scrap: 0, loss: 0 });
+  const showLiveStock = stockPeriod?.started && !stockPeriod.closed;
 
   return (
     <Card className="stock-page-card" title="Tồn kho" extra={<Space>
-      {asTon && canWrite && <AppActionButton tone="secondary" icon={<AuditOutlined />} onClick={() => {
-        void listBalances({ onlyInStock: false }).then((allRows) => {
+      {asTon && canWrite && showLiveStock && <AppActionButton tone="secondary" icon={<AuditOutlined />} onClick={() => {
+        void Promise.all([
+          listBalances({ onlyInStock: false }),
+          getYearPeriod(workingYear.year).catch(() => null),
+        ]).then(([allRows, period]) => {
+          const today = dayjs();
+          const defaultDate = period?.plannedEnd && !dayjs(period.plannedEnd).isAfter(today, "day")
+            ? dayjs(period.plannedEnd)
+            : monthRange
+              ? (today.isAfter(dayjs(monthRange[1]), "day") ? dayjs(monthRange[1]) : today)
+              : (period?.started && today.isAfter(dayjs(period.periodTo), "day") ? dayjs(period.periodTo) : today);
+          setCountPeriod(period);
+          setCountDate(defaultDate);
           setCountBalances(allRows.sort((a, b) => a.categoryName.localeCompare(b.categoryName, "vi")));
           setCountedKg({});
           setScrapKg({});
@@ -141,41 +188,42 @@ export function StockPage() {
         }).catch((error) => message.error(toApiError(error).message));
       }}>Kiểm kê / Hao hụt</AppActionButton>}
     </Space>}>
-      {!asTon && <Space style={{ marginBottom: 12 }} wrap><span>Kỳ kiểm kê Xưởng:</span><DatePicker picker="year" allowClear={false} value={dayjs(`${factoryYear}-01-01`)} onChange={(value) => value && setFactoryYear(value.year())} /></Space>}
       <OpeningInventory year={asTon ? workingYear.year : factoryYear} month={asTon || factoryYear === workingYear.year ? workingYear.month : undefined} />
-      {workingYear.month && monthRange && <Card size="small" style={{ marginBottom: 12 }}>
-        <Statistic title={`Đã giao trong tháng ${dayjs(`${workingYear.month}-01`).format("MM/YYYY")} (kg)`} value={qtyFormat.format(monthDeliveredKg ?? 0)} />
-        <DeliveredByCategory from={monthRange[0]} to={monthRange[1]} shopKey={shop} />
-      </Card>}
       {asTon ? <div className="stock-stat-grid">
-        <Card size="small"><Statistic title="Tổng tiền hàng đã nhập" value={formatMoney(total.purchasedValue)} /></Card>
-        <Card size="small"><Statistic title="Tổng đã nhập (kg)" value={qtyFormat.format(total.purchased)} /></Card>
-        <Card size="small"><Statistic title="Tổng đã giao tích lũy (kg)" value={qtyFormat.format(total.delivered)} />
-          <DeliveredByCategory shopKey={shop} />
+        <Card size="small"><Statistic title="Tiền hàng nhập trong khoảng xem" value={stockFlow ? formatMoney(stockFlow.purchaseAmount) : "—"} /></Card>
+        <Card size="small"><Statistic title="Đã nhập trong khoảng xem (kg)" value={stockFlow ? qtyFormat.format(Number(stockFlow.purchaseKg)) : "—"} /></Card>
+        <Card size="small"><Statistic title="Đã giao trong khoảng xem (kg)" value={stockFlow ? qtyFormat.format(Number(stockFlow.deliveredKg)) : "—"} />
+          {monthRange && <DeliveredByCategory from={monthRange[0]} to={monthRange[1]} shopKey={shop} />}
         </Card>
-        <Card size="small"><Statistic title="Tồn sổ (kg)" value={qtyFormat.format(total.quantity)} /></Card>
-        <Card size="small"><Statistic title="Vụn nhôm kiểm kê gần nhất (kg)" value={qtyFormat.format(total.scrap)} /></Card>
-        <Card size="small"><Statistic title="Hao hụt thực kiểm gần nhất (kg)" value={qtyFormat.format(total.loss)} /></Card>
+        {showLiveStock && <>
+          <Card size="small"><Statistic title="Tồn sổ hiện tại (kg)" value={qtyFormat.format(total.quantity)} /></Card>
+          <Card size="small"><Statistic title="Vụn nhôm kiểm kê gần nhất (kg)" value={qtyFormat.format(total.scrap)} /></Card>
+          <Card size="small"><Statistic title="Hao hụt thực kiểm gần nhất (kg)" value={qtyFormat.format(total.loss)} /></Card>
+        </>}
       </div> : <>
         <Alert style={{ marginBottom: 12 }} type="info" showIcon message="Xưởng không trừ kho khi giao thành phẩm; tồn và hao hụt được quyết toán theo kiểm kê cuối kỳ." description={<Link to="/quyet-toan-xuong">Mở quyết toán Xưởng để kiểm kê từng loại nhôm và chốt kỳ</Link>} />
+        {factoryCount && <Typography.Paragraph strong>
+          Kỳ {dayjs(factoryCount.periodFrom).format("DD/MM/YYYY")} – {dayjs(factoryCount.periodTo).format("DD/MM/YYYY")}
+        </Typography.Paragraph>}
         <div className="stock-stat-grid">
-          <Card size="small"><Statistic title="Tổng tiền hàng đã nhập (gồm nội bộ)" value={formatMoney(total.purchasedValue)} /></Card>
-          <Card size="small"><Statistic title="Tổng đã nhập kho (kg, gồm nội bộ)" value={qtyFormat.format(total.purchased)} /></Card>
-          <Card size="small"><Statistic title="Tồn sổ hiện tại (kg)" value={qtyFormat.format(total.quantity)} /></Card>
-        </div>
-        <div className="stock-stat-grid">
-          <Card size="small"><Statistic title="Tiền nhập nguyên liệu trong kỳ" value={factoryReport ? formatMoney(factoryReport.purchaseValue) : "—"} /></Card>
-          <Card size="small"><Statistic title="Khối lượng nhập trong kỳ (kg)" value={qtyFormat.format(factoryReport?.purchasedKg ?? 0)} /></Card>
-          <Card size="small"><Statistic title="Đã giao khách (kg)" value={qtyFormat.format(factoryReport?.finishedSoldKg ?? 0)} />
+          <Card size="small"><Statistic title="Tổng tiền hàng nhập trong kỳ (gồm nội bộ)" value={factoryReport ? formatMoney(factoryReport.purchaseValue) : "—"} /></Card>
+          <Card size="small"><Statistic title="Tổng nhôm nhập kho trong kỳ (kg)" value={factoryReport ? qtyFormat.format(factoryReport.purchasedKg) : "—"} /></Card>
+          <Card size="small"><Statistic title="Đã giao khách trong kỳ (kg)" value={factoryReport ? qtyFormat.format(factoryReport.finishedSoldKg) : "—"} />
             {factoryCount && <DeliveredByCategory from={factoryCount.periodFrom} to={factoryCount.periodTo} shopKey={`${shop}-${factoryYear}`} />}
           </Card>
-          <Card size="small"><Statistic title="Tổng vụn nhôm (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(Number(factoryReport?.scrapSoldKg ?? 0) + Number(factoryCount.scrapKg))} /></Card>
-          <Card size="small"><Statistic title="Vụn chưa bán kiểm kê (kg)" value={factoryCount?.status === "MISSING" || factoryCount == null ? "Chưa kiểm kê" : qtyFormat.format(factoryCount.scrapKg)} /></Card>
-          <Card size="small"><Statistic title="Hao hụt ước tính (kg)" value={factoryReport?.estimatedLossKg == null ? "Chưa kiểm kê" : qtyFormat.format(factoryReport.estimatedLossKg)} /></Card>
-          <Card size="small"><Statistic title="Giá trị nguyên liệu cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} /></Card>
+          <Card size="small"><Statistic title="Tổng vụn nhôm trong kỳ (kg)" value={factoryCount?.status === "MISSING" || !factoryCount || !factoryReport ? "Chưa kiểm kê" : qtyFormat.format(Number(factoryReport.scrapSoldKg) + Number(factoryCount.scrapKg))} /></Card>
+          <Card size="small"><Statistic title="Hao hụt ước tính trong kỳ (kg)" value={factoryReport?.estimatedLossKg == null ? "Chưa kiểm kê" : factoryReport.estimatedLossKg < 0 ? "Cần đối chiếu" : qtyFormat.format(factoryReport.estimatedLossKg)} />
+            {factoryReport?.estimatedLossKg != null && factoryReport.estimatedLossKg < 0 &&
+              <Typography.Text type="secondary">Tồn kiểm kê vượt lượng có thể còn. Kiểm tra tồn đầu kỳ và số cân cuối kỳ.</Typography.Text>}
+          </Card>
+          <Card size="small"><Statistic title="Giá trị hàng tồn cuối kỳ" value={factoryReport?.closingValue == null ? "Chưa kiểm kê" : formatMoney(factoryReport.closingValue)} />
+            <Typography.Text type="secondary">Nguyên liệu được định giá theo phiếu nhập gần nhất của từng loại.</Typography.Text>
+          </Card>
         </div>
       </>}
-      {asTon && <Alert type="info" showIcon style={{ marginBottom: 12 }} message="Số vụn và hao hụt chỉ là lần kiểm kê gần nhất của từng loại, không cộng dồn theo năm. Muốn chốt kỳ phải cân đủ các loại đã phát sinh." />}
+      {stockPeriod?.closed && <YearEndBalanceCard key={factoryYear} year={factoryYear} />}
+      {showLiveStock && <>
+      {asTon && <Alert type="info" showIcon style={{ marginBottom: 12 }} message="Tồn sổ và kiểm kê gần nhất phản ánh kho hiện tại. Muốn chốt kỳ phải cân đủ các loại đã phát sinh." />}
       <Space style={{ marginBottom: 16 }} wrap>
         <LiveSearch value={query} onChange={setQuery} placeholder="Tìm mã hoặc tên" style={{ width: 360 }} suggestions={rows.flatMap((r) => [r.productCode, r.productName, r.categoryName])} />
       </Space>
@@ -204,6 +252,7 @@ export function StockPage() {
           },
         ]}
       />
+      </>}
       <Modal
         open={countOpen}
         title="Kiểm kê tồn kho và tính hao hụt"
@@ -219,8 +268,26 @@ export function StockPage() {
           type="info"
           style={{ marginBottom: 16 }}
           message="Chênh lệch = tồn sổ − nguyên liệu thực cân; hao hụt thuần = chênh lệch thiếu − vụn nhôm"
-          description="Nhập số kg nguyên liệu còn trong kho và kg vụn nằm trong phần thiếu so với tồn sổ. Vụn không được lớn hơn phần thiếu. Để trống khối lượng nguyên liệu nếu loại chưa kiểm kê; nhập 0 nếu đã cân và không còn hàng. Thống kê giữ lần kiểm kê mới nhất theo từng loại."
+          description="Còn trong kho không được lớn hơn (tồn sổ − vụn nhôm) và vụn không được lớn hơn phần thiếu. Để trống khối lượng nguyên liệu nếu loại chưa kiểm kê; nhập 0 nếu đã cân và không còn hàng. Thống kê giữ lần kiểm kê mới nhất theo từng loại."
         />
+        <Space style={{ marginBottom: 12 }} wrap>
+          <Typography.Text strong>Ngày kiểm kê:</Typography.Text>
+          <DatePicker
+            aria-label="Ngày kiểm kê"
+            allowClear={false}
+            format="DD/MM/YYYY"
+            value={countDate}
+            maxDate={dayjs()}
+            disabledDate={(date) => date.isAfter(dayjs(), "day")
+              || (!!countPeriod?.started && (date.isBefore(dayjs(countPeriod.periodFrom), "day") || date.isAfter(dayjs(countPeriod.periodTo), "day")))}
+            onChange={(value) => value && setCountDate(value)}
+          />
+          <Typography.Text type="secondary">
+            {countPeriod?.plannedEnd
+              ? `Mặc định lấy theo ngày kết thúc dự kiến (${dayjs(countPeriod.plannedEnd).format("DD/MM/YYYY")}). Kho không được có phát sinh sau ngày kiểm kê.`
+              : "Chọn đúng ngày chốt kiểm kê; kho không được có phát sinh sau ngày này."}
+          </Typography.Text>
+        </Space>
         <PagedTable
           rowKey="key"
           size="small"
@@ -232,20 +299,76 @@ export function StockPage() {
             { title: "Sản phẩm", dataIndex: "productName", align: "center" },
             { title: "Đã nhập (kg)", align: "center", render: (_, row) => qtyFormat.format(row.purchasedKg) },
             { title: "Đã giao (kg)", align: "center", render: (_, row) => qtyFormat.format(row.deliveredKg) },
-            { title: "Còn trong kho (kg)", align: "center", render: (_, row) => (
-              <InputNumber min={0} step={0.001} precision={3} value={row.actualKg} style={{ width: 150 }}
-                onChange={(value) => setCountedKg((current) => ({ ...current, [row.key]: value }))} />
-            ) },
-            { title: "Vụn nhôm trong chênh lệch (kg)", align: "center", render: (_, row) => (
-              <InputNumber min={0} max={row.actualKg == null ? undefined : Math.max(0, row.quantityBase - row.actualKg)}
-                step={0.001} precision={3} value={row.scrapKg} style={{ width: 145 }}
-                onChange={(value) => setScrapKg((current) => ({ ...current, [row.key]: value }))} />
-            ) },
+            { title: "Còn trong kho (kg)", align: "center", render: (_, row) => {
+              const maxActual = roundKg(row.preCountKg - row.scrapKg);
+              return (
+                <InputNumber
+                  key={`actual-${row.key}-${clampTick}`}
+                  min={0}
+                  max={maxActual}
+                  step={1}
+                  value={row.actualKg}
+                  style={{ width: 150 }}
+                  placeholder={`≤ ${formatCountKg(maxActual)}`}
+                  formatter={formatCountKg}
+                  parser={(v) => {
+                    const raw = (v ?? "").replace(/,/g, "");
+                    if (!raw) return "" as unknown as number;
+                    const parsed = Number(raw);
+                    if (!Number.isFinite(parsed)) return 0;
+                    return parsed > maxActual ? maxActual : parsed;
+                  }}
+                  onInput={(text) => {
+                    const raw = (text ?? "").replace(/,/g, "");
+                    const parsed = Number(raw);
+                    if (raw !== "" && Number.isFinite(parsed) && parsed > maxActual) {
+                      setCountedKg((current) => ({ ...current, [row.key]: maxActual }));
+                      setClampTick((t) => t + 1);
+                    }
+                  }}
+                  onChange={(value) => {
+                    const next = value == null ? null : Math.min(Math.max(0, Number(value)), maxActual);
+                    setCountedKg((current) => ({ ...current, [row.key]: next }));
+                  }} />
+              );
+            } },
+            { title: "Vụn nhôm trong chênh lệch (kg)", align: "center", render: (_, row) => {
+              const maxScrap = row.actualKg == null ? roundKg(row.preCountKg) : roundKg(row.preCountKg - row.actualKg);
+              return (
+                <InputNumber
+                  key={`scrap-${row.key}-${clampTick}`}
+                  min={0}
+                  max={maxScrap}
+                  step={1}
+                  value={row.scrapKg}
+                  style={{ width: 145 }}
+                  formatter={formatCountKg}
+                  parser={(v) => {
+                    const raw = (v ?? "").replace(/,/g, "");
+                    if (!raw) return "" as unknown as number;
+                    const parsed = Number(raw);
+                    if (!Number.isFinite(parsed)) return 0;
+                    return parsed > maxScrap ? maxScrap : parsed;
+                  }}
+                  onInput={(text) => {
+                    const raw = (text ?? "").replace(/,/g, "");
+                    const parsed = Number(raw);
+                    if (raw !== "" && Number.isFinite(parsed) && parsed > maxScrap) {
+                      setScrapKg((current) => ({ ...current, [row.key]: maxScrap }));
+                      setClampTick((t) => t + 1);
+                    }
+                  }}
+                  onChange={(value) => {
+                    const next = value == null ? null : Math.min(Math.max(0, Number(value)), maxScrap);
+                    setScrapKg((current) => ({ ...current, [row.key]: next }));
+                  }} />
+              );
+            } },
             { title: "Hao hụt thuần (kg)", align: "center", render: (_, row) => {
               if (row.actualKg == null) return "—";
-              const rounded = Math.round((row.quantityBase - row.actualKg - row.scrapKg) * 1000) / 1000;
-              return <span style={{ color: rounded > 0 ? "var(--color-danger)" : rounded < 0 ? "var(--color-success)" : undefined }}>
-                {rounded < 0 ? `Thừa ${qtyFormat.format(-rounded)}` : qtyFormat.format(rounded)}
+              const rounded = Math.round((row.preCountKg - row.actualKg - row.scrapKg) * 1000) / 1000;
+              return <span style={{ color: rounded !== 0 ? "var(--color-danger)" : undefined }}>
+                {qtyFormat.format(rounded)}
               </span>;
             } },
           ]}
@@ -264,7 +387,10 @@ export function StockPage() {
         <PagedTable<Movement>
           rowKey="id"
           size="small"
-          dataSource={movements}
+          dataSource={monthRange ? movements.filter(row => {
+            const day = dayjs(row.movementAt).format("YYYY-MM-DD");
+            return day >= monthRange[0] && day <= monthRange[1];
+          }) : []}
           columns={[
             { title: "Thời gian", dataIndex: "movementAt", align: "center", render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm") },
             { title: "Phiếu", align: "center", render: (_, movement) => <Space>{movement.documentCode}{movement.internal && <Tag color="blue">Nội bộ</Tag>}</Space> },
