@@ -1162,14 +1162,14 @@ public class StockDocumentService {
 	}
 
 	private BigDecimal preCountQuantity(long productId, long categoryId, BigDecimal currentBalance) {
-		LocalDate lastClosed = jdbc.query("""
+		LocalDate lastClosed = jdbc.queryForObject("""
 				SELECT MAX(period_to) FROM (
 				    SELECT period_to FROM year_end_balances WHERE shop_id = ?
 				    UNION ALL
 				    SELECT period_to FROM distribution_period_closings WHERE shop_id = ?
 				) closed
 				""", (rs, i) -> rs.getDate(1) == null ? null : rs.getDate(1).toLocalDate(),
-				shops.currentId(), shops.currentId()).stream().findFirst().orElse(null);
+				shops.currentId(), shops.currentId());
 		BigDecimal netAdjustments = jdbc.queryForObject("""
 				SELECT COALESCE(SUM(m.quantity_delta_base), 0)
 				FROM stock_movements m

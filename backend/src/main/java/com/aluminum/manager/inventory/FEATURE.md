@@ -37,6 +37,8 @@ API tồn kho còn trả tổng tiền phiếu nhập đã xác nhận, chưa đ
 
 Kiểm kê Phân phối nhận ngày kiểm kê từ popup (mặc định theo ngày kết thúc dự kiến hoặc tháng đang chọn). Khối lượng còn trong kho không được lớn hơn `tồn sổ − vụn nhôm` (chỉ điều chỉnh thiếu, không tạo tồn thừa). Backend cho phép kiểm kê trong cả tháng đang mở và tháng đã khóa (nhưng chặn tháng chưa mở, kỳ đã chốt và trường hợp kho đã có biến động sau ngày kiểm kê); các phiếu nhập/bán/sửa/đảo thông thường vẫn bị khóa tháng chặn.
 
+Khi chưa có bản chốt năm hoặc tháng, kiểm kê lấy tồn trước điều chỉnh từ tồn sổ hiện tại và không lỗi vì ngày chốt trống. Nếu đã có bản chốt, chỉ loại các điều chỉnh phát sinh sau ngày chốt gần nhất để tránh trừ kiểm kê hai lần.
+
 Rà soát 19/11: sửa phiếu nhập Phân phối sau khi đã bán một phần cho phép tổng nhập mới hợp lệ; dựng lại phiếu rồi kiểm tra tồn cuối trong cùng transaction, rollback nếu thiếu hàng. Test MySQL bảo vệ số đã thu, hạn sửa gốc, hai request thu đồng thời và đảo cặp nội bộ. Xem docs/audit-followup-20261119.md.
 
 Audit b290e3c bổ sung ca MySQL: thanh toán đủ rồi retry không nhân đôi dòng tiền/biến động; phiếu hai loại đổi thứ tự, tăng lượng và rollback khi đổi sang loại không đủ tồn; tháng khóa từ chối tạo/sửa/xác nhận/hủy/đảo. Không đổi nghiệp vụ hoặc công thức kho.
