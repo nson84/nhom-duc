@@ -233,6 +233,7 @@ Hồi quy giữ backup trên máy: tạo 52 bản đã ghi nhận, kiểm tra 50
 - Mở Báo cáo cho kỳ có ngày bắt đầu đã lưu, chưa chốt và đã kéo dài quá 400 ngày. Kiểm tra chế độ Cả năm tải đủ khoảng kỳ và không hiện lỗi giới hạn ngày.
 - Trên cơ sở dữ liệu thử, mở lại kiểm kê năm cho mỗi sổ, sửa số cân và chốt lại. Kiểm tra bản chốt mới, tồn chuyển kỳ và nhật ký. Kiểm tra từ chối khi có bản chốt phụ thuộc hoặc Phân phối đã phát sinh kho sau ngày chốt.
 - Chốt kỳ năm khi tháng cuối còn mở, sau đó mở tháng đầu kỳ tiếp theo. Xác nhận tháng mới mở được và vẫn chặn mở thêm tháng nếu tháng của kỳ mới chưa khóa.
+- Kiểm kê Phân phối khi chưa có bản chốt trước đó phải không lỗi vì ngày chốt trống; ca chốt kỳ sau kiểm kê dùng đồng hồ kiểm thử sau ngày kết thúc kỳ để giữ quy tắc không chốt ngày tương lai.
 - Kiểm tra kỳ Xưởng đầu tiên có phiếu bán trước ngày mở kỳ và phiếu trong kỳ: tổng kg đã giao chỉ cộng phiếu trong kỳ. Kiểm tra sáu ô Tồn kho dùng cùng khoảng ngày trên màn hình.
 - Xem công nợ kỳ cũ có một lần thanh toán trong kỳ và một lần sau kỳ. Kiểm tra cả hai hiện trong lịch sử, tổng trong kỳ chỉ có khoản trong kỳ và nút ẩn nếu hiện tại đã trả đủ. Với phiếu còn nợ, chọn ngày thực trả trong kỳ khác đã mở và đối chiếu Thu chi.
 - Kiểm tra danh sách kỳ với hai kỳ ngắn cùng năm và một kỳ qua 31/12. Chọn từng kỳ, đối chiếu khoảng ngày, trạng thái và tháng gợi ý. Sau khi chốt kỳ mới nhất, kiểm tra ngày bắt đầu gợi ý của kỳ tiếp theo.

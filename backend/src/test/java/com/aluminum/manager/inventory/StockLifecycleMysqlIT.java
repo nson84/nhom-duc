@@ -206,7 +206,8 @@ class StockLifecycleMysqlIT {
         assertEquals(1, result.adjustedItems());
         assertEquals(0, new BigDecimal("970").compareTo(service.balances(null, false).get(0).quantityBase()));
         assertEquals(0, new BigDecimal("20").compareTo(service.balances(null, false).get(0).latestCountLossKg()));
-        var dashboard = new DashboardService(jdbc, clock, shops, periods);
+        var closingClock = Clock.fixed(Instant.parse("2025-03-01T10:00:00Z"), ZoneOffset.UTC);
+        var dashboard = new DashboardService(jdbc, closingClock, shops, periods);
         var end = java.time.LocalDate.of(2025, 2, 28);
         transaction(() -> periods.saveDraftPeriod(2025, day.toLocalDate(), end));
         transaction(() -> dashboard.closeDistribution(day.toLocalDate(), end, true, 2025));
